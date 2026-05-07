@@ -35,10 +35,10 @@ export function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-text-primary">
+          <h1 className="text-3xl font-semibold tracking-tight text-text-primary">
             {vehicle?.displayName ?? 'Tableau de bord'}
           </h1>
-          <p className="text-sm text-text-muted mt-0.5">
+          <p className="text-sm text-text-muted mt-1">
             {state?.isCached ? 'Données en cache' : 'Données fraîches'}
           </p>
         </div>
@@ -59,7 +59,7 @@ export function DashboardPage() {
         {/* Battery hero — span full row on xl */}
         <div className="md:col-span-2 xl:col-span-2">
           {isLoading
-            ? <div className="card p-6"><CardSkeleton /></div>
+            ? <div className="surface-premium p-6"><CardSkeleton /></div>
             : state && (
               <BatteryHeroCard
                 level={state.batteryLevel}
@@ -113,27 +113,27 @@ function QuickActionsCard({ isAsleep }: { isAsleep: boolean }) {
   const wakeMutation = useMutation({ mutationFn: commandsApi.wake, ...qOpts })
 
   return (
-    <Card>
+    <Card className="surface-premium">
       <CardHeader>
-        <CardTitle>Commandes rapides</CardTitle>
+        <CardTitle>Commandes Rapides</CardTitle>
       </CardHeader>
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {isAsleep ? (
-          <Button variant="primary" loading={wakeMutation.isPending} onClick={() => wakeMutation.mutate()}>
+          <Button className="col-span-2 sm:col-span-4" variant="primary" loading={wakeMutation.isPending} onClick={() => wakeMutation.mutate()}>
             <Zap size={14} /> Réveiller
           </Button>
         ) : (
           <>
-            <Button size="sm" loading={lockMutation.isPending} onClick={() => lockMutation.mutate()}>
+            <Button size="sm" className="h-12" loading={lockMutation.isPending} onClick={() => lockMutation.mutate()}>
               <Lock size={14} /> Verrouiller
             </Button>
-            <Button size="sm" loading={unlockMutation.isPending} onClick={() => unlockMutation.mutate()}>
+            <Button size="sm" className="h-12" loading={unlockMutation.isPending} onClick={() => unlockMutation.mutate()}>
               <Unlock size={14} /> Déverrouiller
             </Button>
-            <Button size="sm" loading={climateStartMutation.isPending} onClick={() => climateStartMutation.mutate()}>
+            <Button size="sm" className="h-12" loading={climateStartMutation.isPending} onClick={() => climateStartMutation.mutate()}>
               <Thermometer size={14} /> Clim ON
             </Button>
-            <Button size="sm" variant="ghost" loading={climateStopMutation.isPending} onClick={() => climateStopMutation.mutate()}>
+            <Button size="sm" className="h-12" variant="ghost" loading={climateStopMutation.isPending} onClick={() => climateStopMutation.mutate()}>
               Clim OFF
             </Button>
           </>
@@ -155,7 +155,7 @@ function StatsChipsCard() {
   if (isLoading) return <CardSkeleton />
 
   return (
-    <Card>
+    <Card className="surface-premium">
       <CardHeader><CardTitle>30 derniers jours</CardTitle></CardHeader>
       <div className="grid grid-cols-2 gap-4">
         <StatChip label="Distance" value={`${Math.round(s?.['distanceKm'] ?? 0)} km`} />

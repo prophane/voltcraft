@@ -15,7 +15,11 @@ export function TripsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-text-primary">Trajets</h1>
+      <div className="surface-premium p-4 md:p-5">
+        <h1 className="text-2xl font-semibold tracking-tight text-text-primary">Trips</h1>
+        <p className="text-sm text-text-muted mt-1">Historique de déplacement et consommation</p>
+        <div className="h-px mt-4 accent-line opacity-70" />
+      </div>
 
       {isLoading ? (
         <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <CardSkeleton key={i} />)}</div>
@@ -24,10 +28,10 @@ export function TripsPage() {
       ) : (
         <div className="space-y-3">
           {trips.map((trip) => (
-            <Card key={trip['id'] as string} className="hover:border-border transition-colors cursor-pointer">
+            <Card key={trip['id'] as string} className="surface-premium hover:border-border transition-colors cursor-pointer">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-bg-overlay">
+                  <div className="p-2 rounded-lg bg-bg-overlay border border-border-subtle">
                     <Route size={16} className="text-accent-400" />
                   </div>
                   <div>

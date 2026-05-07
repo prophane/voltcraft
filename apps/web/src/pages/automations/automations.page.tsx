@@ -45,11 +45,15 @@ export function AutomationsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-text-primary">Automatisations</h1>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-text-primary">Automations</h1>
+          <p className="text-sm text-text-muted mt-1">Règles actives et exécutions récentes</p>
+        </div>
         <Button size="sm" variant="primary">
           <Plus size={14} /> Nouvelle règle
         </Button>
       </div>
+      <div className="h-px accent-line opacity-70" />
 
       {isLoading ? (
         <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)}</div>
@@ -60,7 +64,7 @@ export function AutomationsPage() {
       ) : (
         <div className="space-y-3">
           {(rules as Record<string, unknown>[]).map((rule) => (
-            <Card key={rule['id'] as string} className={!rule['enabled'] ? 'opacity-60' : ''}>
+            <Card key={rule['id'] as string} className={`surface-premium ${!rule['enabled'] ? 'opacity-60' : ''}`}>
               <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">

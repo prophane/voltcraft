@@ -15,7 +15,11 @@ export function ChargesPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-text-primary">Recharges</h1>
+      <div className="surface-premium p-4 md:p-5">
+        <h1 className="text-2xl font-semibold tracking-tight text-text-primary">Charging</h1>
+        <p className="text-sm text-text-muted mt-1">Sessions de recharge et coûts estimés</p>
+        <div className="h-px mt-4 accent-line opacity-70" />
+      </div>
 
       {isLoading ? (
         <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)}</div>
@@ -24,10 +28,10 @@ export function ChargesPage() {
       ) : (
         <div className="space-y-3">
           {sessions.map((session) => (
-            <Card key={session['id'] as string}>
+            <Card key={session['id'] as string} className="surface-premium">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-success-bg">
+                  <div className="p-2 rounded-lg bg-success-bg border border-success/30">
                     <Battery size={16} className="text-success" />
                   </div>
                   <div>
