@@ -84,6 +84,7 @@ export const settingsApi = {
   update: (data: unknown) => api.patch('/settings', data),
   getTeslaOAuth: () => api.get<{ oauthConfigured: boolean; connected: boolean; region: TeslaRegion; accountEmail: string | null }>('/settings/tesla'),
   updateTeslaOAuth: (data: TeslaOAuthConfig) => api.post('/settings/tesla', data),
+  registerTeslaPartner: (domain: string) => api.post('/settings/tesla/register-partner', { domain }),
 }
 
 export const diagnosticsApi = {

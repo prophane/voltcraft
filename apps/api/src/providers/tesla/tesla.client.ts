@@ -213,4 +213,69 @@ export class TeslaClient {
       data: { endpoint, method, triggeredBy: 'sync' },
     }).catch(() => {/* non-blocking */})
   }
+
+  /**
+   * Register this app as a Tesla Fleet API partner for the given domain and region.
+   * Uses a client_credentials (application) token — NOT the user OAuth token.
+   * Must be called once after the public key is published at /.well-known/...
+   */
+  async registerPartner(domain: string, region: string): Promise<{ registered: boolean; response: unknown }> {
+    if (!env.TESLA_CLIENT_ID || !env.TESLA_CLIENT_SECRET) {
+      throw new TeslaApiError('Tesla client_id and client_secret must be configured before partner registration', 'tesla_oauth_not_configured')
+    }
+
+    const audience = this.baseUrl(region)
+
+    // Step 1: Get application (client_credentials) token
+    const tokenBody = new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: env.TESLA_CLIENT_ID,
+      client_secret: env.TESLA_CLIENT_SECRET,
+      scope: 'openid vehicle_device_data vehicle_cmds vehicle_charging_cmds',
+      audience,
+    })
+
+    const tokenRes = await fetch(TESLA_FLEET_AUTH_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: tokenBody.toString(),
+      signal: AbortSignal.timeout(20_000),
+    })
+
+    if (!tokenRes.ok) {
+      const details = await tokenRes.text().catch(() => '')
+      throw new TeslaApiError(
+        `Failed to get Tesla application token (${tokenRes.status})${details ? `: ${details.slice(0, 300)}` : ''}`,
+        'tesla_app_token_failed',
+      )
+    }
+
+    const tokenPayload = (await tokenRes.json()) as { access_token?: string }
+    if (!tokenPayload.access_token) {
+      throw new TeslaApiError('Tesla client_credentials token response missing access_token', 'tesla_app_token_invalid')
+    }
+
+    // Step 2: Register partner account for the domain
+    const registerUrl = `${audience}/api/1/partner_accounts`
+    const registerRes = await fetch(registerUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenPayload.access_token}`,
+      },
+      body: JSON.stringify({ domain }),
+      signal: AbortSignal.timeout(20_000),
+    })
+
+    const registerBody = await registerRes.json().catch(() => ({}))
+
+    if (!registerRes.ok) {
+      throw new TeslaApiError(
+        `Tesla partner registration failed (${registerRes.status}): ${JSON.stringify(registerBody).slice(0, 300)}`,
+        'tesla_partner_registration_failed',
+      )
+    }
+
+    return { registered: true, response: registerBody }
+  }
 }

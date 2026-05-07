@@ -32,6 +32,8 @@ export function TeslaSettingsSection() {
     retry: false,
   })
 
+  const [registerPartnerResult, setRegisterPartnerResult] = useState<{ ok: boolean; message: string } | null>(null)
+
   const oauthMutation = useMutation({
     mutationFn: (data: TeslaOAuthConfig) => settingsApi.updateTeslaOAuth(data),
     onSuccess: () => {
@@ -39,6 +41,18 @@ export function TeslaSettingsSection() {
       setShowOAuthForm(false)
       setTimeout(() => setOAuthSaveSuccess(false), 4000)
       void refetchTeslaHealth()
+    },
+  })
+
+  const registerPartnerMutation = useMutation({
+    mutationFn: (domain: string) => settingsApi.registerTeslaPartner(domain),
+    onSuccess: (data) => {
+      const msg = (data as { data?: { message?: string } })?.data?.message ?? 'Partner enregistré avec succès.'
+      setRegisterPartnerResult({ ok: true, message: msg })
+      void refetchTeslaHealth()
+    },
+    onError: (err) => {
+      setRegisterPartnerResult({ ok: false, message: err instanceof Error ? err.message : 'Erreur inconnue' })
     },
   })
 
@@ -222,26 +236,40 @@ export function TeslaSettingsSection() {
           <p className="text-[11px] text-text-muted mt-2 break-all">If click fails, open directly: {oauthConnectUrl}</p>
         </div>
 
+        {/* Partner registration block — shown when OAuth works but partner not registered */}
         {displayedHealth?.partnerRegistrationRequired && (
-          <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 space-y-2">
-            <p className="text-sm font-medium text-text-primary">Étape restante côté Tesla Developer</p>
-            <p className="text-sm text-text-secondary">
-              L&apos;OAuth utilisateur fonctionne. Le blocage restant est l&apos;enregistrement partner Fleet de ton application pour la région EU.
+          <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 space-y-3">
+            <p className="text-sm font-medium text-text-primary">Enregistrement Partner Fleet requis</p>
+            <p className="text-xs text-text-secondary">
+              L'OAuth utilisateur fonctionne. Tesla exige que ton application soit enregistrée comme partenaire Fleet pour pouvoir accéder aux véhicules.
+              Cette étape est automatique — elle appelle <code className="text-accent-400">POST /api/1/partner_accounts</code> avec un token applicatif.
             </p>
-            <p className="text-sm text-text-secondary">
-              1. Vérifie que cette URL répond publiquement: {displayedHealth.partnerPublicKeyUrl ?? 'URL de clé partner indisponible'}
-            </p>
-            <p className="text-sm text-text-secondary">
-              2. Ouvre le portail Tesla Developer et finalise la registration partner pour le domaine public de Voltcraft.
-            </p>
-            <a
-              href={teslaDeveloperPortalUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-accent-500 hover:underline"
+            {displayedHealth.partnerPublicKeyUrl && (
+              <p className="text-xs text-text-muted">
+                Clé publique servie sur: <a href={displayedHealth.partnerPublicKeyUrl} target="_blank" rel="noopener noreferrer" className="text-accent-500 hover:underline break-all">{displayedHealth.partnerPublicKeyUrl}</a>
+              </p>
+            )}
+
+            {registerPartnerResult && (
+              <div className={`rounded p-2 flex gap-2 text-xs ${registerPartnerResult.ok ? 'bg-success/10 text-success' : 'bg-error/10 text-error'}`}>
+                {registerPartnerResult.ok
+                  ? <CheckCircle2 size={13} className="flex-shrink-0 mt-0.5" />
+                  : <AlertCircle size={13} className="flex-shrink-0 mt-0.5" />}
+                {registerPartnerResult.message}
+              </div>
+            )}
+
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={registerPartnerMutation.isPending}
+              onClick={() => {
+                setRegisterPartnerResult(null)
+                registerPartnerMutation.mutate(window.location.hostname)
+              }}
             >
-              Ouvrir Tesla Developer
-            </a>
+              Enregistrer le partner Tesla Fleet
+            </Button>
           </div>
         )}
 

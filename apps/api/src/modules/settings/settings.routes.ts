@@ -7,6 +7,7 @@ import { updateSettingsSchema } from './settings.schemas.js'
 import { ok } from '../../common/http/response.js'
 import { env } from '../../config/env.js'
 import { persistTeslaOAuthConfig } from '../../config/tesla-config.js'
+import { TeslaClient } from '../../providers/tesla/tesla.client.js'
 import { z } from 'zod'
 
 const teslaOAuthCfgSchema = z.object({
@@ -85,5 +86,32 @@ export async function settingsRoutes(app: FastifyInstance) {
       },
       persistedToFile: persistence.persistedToFile,
     }))
+  })
+
+  // Tesla Fleet partner registration (one-time, needed to call Fleet API on behalf of users)
+  app.post('/tesla/register-partner', { schema: { tags: ['settings'] } }, async (req, reply) => {
+    if (!env.AUTH_DISABLED) {
+      const token = await requireAuth(req)
+      await authService.validateSession(token)
+    }
+
+    const { domain } = z.object({ domain: z.string().min(1) }).parse(req.body)
+    const region = env.TESLA_REGION ?? 'eu'
+
+    const client = new TeslaClient(app.prisma, app.redis)
+
+    try {
+      const result = await client.registerPartner(domain, region)
+      app.log.info(`Tesla partner registration successful for domain=${domain} region=${region}`)
+      return reply.status(200).send(ok({
+        message: `Partner account registered for ${domain} in region ${region}.`,
+        region,
+        response: result.response,
+      }))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      app.log.error(`Tesla partner registration failed: ${message}`)
+      return reply.status(500).send({ error: message })
+    }
   })
 }
