@@ -8,6 +8,7 @@ import {
   Lock, Unlock, Volume2, Lightbulb, Thermometer,
   Zap, ZapOff, Play, Square, BellRing,
 } from 'lucide-react'
+import { ApiError } from '@/lib/api-client'
 
 interface CommandDef {
   label: string
@@ -16,6 +17,27 @@ interface CommandDef {
   mutationFn: () => Promise<unknown>
   variant?: 'primary' | 'secondary' | 'danger'
   requiresConfirm?: boolean
+}
+
+function getCommandErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    const msg = err.message || `Request failed (${err.status})`
+    const lower = msg.toLowerCase()
+
+    if (lower.includes('vehicle is asleep') || lower.includes('wake it up')) {
+      return 'Le vehicule dort. Lance d abord la commande Reveiller, puis reessaie.'
+    }
+    if (lower.includes('missing permission') || lower.includes('scope')) {
+      return 'Droits API insuffisants pour cette commande. Reconnecte Tesla OAuth pour regénérer les scopes commandes.'
+    }
+    if (lower.includes('partner') || lower.includes('registered in the active region') || lower.includes('current region')) {
+      return 'Partner Fleet non actif dans la region du compte. Va dans Parametres Tesla et relance Enregistrer le partner.'
+    }
+    return msg
+  }
+
+  if (err instanceof Error) return err.message
+  return 'Erreur inconnue lors de la commande.'
 }
 
 export function CommandsPage() {
@@ -91,7 +113,7 @@ export function CommandsPage() {
                 <p className="text-xs text-success">✓ Commande envoyée</p>
               )}
               {mutation.isError && (
-                <p className="text-xs text-error">✗ {(mutation.error as Error).message}</p>
+                <p className="text-xs text-error">✗ {getCommandErrorMessage(mutation.error)}</p>
               )}
             </Card>
           )

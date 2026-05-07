@@ -43,15 +43,24 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (!res.ok) {
-    const maybeError = body as { error?: { code?: string; message?: string } } | null
+    const maybeError = body as {
+      error?: { code?: string; message?: string } | string
+      code?: string
+      message?: string
+    } | null
     const fallbackMessage = rawText
       ? `${res.status} ${res.statusText}: ${rawText.slice(0, 160)}`
       : `Request failed (${res.status} ${res.statusText})`
 
+    const nestedError = typeof maybeError?.error === 'object' ? maybeError.error : null
+    const stringError = typeof maybeError?.error === 'string' ? maybeError.error : null
+    const resolvedMessage = nestedError?.message ?? maybeError?.message ?? stringError ?? fallbackMessage
+    const resolvedCode = nestedError?.code ?? maybeError?.code ?? 'UNKNOWN'
+
     throw new ApiError(
       res.status,
-      maybeError?.error?.code ?? 'UNKNOWN',
-      maybeError?.error?.message ?? fallbackMessage,
+      resolvedCode,
+      resolvedMessage,
     )
   }
 

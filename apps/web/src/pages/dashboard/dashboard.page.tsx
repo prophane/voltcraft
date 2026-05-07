@@ -1,177 +1,205 @@
+import { type ReactNode, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { vehicleApi, commandsApi } from '@/features/vehicle/api'
-import { BatteryHeroCard } from '@/features/vehicle/components/battery-hero-card'
-import { VehicleStatusCard } from '@/features/vehicle/components/vehicle-status-card'
-import { Card, CardHeader, CardTitle } from '@/components/ui/card'
+import { vehicleApi, commandsApi, statsApi } from '@/features/vehicle/api'
 import { Button } from '@/components/ui/button'
-import { CardSkeleton } from '@/components/ui/skeleton'
-import { RefreshCw, Lock, Unlock, Thermometer, Zap } from 'lucide-react'
+import { Card } from '@/components/ui/card'
+import { RefreshCw, Lock, Unlock, Thermometer, Zap, Car, MapPin } from 'lucide-react'
+import { cn, formatDate } from '@/lib/utils'
+
+function ArcGauge({ level, rangeKm }: { level: number; rangeKm: number }) {
+  const radius = 110
+  const circumference = Math.PI * radius
+  const progress = Math.max(0, Math.min(100, level))
+  const dash = (progress / 100) * circumference
+
+  return (
+    <div className="relative flex justify-center mt-2">
+      <svg width="280" height="170" viewBox="0 0 280 170" className="overflow-visible">
+        <path
+          d={`M 30 140 A ${radius} ${radius} 0 0 1 250 140`}
+          fill="none"
+          stroke="rgba(255,255,255,0.16)"
+          strokeWidth="12"
+          strokeLinecap="round"
+        />
+        <path
+          d={`M 30 140 A ${radius} ${radius} 0 0 1 250 140`}
+          fill="none"
+          stroke="#E8112D"
+          strokeWidth="12"
+          strokeLinecap="round"
+          strokeDasharray={`${dash} ${circumference}`}
+        />
+      </svg>
+
+      <div className="absolute top-[66px] text-center">
+        <p className="text-5xl font-semibold leading-none text-text-primary">{Math.round(level)}<span className="text-2xl align-top">%</span></p>
+        <p className="text-2xl text-text-secondary mt-1">{Math.round(rangeKm)} km</p>
+        <p className="text-sm text-text-muted mt-1">Battery</p>
+      </div>
+    </div>
+  )
+}
+
+function QuickActionTile({
+  icon,
+  label,
+  subtitle,
+  onClick,
+  loading,
+}: {
+  icon: ReactNode
+  label: string
+  subtitle?: string
+  onClick: () => void
+  loading?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={loading}
+      className="rounded-xl border border-border-subtle bg-bg-overlay/70 hover:bg-bg-overlay px-3 py-3 text-left transition-colors disabled:opacity-50"
+    >
+      <div className="text-text-secondary mb-2">{icon}</div>
+      {subtitle ? <p className="text-lg font-medium text-text-primary leading-tight">{subtitle}</p> : null}
+      <p className="text-xs text-text-muted mt-0.5">{label}</p>
+    </button>
+  )
+}
 
 export function DashboardPage() {
   const qc = useQueryClient()
 
-  const { data: vehicle, isLoading: vLoading } = useQuery({
+  const { data: vehicle } = useQuery({
     queryKey: ['vehicle', 'current'],
     queryFn: vehicleApi.getCurrent,
     refetchInterval: 60_000,
   })
 
-  const { data: state, isLoading: sLoading } = useQuery({
+  const { data: state } = useQuery({
     queryKey: ['vehicle', 'state'],
     queryFn: vehicleApi.getState,
     refetchInterval: 60_000,
     enabled: !!vehicle,
   })
 
-  const syncMutation = useMutation({
-    mutationFn: vehicleApi.sync,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['vehicle'] }) },
-  })
-
-  const isLoading = vLoading || sLoading
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-text-primary">
-            {vehicle?.displayName ?? 'Tableau de bord'}
-          </h1>
-          <p className="text-sm text-text-muted mt-1">
-            {state?.isCached ? 'Données en cache' : 'Données fraîches'}
-          </p>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          loading={syncMutation.isPending}
-          onClick={() => syncMutation.mutate()}
-        >
-          <RefreshCw size={14} />
-          Sync
-        </Button>
-      </div>
-
-      {/* Bento grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-
-        {/* Battery hero — span full row on xl */}
-        <div className="md:col-span-2 xl:col-span-2">
-          {isLoading
-            ? <div className="surface-premium p-6"><CardSkeleton /></div>
-            : state && (
-              <BatteryHeroCard
-                level={state.batteryLevel}
-                range={state.batteryRange}
-                isCharging={state.isCharging}
-                chargeRate={state.chargeRate ?? undefined}
-                timeToFull={state.timeToFullCharge ?? undefined}
-              />
-            )}
-        </div>
-
-        {/* Vehicle status */}
-        <div>
-          {isLoading
-            ? <CardSkeleton />
-            : state && vehicle && (
-              <VehicleStatusCard
-                displayName={vehicle.displayName}
-                state={vehicle.state}
-                isLocked={state.isLocked}
-                insideTemp={state.insideTemp}
-                outsideTemp={state.outsideTemp}
-                lastSeenAt={vehicle.lastSeenAt}
-              />
-            )}
-        </div>
-
-        {/* Quick commands */}
-        <div className="md:col-span-2">
-          <QuickActionsCard isAsleep={vehicle?.state === 'asleep'} />
-        </div>
-
-        {/* Stats chips */}
-        <div>
-          <StatsChipsCard />
-        </div>
-
-      </div>
-    </div>
-  )
-}
-
-function QuickActionsCard({ isAsleep }: { isAsleep: boolean }) {
-  const qc = useQueryClient()
-  const qOpts = { onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle'] }) }
-
-  const lockMutation = useMutation({ mutationFn: commandsApi.lock, ...qOpts })
-  const unlockMutation = useMutation({ mutationFn: commandsApi.unlock, ...qOpts })
-  const climateStartMutation = useMutation({ mutationFn: commandsApi.climateStart, ...qOpts })
-  const climateStopMutation = useMutation({ mutationFn: commandsApi.climateStop, ...qOpts })
-  const wakeMutation = useMutation({ mutationFn: commandsApi.wake, ...qOpts })
-
-  return (
-    <Card className="surface-premium">
-      <CardHeader>
-        <CardTitle>Commandes Rapides</CardTitle>
-      </CardHeader>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {isAsleep ? (
-          <Button className="col-span-2 sm:col-span-4" variant="primary" loading={wakeMutation.isPending} onClick={() => wakeMutation.mutate()}>
-            <Zap size={14} /> Réveiller
-          </Button>
-        ) : (
-          <>
-            <Button size="sm" className="h-12" loading={lockMutation.isPending} onClick={() => lockMutation.mutate()}>
-              <Lock size={14} /> Verrouiller
-            </Button>
-            <Button size="sm" className="h-12" loading={unlockMutation.isPending} onClick={() => unlockMutation.mutate()}>
-              <Unlock size={14} /> Déverrouiller
-            </Button>
-            <Button size="sm" className="h-12" loading={climateStartMutation.isPending} onClick={() => climateStartMutation.mutate()}>
-              <Thermometer size={14} /> Clim ON
-            </Button>
-            <Button size="sm" className="h-12" variant="ghost" loading={climateStopMutation.isPending} onClick={() => climateStopMutation.mutate()}>
-              Clim OFF
-            </Button>
-          </>
-        )}
-      </div>
-    </Card>
-  )
-}
-
-function StatsChipsCard() {
-  const { data, isLoading } = useQuery({
+  const { data: summary } = useQuery({
     queryKey: ['stats', 'summary', 30],
-    queryFn: () => import('@/features/vehicle/api').then(m => m.statsApi.summary(30)),
+    queryFn: () => statsApi.summary(30),
     staleTime: 300_000,
   })
 
-  const s = data as Record<string, number> | undefined
+  const syncMutation = useMutation({
+    mutationFn: vehicleApi.sync,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle'] }),
+  })
 
-  if (isLoading) return <CardSkeleton />
+  const lockMutation = useMutation({
+    mutationFn: commandsApi.lock,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle'] }),
+  })
+  const unlockMutation = useMutation({
+    mutationFn: commandsApi.unlock,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle'] }),
+  })
+  const climateStartMutation = useMutation({
+    mutationFn: commandsApi.climateStart,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle'] }),
+  })
+  const wakeMutation = useMutation({
+    mutationFn: commandsApi.wake,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle'] }),
+  })
+
+  const statusLabel = useMemo(() => {
+    if (!vehicle?.state) return 'Unknown'
+    return vehicle.state === 'online' ? 'Online' : vehicle.state
+  }, [vehicle?.state])
 
   return (
-    <Card className="surface-premium">
-      <CardHeader><CardTitle>30 derniers jours</CardTitle></CardHeader>
-      <div className="grid grid-cols-2 gap-4">
-        <StatChip label="Distance" value={`${Math.round(s?.['distanceKm'] ?? 0)} km`} />
-        <StatChip label="Énergie" value={`${s?.['energyAddedKwh']?.toFixed(1) ?? '—'} kWh`} />
-        <StatChip label="Coût estimé" value={`${s?.['estimatedCostEur']?.toFixed(2) ?? '—'} €`} />
-        <StatChip label="Trajets" value={String(s?.['tripsCount'] ?? '—')} />
+    <div className="max-w-md lg:max-w-5xl mx-auto space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-4xl font-semibold tracking-tight text-text-primary">Dashboard</h1>
+          <p className="text-sm text-text-muted mt-1">{state?.isCached ? 'Données cache' : 'Données fraîches'}</p>
+        </div>
+        <Button variant="ghost" size="sm" loading={syncMutation.isPending} onClick={() => syncMutation.mutate()}>
+          <RefreshCw size={14} /> Sync
+        </Button>
       </div>
-    </Card>
-  )
-}
 
-function StatChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="stat-label">{label}</p>
-      <p className="stat-value text-xl mt-0.5">{value}</p>
+      <Card className="surface-premium p-4 md:p-6">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-3xl font-medium text-text-primary">{vehicle?.displayName ?? 'Model 3'}</h2>
+            <p className="text-base text-text-secondary mt-1">
+              {statusLabel} <span className={cn('inline-block w-2 h-2 rounded-full ml-1', vehicle?.state === 'online' ? 'bg-success' : 'bg-warning')} />
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-border-subtle bg-bg-overlay/50 h-32 flex items-center justify-center">
+          <Car size={72} className="text-text-secondary" />
+        </div>
+
+        <ArcGauge level={state?.batteryLevel ?? 0} rangeKm={state?.batteryRange ?? 0} />
+
+        <p className="text-center text-sm text-text-muted -mt-2">
+          <MapPin size={12} className="inline mr-1" />
+          Parked · {vehicle?.lastSeenAt ? formatDate(vehicle.lastSeenAt) : '—'}
+        </p>
+
+        <div className="grid grid-cols-4 gap-2 mt-5">
+          <QuickActionTile
+            icon={<Lock size={18} />}
+            label="Lock"
+            onClick={() => lockMutation.mutate()}
+            loading={lockMutation.isPending}
+          />
+          <QuickActionTile
+            icon={<Unlock size={18} />}
+            label="Unlock"
+            onClick={() => unlockMutation.mutate()}
+            loading={unlockMutation.isPending}
+          />
+          <QuickActionTile
+            icon={<Thermometer size={18} />}
+            label="Climate"
+            subtitle={state?.insideTemp != null ? `${Math.round(state.insideTemp)}.0°` : undefined}
+            onClick={() => climateStartMutation.mutate()}
+            loading={climateStartMutation.isPending}
+          />
+          <QuickActionTile
+            icon={<Zap size={18} />}
+            label={vehicle?.state === 'asleep' ? 'Wake' : 'Charge'}
+            onClick={() => wakeMutation.mutate()}
+            loading={wakeMutation.isPending}
+          />
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-border-subtle bg-bg-overlay/70 p-4 h-36 flex items-end justify-between">
+          <div>
+            <p className="text-sm text-text-primary">{state?.latitude && state?.longitude ? 'Position active' : 'Position indisponible'}</p>
+            <p className="text-xs text-success mt-1">Connected</p>
+          </div>
+          <MapPin size={18} className="text-accent-400" />
+        </div>
+      </Card>
+
+      <Card className="surface-premium p-4 md:p-5 lg:max-w-sm">
+        <h3 className="text-lg font-medium text-text-primary">30 derniers jours</h3>
+        <div className="grid grid-cols-2 gap-4 mt-4">
+          <div>
+            <p className="text-xs text-text-muted uppercase">Distance</p>
+            <p className="text-3xl font-semibold text-text-primary mt-1">{Math.round((summary as Record<string, number> | undefined)?.distanceKm ?? 0)} km</p>
+          </div>
+          <div>
+            <p className="text-xs text-text-muted uppercase">Énergie</p>
+            <p className="text-3xl font-semibold text-text-primary mt-1">{(summary as Record<string, number> | undefined)?.energyAddedKwh?.toFixed(1) ?? '—'} kWh</p>
+          </div>
+        </div>
+      </Card>
     </div>
   )
 }
