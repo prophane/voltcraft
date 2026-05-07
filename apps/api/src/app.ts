@@ -128,13 +128,11 @@ export async function buildApp() {
 
   await app.register(staticPlugin, {
     root: distPath,
-    prefix: '/',
-    constraints: {}, // serve all files
   })
 
   // Fallback: any unmatched route serves index.html for SPA routing
-  app.get('*', async (_req, reply) => {
-    reply.type('text/html').sendFile('index.html')
+  app.setNotFoundHandler((req, reply) => {
+    reply.sendFile('index.html')
   })
 
   // ── Error handler ────────────────────────────────────────────
