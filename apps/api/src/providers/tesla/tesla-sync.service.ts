@@ -26,39 +26,43 @@ export class TeslaSyncService {
 
     try {
       const data = await this.client.getVehicleData(vehicle.teslaAccount, vehicle.vin)
+      const chargeState = data.charge_state ?? ({} as Partial<typeof data.charge_state>)
+      const climateState = data.climate_state ?? ({} as Partial<typeof data.climate_state>)
+      const driveState = data.drive_state ?? ({} as Partial<typeof data.drive_state>)
+      const vehicleState = data.vehicle_state ?? ({} as Partial<typeof data.vehicle_state>)
 
       const isAsleep = data.state === 'asleep' || data.state === 'offline'
       const snapshot = {
         vehicleState: data.state,
-        odometer: data.vehicle_state.odometer,
+        odometer: vehicleState.odometer ?? null,
 
-        batteryLevel: data.charge_state.battery_level,
-        batteryRange: data.charge_state.battery_range * 1.609344, // miles → km
-        chargeLimitSoc: data.charge_state.charge_limit_soc,
-        chargeState: data.charge_state.charging_state,
-        isCharging: data.charge_state.charging_state === 'Charging',
-        isPluggedIn: data.charge_state.charge_port_door_open,
-        chargeRate: data.charge_state.charge_rate * 1.609344,
-        chargeAmps: data.charge_state.charge_amps,
-        chargeVoltage: data.charge_state.charger_voltage,
-        timeToFullCharge: data.charge_state.time_to_full_charge,
+        batteryLevel: chargeState.battery_level ?? 0,
+        batteryRange: (chargeState.battery_range ?? 0) * 1.609344, // miles → km
+        chargeLimitSoc: chargeState.charge_limit_soc ?? null,
+        chargeState: chargeState.charging_state ?? null,
+        isCharging: chargeState.charging_state === 'Charging',
+        isPluggedIn: chargeState.charge_port_door_open ?? false,
+        chargeRate: chargeState.charge_rate != null ? chargeState.charge_rate * 1.609344 : null,
+        chargeAmps: chargeState.charge_amps ?? null,
+        chargeVoltage: chargeState.charger_voltage ?? null,
+        timeToFullCharge: chargeState.time_to_full_charge ?? null,
 
-        climateOn: data.climate_state.is_climate_on,
-        insideTemp: data.climate_state.inside_temp,
-        outsideTemp: data.climate_state.outside_temp,
-        isSeatHeaterOn: data.climate_state.seat_heater_left > 0,
+        climateOn: climateState.is_climate_on ?? false,
+        insideTemp: climateState.inside_temp ?? null,
+        outsideTemp: climateState.outside_temp ?? null,
+        isSeatHeaterOn: (climateState.seat_heater_left ?? 0) > 0,
 
-        isLocked: data.vehicle_state.locked,
-        isTrunkOpen: data.vehicle_state.rt > 0,
-        isFrunkOpen: data.vehicle_state.ft > 0,
+        isLocked: vehicleState.locked ?? true,
+        isTrunkOpen: (vehicleState.rt ?? 0) > 0,
+        isFrunkOpen: (vehicleState.ft ?? 0) > 0,
 
-        isDriving: (data.drive_state.speed ?? 0) > 0,
-        speed: data.drive_state.speed,
-        power: data.drive_state.power,
+        isDriving: (driveState.speed ?? 0) > 0,
+        speed: driveState.speed ?? null,
+        power: driveState.power ?? null,
 
-        latitude: data.drive_state.latitude,
-        longitude: data.drive_state.longitude,
-        heading: data.drive_state.heading,
+        latitude: driveState.latitude ?? null,
+        longitude: driveState.longitude ?? null,
+        heading: driveState.heading != null ? Math.round(driveState.heading) : null,
         atHome: false, // computed by home geofence check elsewhere
       }
 

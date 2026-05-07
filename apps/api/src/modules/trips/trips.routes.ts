@@ -7,6 +7,7 @@ import { AuthService } from '../auth/auth.service.js'
 import { requireAuth } from '../auth/auth.routes.js'
 import { NotFoundError } from '../../common/errors/app-error.js'
 import { ok, paginated } from '../../common/http/response.js'
+import { withVehicleAutoBootstrap } from '../vehicle/vehicle-auto-bootstrap.js'
 
 const paginationSchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -31,7 +32,7 @@ export async function tripsRoutes(app: FastifyInstance) {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
     const query = paginationSchema.parse(req.query)
-    const vehicle = await getVehicle(session.userId)
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
     const { trips, total } = await tripsRepo.findMany(vehicle.id, {
       page: query.page,
       pageSize: query.pageSize,
@@ -46,7 +47,7 @@ export async function tripsRoutes(app: FastifyInstance) {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
     const { id } = req.params as { id: string }
-    const vehicle = await getVehicle(session.userId)
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
     const trip = await tripsRepo.findById(id, vehicle.id)
     if (!trip) throw new NotFoundError('Trip')
     return ok(trip)

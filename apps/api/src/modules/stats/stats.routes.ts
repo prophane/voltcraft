@@ -8,6 +8,7 @@ import { requireAuth } from '../auth/auth.routes.js'
 import { NotFoundError } from '../../common/errors/app-error.js'
 import { calcAvgConsumption } from './calculators/summary.calculator.js'
 import { ok } from '../../common/http/response.js'
+import { withVehicleAutoBootstrap } from '../vehicle/vehicle-auto-bootstrap.js'
 
 const periodSchema = z.object({
   days: z.coerce.number().min(1).max(365).default(30),
@@ -30,7 +31,7 @@ export async function statsRoutes(app: FastifyInstance) {
     const session = await authService.validateSession(token)
     const { days } = periodSchema.parse(req.query)
     const since = new Date(Date.now() - days * 86_400_000)
-    const vehicle = await getVehicle(session.userId)
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
 
     const [distanceKm, energyKwh, cost, tripsCount, chargesCount] = await Promise.all([
       statsRepo.getDistanceSum(vehicle.id, since),
@@ -57,7 +58,7 @@ export async function statsRoutes(app: FastifyInstance) {
     const session = await authService.validateSession(token)
     const { days } = periodSchema.parse(req.query)
     const since = new Date(Date.now() - days * 86_400_000)
-    const vehicle = await getVehicle(session.userId)
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
     const trend = await statsRepo.getDailyBatteryTrend(vehicle.id, since)
     return ok(trend)
   })
@@ -68,7 +69,7 @@ export async function statsRoutes(app: FastifyInstance) {
     const session = await authService.validateSession(token)
     const { days } = periodSchema.parse(req.query)
     const since = new Date(Date.now() - days * 86_400_000)
-    const vehicle = await getVehicle(session.userId)
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
     const metrics = await statsRepo.getDailyTripMetrics(vehicle.id, since)
     return ok(metrics)
   })

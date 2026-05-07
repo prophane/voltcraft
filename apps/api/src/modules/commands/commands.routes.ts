@@ -9,6 +9,7 @@ import { TeslaClient } from '../../providers/tesla/tesla.client.js'
 import { requireAuth } from '../auth/auth.routes.js'
 import { chargeLimitSchema } from './commands.schemas.js'
 import { ok } from '../../common/http/response.js'
+import { withVehicleAutoBootstrap } from '../vehicle/vehicle-auto-bootstrap.js'
 
 export async function commandsRoutes(app: FastifyInstance) {
   const vehicleRepo = new VehicleRepository(app.prisma)
@@ -22,7 +23,7 @@ export async function commandsRoutes(app: FastifyInstance) {
   const run = async (req: Parameters<typeof requireAuth>[0], command: Parameters<typeof policy.execute>[1], params?: Record<string, unknown>) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
-    return policy.execute(session.userId, command, params)
+    return withVehicleAutoBootstrap(app, () => policy.execute(session.userId, command, params))
   }
 
   app.post('/lock', { schema: { tags: ['commands'] } }, async (req) => ok(await run(req, 'lock')))
@@ -44,7 +45,7 @@ export async function commandsRoutes(app: FastifyInstance) {
   app.get('/history', { schema: { tags: ['commands'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
-    const vehicle = await vehicleRepo.findActive(session.userId)
+    const vehicle = await withVehicleAutoBootstrap(app, () => vehicleRepo.findActive(session.userId))
     if (!vehicle) return ok([])
     const logs = await commandRepo.getRecent(vehicle.id)
     return ok(logs)

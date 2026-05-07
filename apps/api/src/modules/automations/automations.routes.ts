@@ -8,6 +8,7 @@ import { requireAuth } from '../auth/auth.routes.js'
 import { NotFoundError } from '../../common/errors/app-error.js'
 import { createAutomationSchema, updateAutomationSchema } from './automations.schemas.js'
 import { ok } from '../../common/http/response.js'
+import { withVehicleAutoBootstrap } from '../vehicle/vehicle-auto-bootstrap.js'
 
 export async function automationsRoutes(app: FastifyInstance) {
   const repo = new AutomationsRepository(app.prisma)
@@ -24,7 +25,7 @@ export async function automationsRoutes(app: FastifyInstance) {
   app.get('/', { schema: { tags: ['automations'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
-    const vehicle = await getVehicle(session.userId)
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
     return ok(await repo.findAll(vehicle.id))
   })
 
@@ -33,7 +34,7 @@ export async function automationsRoutes(app: FastifyInstance) {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
     const input = createAutomationSchema.parse(req.body)
-    const vehicle = await getVehicle(session.userId)
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
     const rule = await repo.create(vehicle.id, {
       ...input,
       triggerConfig: input.triggerConfig as Prisma.InputJsonValue,
@@ -48,7 +49,7 @@ export async function automationsRoutes(app: FastifyInstance) {
     const session = await authService.validateSession(token)
     const { id } = req.params as { id: string }
     const input = updateAutomationSchema.parse(req.body)
-    const vehicle = await getVehicle(session.userId)
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
     const existing = await repo.findById(id, vehicle.id)
     if (!existing) throw new NotFoundError('Automation rule')
     return ok(await repo.update(id, (() => {
@@ -66,7 +67,7 @@ export async function automationsRoutes(app: FastifyInstance) {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
     const { id } = req.params as { id: string }
-    const vehicle = await getVehicle(session.userId)
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
     const existing = await repo.findById(id, vehicle.id)
     if (!existing) throw new NotFoundError('Automation rule')
     await repo.softDelete(id)
@@ -78,7 +79,7 @@ export async function automationsRoutes(app: FastifyInstance) {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
     const { id } = req.params as { id: string }
-    const vehicle = await getVehicle(session.userId)
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
     const existing = await repo.findById(id, vehicle.id)
     if (!existing) throw new NotFoundError('Automation rule')
     return ok(await repo.getExecutions(id))

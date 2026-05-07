@@ -7,6 +7,7 @@ import { AuthService } from '../auth/auth.service.js'
 import { requireAuth } from '../auth/auth.routes.js'
 import { NotFoundError } from '../../common/errors/app-error.js'
 import { ok, paginated } from '../../common/http/response.js'
+import { withVehicleAutoBootstrap } from '../vehicle/vehicle-auto-bootstrap.js'
 
 const paginationSchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -35,7 +36,7 @@ export async function chargesRoutes(app: FastifyInstance) {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
     const query = paginationSchema.parse(req.query)
-    const vehicle = await getVehicle(session.userId)
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
     const { sessions, total } = await chargesRepo.findMany(vehicle.id, {
       page: query.page,
       pageSize: query.pageSize,
@@ -49,7 +50,7 @@ export async function chargesRoutes(app: FastifyInstance) {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
     const { id } = req.params as { id: string }
-    const vehicle = await getVehicle(session.userId)
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
     const session_ = await chargesRepo.findById(id, vehicle.id)
     if (!session_) throw new NotFoundError('Charge session')
     return ok(session_)
@@ -63,7 +64,7 @@ export async function chargesRoutes(app: FastifyInstance) {
       year: (req.query as Record<string, string>)['year'] ?? now.getFullYear(),
       month: (req.query as Record<string, string>)['month'] ?? now.getMonth() + 1,
     })
-    const vehicle = await getVehicle(sess.userId)
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(sess.userId))
     const summary = await chargesRepo.getMonthlySummary(vehicle.id, year, month)
     return ok(summary)
   })
