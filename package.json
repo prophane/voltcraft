@@ -6,7 +6,7 @@
   "scripts": {
     "dev:api": "pnpm --filter @voltcraft/api dev",
     "dev:web": "pnpm --filter @voltcraft/web dev",
-    "build:api": "pnpm --filter @voltcraft/api build",
+    "build:api": "pnpm --filter @voltcraft/shared build && pnpm --filter @voltcraft/api build",
     "build:web": "pnpm --filter @voltcraft/web build",
     "db:generate": "pnpm --filter @voltcraft/api prisma:generate",
     "db:migrate": "pnpm --filter @voltcraft/api prisma:migrate",
