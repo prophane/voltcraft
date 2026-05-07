@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
+import { TeslaSettingsSection } from './tesla-section'
 
 export function SettingsPage() {
   const qc = useQueryClient()
@@ -116,6 +117,9 @@ export function SettingsPage() {
           </div>
         </div>
       </Card>
+
+      {/* Tesla Configuration */}
+      <TeslaSettingsSection />
 
       {/* Diagnostics */}
       <Card>
