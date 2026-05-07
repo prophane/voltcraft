@@ -79,7 +79,13 @@ function validateTeslaTokenForFleetApi(token: string, region: TeslaRegion) {
 
 export async function bootstrapTeslaInventory(
   db: PrismaClient,
-  input: { token: string; region: TeslaRegion },
+  input: {
+    token: string
+    region: TeslaRegion
+    refreshToken?: string
+    tokenExpiry?: Date
+    accountEmail?: string
+  },
 ): Promise<{ userId: string; accountId: string; vehiclesCount: number }> {
   const token = input.token.trim()
   const region = input.region
@@ -108,20 +114,20 @@ export async function bootstrapTeslaInventory(
         data: {
           region,
           accessToken: token,
-          refreshToken: token,
-          tokenExpiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-          email: user.email,
+          refreshToken: input.refreshToken ?? token,
+          tokenExpiry: input.tokenExpiry ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          email: input.accountEmail ?? user.email,
           isActive: true,
         },
       })
     : await db.teslaAccount.create({
         data: {
           userId: user.id,
-          email: user.email,
+          email: input.accountEmail ?? user.email,
           region,
           accessToken: token,
-          refreshToken: token,
-          tokenExpiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          refreshToken: input.refreshToken ?? token,
+          tokenExpiry: input.tokenExpiry ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
           isActive: true,
         },
       })

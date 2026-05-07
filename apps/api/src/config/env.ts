@@ -21,6 +21,9 @@ const envSchema = z.object({
   // Tesla credentials — optional at startup, configured via setup wizard
   TESLA_TOKEN: z.string().default(''),
   TESLA_REGION: z.enum(['na', 'eu', 'cn']).default('na'),
+  TESLA_CLIENT_ID: z.string().default(''),
+  TESLA_CLIENT_SECRET: z.string().default(''),
+  TESLA_REDIRECT_URI: z.string().url().default('http://localhost:3001/api/auth/tesla/callback'),
 
   MQTT_BROKER: z.string().default('localhost'),
   MQTT_PORT: z.coerce.number().default(1883),

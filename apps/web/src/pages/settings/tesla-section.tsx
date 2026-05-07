@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { useLocation } from 'react-router-dom'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api-client'
@@ -8,6 +9,7 @@ import { AlertCircle, CheckCircle2, Zap } from 'lucide-react'
 type TeslaRegion = 'na' | 'eu' | 'cn'
 
 export function TeslaSettingsSection() {
+  const location = useLocation()
   const [teslaToken, setTeslaToken] = useState('')
   const [teslaRegion, setTeslaRegion] = useState<TeslaRegion>('na')
   const [error, setError] = useState<string | null>(null)
@@ -33,6 +35,21 @@ export function TeslaSettingsSection() {
       setTeslaRegion(teslaConfig.region)
     }
   }, [teslaConfig])
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const oauthState = params.get('tesla_oauth')
+    const reason = params.get('reason')
+
+    if (oauthState === 'success') {
+      setSuccess(true)
+      setError(null)
+      setTimeout(() => setSuccess(false), 4000)
+    } else if (oauthState === 'error') {
+      setSuccess(false)
+      setError(reason ? decodeURIComponent(reason) : 'Tesla OAuth connection failed')
+    }
+  }, [location.search])
 
   // Update Tesla config
   const updateMutation = useMutation({
@@ -100,6 +117,18 @@ export function TeslaSettingsSection() {
             <option value="eu">Europe</option>
             <option value="cn">China</option>
           </select>
+        </div>
+
+        <div className="pt-1">
+          <p className="text-xs text-text-muted mb-2">
+            Prefer automatic flow: connect Voltcraft directly to your Tesla account via OAuth.
+          </p>
+          <a
+            href="/api/auth/tesla/connect?returnTo=/settings"
+            className="inline-flex items-center justify-center w-full rounded-lg border border-border px-3 py-2.5 text-sm font-medium text-text-primary hover:bg-bg-overlay transition-colors"
+          >
+            Connect With Tesla OAuth
+          </a>
         </div>
 
         {/* Status Messages */}
