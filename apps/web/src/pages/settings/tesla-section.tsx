@@ -40,6 +40,11 @@ export function TeslaSettingsSection() {
   }, [location.search, refetchTeslaHealth])
 
   const displayedHealth = testResult ?? teslaHealth
+  const oauthConnectUrl = `/api/auth/tesla/connect?returnTo=${encodeURIComponent('/settings')}`
+
+  const handleConnectOAuth = () => {
+    window.location.assign(oauthConnectUrl)
+  }
 
   return (
     <Card className="p-6 space-y-6">
@@ -95,12 +100,14 @@ export function TeslaSettingsSection() {
           <p className="text-xs text-text-muted mb-2">
             OAuth Fleet only: connect Voltcraft directly to your Tesla account.
           </p>
-          <a
-            href="/api/auth/tesla/connect?returnTo=/settings"
-            className="inline-flex items-center justify-center w-full rounded-lg border border-border px-3 py-2.5 text-sm font-medium text-text-primary hover:bg-bg-overlay transition-colors"
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={handleConnectOAuth}
           >
             Connect With Tesla OAuth
-          </a>
+          </Button>
+          <p className="text-[11px] text-text-muted mt-2 break-all">If click fails, open directly: {oauthConnectUrl}</p>
         </div>
 
         {/* Status Messages */}

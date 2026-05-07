@@ -40,6 +40,8 @@ export async function authRoutes(app: FastifyInstance) {
   const service = new AuthService(repo)
 
   app.get('/tesla/connect', { schema: { tags: ['auth'] } }, async (req, reply) => {
+    app.log.info({ path: '/api/auth/tesla/connect' }, 'Tesla OAuth connect requested')
+
     if (!env.TESLA_CLIENT_ID || !env.TESLA_CLIENT_SECRET) {
       throw new AppError('TESLA_OAUTH_NOT_CONFIGURED', 'TESLA_CLIENT_ID / TESLA_CLIENT_SECRET are not configured on server', 400)
     }
@@ -82,6 +84,8 @@ export async function authRoutes(app: FastifyInstance) {
   })
 
   app.get('/tesla/callback', { schema: { tags: ['auth'] } }, async (req, reply) => {
+    app.log.info({ path: '/api/auth/tesla/callback' }, 'Tesla OAuth callback requested')
+
     const query = req.query as { code?: string; state?: string; error?: string; error_description?: string }
     const returnTo = req.cookies[TESLA_OAUTH_RETURN_COOKIE] ?? '/settings'
 
