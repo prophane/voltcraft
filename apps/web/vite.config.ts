@@ -42,7 +42,7 @@ export default defineConfig({
   preview: {
     port: 3000,
     host: '0.0.0.0',
-    allowedHosts: 'all',
+    allowedHosts: ['.prophane.local', 'localhost', '127.0.0.1'],
     proxy: {
       '/api': {
         target: 'http://api:3001',
