@@ -90,10 +90,10 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-voltcraft}:${POSTGRES_PASSWORD:-voltcraft_db_secret}@db:5432/${POSTGRES_DB:-voltcraft}
       REDIS_URL: redis://:${REDIS_PASSWORD:-voltcraft_redis_secret}@redis:6379
       SESSION_SECRET: ${SESSION_SECRET:-voltcraft_session_secret_change_in_prod}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-voltcraft_encryption_key_32chars_!!}
-      TESLA_CLIENT_ID: ${TESLA_CLIENT_ID}
-      TESLA_CLIENT_SECRET: ${TESLA_CLIENT_SECRET}
-      TESLA_REDIRECT_URI: ${TESLA_REDIRECT_URI}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-voltcraft_encryption_key_change_in_prod}
+      TESLA_CLIENT_ID: ${TESLA_CLIENT_ID:-}
+      TESLA_CLIENT_SECRET: ${TESLA_CLIENT_SECRET:-}
+      TESLA_REDIRECT_URI: ${TESLA_REDIRECT_URI:-}
       TESLA_REGION: ${TESLA_REGION:-na}
       MQTT_BROKER: mqtt
       MQTT_PORT: 1883

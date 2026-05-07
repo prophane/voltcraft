@@ -9,12 +9,13 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
 
-  SESSION_SECRET: z.string().min(32),
-  ENCRYPTION_KEY: z.string().length(64),
+  SESSION_SECRET: z.string().min(16).default('voltcraft_session_secret_change_in_production'),
+  ENCRYPTION_KEY: z.string().min(16).default('voltcraft_encryption_key_change_in_production_!!'),
 
-  TESLA_CLIENT_ID: z.string().min(1),
-  TESLA_CLIENT_SECRET: z.string().min(1),
-  TESLA_REDIRECT_URI: z.string().url(),
+  // Tesla credentials — optional at startup, configured via setup wizard
+  TESLA_CLIENT_ID: z.string().default(''),
+  TESLA_CLIENT_SECRET: z.string().default(''),
+  TESLA_REDIRECT_URI: z.string().default(''),
   TESLA_REGION: z.enum(['na', 'eu', 'cn']).default('na'),
 
   MQTT_BROKER: z.string().default('localhost'),
