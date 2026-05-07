@@ -3,7 +3,7 @@ import type { VehicleStateSnapshot, VehicleSummary } from '@voltcraft/shared'
 
 type TeslaRegion = 'na' | 'eu' | 'cn'
 
-interface TeslaConnectionStatus {
+export interface TeslaConnectionStatus {
   connected: boolean
   tokenConfigured: boolean
   accountConfigured: boolean
@@ -77,4 +77,6 @@ export const diagnosticsApi = {
   status: () => api.get<unknown>('/diagnostics'),
   apiUsage: () => api.get<unknown>('/diagnostics/api-usage'),
   teslaConnection: () => api.get<TeslaConnectionStatus>('/diagnostics/tesla-connection'),
+  teslaConnectionTest: (payload: { token: string; region: TeslaRegion }) =>
+    api.post<TeslaConnectionStatus>('/diagnostics/tesla-connection/test', payload),
 }

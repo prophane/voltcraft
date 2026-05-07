@@ -5,33 +5,24 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api-client'
 import { diagnosticsApi } from '@/features/vehicle/api'
+import type { TeslaConnectionStatus } from '@/features/vehicle/api'
 import { AlertCircle, CheckCircle2, Zap } from 'lucide-react'
 
 type TeslaRegion = 'na' | 'eu' | 'cn'
-
-interface TeslaConnectionStatus {
-  connected: boolean
-  tokenConfigured: boolean
-  accountConfigured: boolean
-  region: TeslaRegion
-  dbVehicleCount: number
-  apiVehicleCount?: number
-  apiReachable: boolean
-  httpStatus?: number
-  error?: string
-}
 
 export function TeslaSettingsSection() {
   const location = useLocation()
   const [teslaToken, setTeslaToken] = useState('')
   const [teslaRegion, setTeslaRegion] = useState<TeslaRegion>('na')
+  const [hasStoredToken, setHasStoredToken] = useState(false)
+  const [testResult, setTestResult] = useState<TeslaConnectionStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
   const {
     data: teslaHealth,
     refetch: refetchTeslaHealth,
-    isFetching: isCheckingTeslaHealth,
+    isFetching: isLoadingStoredHealth,
   } = useQuery({
     queryKey: ['diagnostics', 'tesla-connection'],
     queryFn: diagnosticsApi.teslaConnection,
@@ -53,11 +44,29 @@ export function TeslaSettingsSection() {
 
   useEffect(() => {
     if (!teslaConfig) return
-    setTeslaToken(teslaConfig.token ?? '')
+    setHasStoredToken(Boolean((teslaConfig as { configured?: boolean }).configured))
     if (teslaConfig.region === 'na' || teslaConfig.region === 'eu' || teslaConfig.region === 'cn') {
       setTeslaRegion(teslaConfig.region)
     }
   }, [teslaConfig])
+
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      const candidate = teslaToken.trim()
+      if (candidate) {
+        return diagnosticsApi.teslaConnectionTest({ token: candidate, region: teslaRegion })
+      }
+      return diagnosticsApi.teslaConnection()
+    },
+    onSuccess: (result) => {
+      setTestResult(result)
+      setError(null)
+    },
+    onError: (err: Error) => {
+      setError(err.message)
+      setTestResult(null)
+    },
+  })
 
   useEffect(() => {
     const params = new URLSearchParams(location.search)
@@ -100,6 +109,8 @@ export function TeslaSettingsSection() {
     updateMutation.mutate()
   }
 
+  const displayedHealth = testResult ?? teslaHealth
+
   return (
     <Card className="p-6 space-y-6">
       <CardHeader>
@@ -113,27 +124,36 @@ export function TeslaSettingsSection() {
         <div className="rounded-lg border border-border bg-bg-overlay/40 p-3 space-y-2">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-medium text-text-primary">Validation connexion API Tesla</p>
-            <Button size="sm" variant="secondary" onClick={() => refetchTeslaHealth()} loading={isCheckingTeslaHealth}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => testMutation.mutate()}
+              loading={testMutation.isPending || isLoadingStoredHealth}
+            >
               Tester la connexion
             </Button>
           </div>
 
-          {teslaHealth ? (
+          {displayedHealth ? (
             <div className="space-y-1 text-xs text-text-secondary">
               <p>
-                Statut: {teslaHealth.connected ? <span className="text-success">Connecté</span> : <span className="text-error">Non connecté</span>}
+                Statut: {displayedHealth.connected ? <span className="text-success">Connecté</span> : <span className="text-error">Non connecté</span>}
               </p>
-              <p>Token configuré: {teslaHealth.tokenConfigured ? 'oui' : 'non'}</p>
-              <p>Compte Tesla en base: {teslaHealth.accountConfigured ? 'oui' : 'non'}</p>
-              <p>Région: {teslaHealth.region?.toUpperCase?.() ?? 'N/A'}</p>
-              <p>Véhicules en base: {teslaHealth.dbVehicleCount ?? 0}</p>
-              <p>Véhicules vus par l'API Tesla: {teslaHealth.apiVehicleCount ?? 0}</p>
-              {!teslaHealth.connected && teslaHealth.error && (
-                <p className="text-error">Détail erreur: {teslaHealth.error}</p>
+              <p>Token configuré: {displayedHealth.tokenConfigured ? 'oui' : 'non'}</p>
+              <p>Compte Tesla en base: {displayedHealth.accountConfigured ? 'oui' : 'non'}</p>
+              <p>Région: {displayedHealth.region?.toUpperCase?.() ?? 'N/A'}</p>
+              <p>Véhicules en base: {displayedHealth.dbVehicleCount ?? 0}</p>
+              <p>Véhicules vus par l'API Tesla: {displayedHealth.apiVehicleCount ?? 0}</p>
+              {!displayedHealth.connected && displayedHealth.error && (
+                <p className="text-error">Détail erreur: {displayedHealth.error}</p>
               )}
             </div>
           ) : (
-            <p className="text-xs text-text-muted">Aucun diagnostic disponible pour le moment.</p>
+            <p className="text-xs text-text-muted">
+              {hasStoredToken
+                ? 'Clique sur "Tester la connexion" pour vérifier le token enregistré sans le modifier.'
+                : 'Colle un token ci-dessous puis clique "Tester la connexion". Le test ne sauvegarde rien.'}
+            </p>
           )}
         </div>
 
@@ -143,7 +163,7 @@ export function TeslaSettingsSection() {
           <textarea
             value={teslaToken}
             onChange={(e) => setTeslaToken(e.target.value)}
-            placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+            placeholder={hasStoredToken ? 'Token déjà configuré. Colle un nouveau token ici pour le tester sans sauvegarder.' : 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...'}
             className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none font-mono"
             rows={6}
           />

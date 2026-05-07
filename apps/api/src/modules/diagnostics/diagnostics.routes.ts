@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { ok } from '../../common/http/response.js'
 import { env } from '../../config/env.js'
+import { z } from 'zod'
 
 type TeslaRegion = 'na' | 'eu' | 'cn'
 
@@ -9,6 +10,91 @@ const REGION_BASE: Record<TeslaRegion, string> = {
   eu: 'https://fleet-api.prd.eu.vn.cloud.tesla.com',
   cn: 'https://fleet-api.prd.cn.vn.cloud.tesla.cn',
 }
+
+interface TeslaConnectionResult {
+  connected: boolean
+  tokenConfigured: boolean
+  accountConfigured: boolean
+  region: TeslaRegion
+  dbVehicleCount: number
+  apiVehicleCount?: number
+  apiReachable: boolean
+  httpStatus?: number
+  error?: string
+}
+
+async function probeTeslaConnection(input: {
+  token: string
+  region: TeslaRegion
+  accountConfigured: boolean
+  dbVehicleCount: number
+}): Promise<TeslaConnectionResult> {
+  const token = input.token.trim()
+
+  if (!token) {
+    return {
+      connected: false,
+      tokenConfigured: false,
+      accountConfigured: input.accountConfigured,
+      region: input.region,
+      dbVehicleCount: input.dbVehicleCount,
+      apiReachable: false,
+      error: 'Tesla token not configured',
+    }
+  }
+
+  const url = `${REGION_BASE[input.region]}/api/1/vehicles`
+
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(15_000),
+    })
+
+    if (!res.ok) {
+      const details = await res.text().catch(() => '')
+      return {
+        connected: false,
+        tokenConfigured: true,
+        accountConfigured: input.accountConfigured,
+        region: input.region,
+        dbVehicleCount: input.dbVehicleCount,
+        apiReachable: false,
+        httpStatus: res.status,
+        error: `Tesla Fleet API rejected request (${res.status})${details ? `: ${details.slice(0, 180)}` : ''}`,
+      }
+    }
+
+    const payload = (await res.json()) as { response?: unknown[] }
+    const apiVehicleCount = Array.isArray(payload.response) ? payload.response.length : 0
+
+    return {
+      connected: true,
+      tokenConfigured: true,
+      accountConfigured: input.accountConfigured,
+      region: input.region,
+      dbVehicleCount: input.dbVehicleCount,
+      apiVehicleCount,
+      apiReachable: true,
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown Tesla API network error'
+    return {
+      connected: false,
+      tokenConfigured: true,
+      accountConfigured: input.accountConfigured,
+      region: input.region,
+      dbVehicleCount: input.dbVehicleCount,
+      apiReachable: false,
+      error: `Unable to reach Tesla Fleet API: ${message}`,
+    }
+  }
+}
+
+const teslaConnectionTestSchema = z.object({
+  token: z.string().min(1),
+  region: z.enum(['na', 'eu', 'cn']),
+})
 
 export async function diagnosticsRoutes(app: FastifyInstance) {
   app.get('/', { schema: { tags: ['diagnostics'] } }, async (_req, reply) => {
@@ -56,68 +142,31 @@ export async function diagnosticsRoutes(app: FastifyInstance) {
 
     const region = (activeAccount?.region ?? env.TESLA_REGION) as TeslaRegion
     const token = (env.TESLA_TOKEN || activeAccount?.accessToken || '').trim()
-    const tokenConfigured = token.length > 0
+    const dbVehicleCount = await app.prisma.vehicle.count({ where: { isActive: true } })
+    const result = await probeTeslaConnection({
+      token,
+      region,
+      accountConfigured: !!activeAccount,
+      dbVehicleCount,
+    })
 
+    return reply.status(200).send(ok(result))
+  })
+
+  app.post('/tesla-connection/test', { schema: { tags: ['diagnostics'] } }, async (req, reply) => {
+    const payload = teslaConnectionTestSchema.parse(req.body)
     const dbVehicleCount = await app.prisma.vehicle.count({ where: { isActive: true } })
 
-    if (!tokenConfigured) {
-      return reply.status(503).send(ok({
-        connected: false,
-        tokenConfigured: false,
-        accountConfigured: !!activeAccount,
-        region,
-        dbVehicleCount,
-        apiReachable: false,
-        error: 'Tesla token not configured',
-      }))
-    }
+    const result = await probeTeslaConnection({
+      token: payload.token,
+      region: payload.region,
+      accountConfigured: false,
+      dbVehicleCount,
+    })
 
-    const url = `${REGION_BASE[region]}/api/1/vehicles`
-
-    try {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(15_000),
-      })
-
-      if (!res.ok) {
-        const details = await res.text().catch(() => '')
-        return reply.status(503).send(ok({
-          connected: false,
-          tokenConfigured: true,
-          accountConfigured: !!activeAccount,
-          region,
-          dbVehicleCount,
-          apiReachable: false,
-          httpStatus: res.status,
-          error: `Tesla Fleet API rejected request (${res.status})${details ? `: ${details.slice(0, 180)}` : ''}`,
-        }))
-      }
-
-      const payload = (await res.json()) as { response?: unknown[] }
-      const apiVehicleCount = Array.isArray(payload.response) ? payload.response.length : 0
-
-      return reply.status(200).send(ok({
-        connected: true,
-        tokenConfigured: true,
-        accountConfigured: !!activeAccount,
-        region,
-        dbVehicleCount,
-        apiVehicleCount,
-        apiReachable: true,
-      }))
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Tesla API network error'
-
-      return reply.status(503).send(ok({
-        connected: false,
-        tokenConfigured: true,
-        accountConfigured: !!activeAccount,
-        region,
-        dbVehicleCount,
-        apiReachable: false,
-        error: `Unable to reach Tesla Fleet API: ${message}`,
-      }))
-    }
+    return reply.status(200).send(ok({
+      ...result,
+      persisted: false,
+    }))
   })
 }
