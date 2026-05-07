@@ -3,6 +3,7 @@ import { setupSchema } from './auth.setup.service.js'
 import { AuthService } from './auth.service.js'
 import { AuthRepository } from './auth.repository.js'
 import { persistTeslaConfig } from '../../config/tesla-config.js'
+import { bootstrapTeslaInventory } from '../../providers/tesla/tesla-bootstrap.service.js'
 
 const COOKIE_NAME = 'voltcraft_session'
 
@@ -24,8 +25,15 @@ export async function registerSetupRoutes(app: FastifyInstance) {
     // Valider le payload
     const payload = setupSchema.parse(request.body)
 
+    let bootstrapResult: { vehiclesCount: number } | null = null
+
     if (payload.teslaToken) {
       await persistTeslaConfig({
+        token: payload.teslaToken,
+        region: payload.teslaRegion ?? 'na',
+      })
+
+      bootstrapResult = await bootstrapTeslaInventory(app.prisma, {
         token: payload.teslaToken,
         region: payload.teslaRegion ?? 'na',
       })
@@ -37,6 +45,7 @@ export async function registerSetupRoutes(app: FastifyInstance) {
       return reply.status(201).send({
         success: true,
         message: 'Setup completed - Tesla token configured',
+        vehiclesDetected: bootstrapResult?.vehiclesCount ?? 0,
       })
     }
 

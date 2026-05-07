@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import type { AuthRepository } from './auth.repository.js'
 import { UnauthorizedError, ConflictError } from '../../common/errors/app-error.js'
 import type { LoginInput, RegisterInput } from './auth.schemas.js'
+import { env } from '../../config/env.js'
 
 const SESSION_TTL_DAYS = 30
 
@@ -52,6 +53,20 @@ export class AuthService {
   }
 
   async validateSession(token: string) {
+    if (env.AUTH_DISABLED && token === 'SYSTEM_AUTH_DISABLED') {
+      const user = await this.repo.ensureSystemUser()
+      return {
+        id: 'SYSTEM_AUTH_DISABLED',
+        userId: user.id,
+        token,
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        createdAt: new Date(),
+        ipAddress: null,
+        userAgent: null,
+        user,
+      }
+    }
+
     const session = await this.repo.findSession(token)
     if (!session) throw new UnauthorizedError('Session not found')
     if (session.expiresAt < new Date()) {

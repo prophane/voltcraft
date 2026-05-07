@@ -4,6 +4,22 @@ import type { RegisterInput } from './auth.schemas.js'
 export class AuthRepository {
   constructor(private readonly db: PrismaClient) {}
 
+  async ensureSystemUser() {
+    return this.db.user.upsert({
+      where: { email: 'system@disabled' },
+      create: {
+        email: 'system@disabled',
+        name: 'System',
+        // Placeholder hash; not used when AUTH_DISABLED=true.
+        passwordHash: 'AUTH_DISABLED_NO_PASSWORD',
+        role: 'ADMIN',
+      },
+      update: {
+        name: 'System',
+      },
+    })
+  }
+
   async findUserByEmail(email: string) {
     return this.db.user.findUnique({ where: { email } })
   }

@@ -7,6 +7,7 @@ import { updateSettingsSchema } from './settings.schemas.js'
 import { ok } from '../../common/http/response.js'
 import { env } from '../../config/env.js'
 import { persistTeslaConfig } from '../../config/tesla-config.js'
+import { bootstrapTeslaInventory } from '../../providers/tesla/tesla-bootstrap.service.js'
 import { z } from 'zod'
 
 const teslaCfgSchema = z.object({
@@ -60,6 +61,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     const region = input.region ?? env.TESLA_REGION
 
     const persistence = await persistTeslaConfig({ token, region })
+    const bootstrap = await bootstrapTeslaInventory(app.prisma, { token, region })
 
     app.log.info(`Tesla config updated: region=${region}; persisted=${persistence.persistedToFile}`)
 
@@ -70,6 +72,7 @@ export async function settingsRoutes(app: FastifyInstance) {
         configured: true,
       },
       persistedToFile: persistence.persistedToFile,
+      vehiclesDetected: bootstrap.vehiclesCount,
     }))
   })
 }
