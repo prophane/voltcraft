@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import type Redis from 'ioredis'
 import { TeslaEcoPolicyService } from '../../src/providers/tesla/tesla-eco-policy.service.js'
 
 // Mock Redis
@@ -6,7 +7,7 @@ const mockRedis = {
   get: async () => null,
   set: async () => 'OK',
   del: async () => 1,
-} as unknown as import('ioredis').default
+} as unknown as Redis
 
 describe('TeslaEcoPolicyService', () => {
   const policy = new TeslaEcoPolicyService(mockRedis)
@@ -40,12 +41,12 @@ describe('TeslaEcoPolicyService', () => {
 
   describe('acquireSyncLock', () => {
     it('acquires lock when redis returns OK', async () => {
-      const redis = { set: async () => 'OK' } as unknown as import('ioredis').default
+      const redis = { set: async () => 'OK' } as unknown as Redis
       const p = new TeslaEcoPolicyService(redis)
       expect(await p.acquireSyncLock('vehicle-1')).toBe(true)
     })
     it('fails to acquire when lock is taken', async () => {
-      const redis = { set: async () => null } as unknown as import('ioredis').default
+      const redis = { set: async () => null } as unknown as Redis
       const p = new TeslaEcoPolicyService(redis)
       expect(await p.acquireSyncLock('vehicle-1')).toBe(false)
     })

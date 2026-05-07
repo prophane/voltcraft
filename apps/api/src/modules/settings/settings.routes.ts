@@ -6,10 +6,11 @@ import { requireAuth } from '../auth/auth.routes.js'
 import { updateSettingsSchema } from './settings.schemas.js'
 import { ok } from '../../common/http/response.js'
 import { env } from '../../config/env.js'
+import { persistTeslaConfig } from '../../config/tesla-config.js'
 import { z } from 'zod'
 
 const teslaCfgSchema = z.object({
-  token: z.string(),
+  token: z.string().min(1),
   region: z.enum(['na', 'eu', 'cn']).optional(),
 })
 
@@ -34,12 +35,17 @@ export async function settingsRoutes(app: FastifyInstance) {
   })
 
   // Tesla Configuration endpoints (no auth in AUTH_DISABLED mode)
-  app.get('/tesla', { schema: { tags: ['settings'] } }, async () => {
-    return {
+  app.get('/tesla', { schema: { tags: ['settings'] } }, async (req) => {
+    if (!env.AUTH_DISABLED) {
+      const token = await requireAuth(req)
+      await authService.validateSession(token)
+    }
+
+    return ok({
       token: env.TESLA_TOKEN ? '••••••••' : '',
       region: env.TESLA_REGION,
       configured: !!env.TESLA_TOKEN,
-    }
+    })
   })
 
   app.post('/tesla', { schema: { tags: ['settings'] } }, async (req, reply) => {
@@ -50,17 +56,20 @@ export async function settingsRoutes(app: FastifyInstance) {
     }
 
     const input = teslaCfgSchema.parse(req.body)
+    const token = input.token.replace(/\s+/g, '').trim()
+    const region = input.region ?? env.TESLA_REGION
 
-    // In a real app, you'd store this in DB and restart the service
-    // For now, we acknowledge it
-    app.log.info(`Tesla config updated: region=${input.region}`)
+    const persistence = await persistTeslaConfig({ token, region })
 
-    return reply.status(201).send({
-      success: true,
+    app.log.info(`Tesla config updated: region=${region}; persisted=${persistence.persistedToFile}`)
+
+    return reply.status(201).send(ok({
       message: 'Tesla configuration updated. Service restart may be required.',
       applied: {
-        region: input.region ?? env.TESLA_REGION,
+        region,
+        configured: true,
       },
-    })
+      persistedToFile: persistence.persistedToFile,
+    }))
   })
 }

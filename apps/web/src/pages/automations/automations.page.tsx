@@ -1,7 +1,6 @@
-import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { automationsApi } from '@/features/vehicle/api'
-import { Card, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { CardSkeleton } from '@/components/ui/skeleton'
 import { Plus, Trash2, Play, Pause, CheckCircle, XCircle } from 'lucide-react'

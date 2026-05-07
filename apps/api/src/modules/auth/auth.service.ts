@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import { AuthRepository } from './auth.repository.js'
+import type { AuthRepository } from './auth.repository.js'
 import { UnauthorizedError, ConflictError } from '../../common/errors/app-error.js'
 import type { LoginInput, RegisterInput } from './auth.schemas.js'
 

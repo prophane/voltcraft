@@ -1,13 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api-client'
 import { AlertCircle, CheckCircle2, Zap } from 'lucide-react'
 
+type TeslaRegion = 'na' | 'eu' | 'cn'
+
 export function TeslaSettingsSection() {
   const [teslaToken, setTeslaToken] = useState('')
-  const [teslaRegion, setTeslaRegion] = useState<'na' | 'eu' | 'cn'>('na')
+  const [teslaRegion, setTeslaRegion] = useState<TeslaRegion>('na')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
@@ -23,6 +25,14 @@ export function TeslaSettingsSection() {
       }
     },
   })
+
+  useEffect(() => {
+    if (!teslaConfig) return
+    setTeslaToken(teslaConfig.token ?? '')
+    if (teslaConfig.region === 'na' || teslaConfig.region === 'eu' || teslaConfig.region === 'cn') {
+      setTeslaRegion(teslaConfig.region)
+    }
+  }, [teslaConfig])
 
   // Update Tesla config
   const updateMutation = useMutation({
@@ -83,7 +93,7 @@ export function TeslaSettingsSection() {
           <label className="stat-label block mb-1.5">Region</label>
           <select
             value={teslaRegion}
-            onChange={(e) => setTeslaRegion(e.target.value as any)}
+            onChange={(e) => setTeslaRegion(e.target.value as TeslaRegion)}
             className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none"
           >
             <option value="na">North America</option>

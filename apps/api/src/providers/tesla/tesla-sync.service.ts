@@ -1,8 +1,7 @@
-import type { Vehicle } from '@prisma/client'
+import type { PrismaClient, TeslaAccount, Vehicle } from '@prisma/client'
 import type { TeslaClient } from './tesla.client.js'
 import type { VehicleRepository } from '../../modules/vehicle/vehicle.repository.js'
 import type { TeslaEcoPolicyService } from './tesla-eco-policy.service.js'
-import type { PrismaClient } from '@prisma/client'
 
 export class TeslaSyncService {
   constructor(
@@ -13,7 +12,7 @@ export class TeslaSyncService {
   ) {}
 
   async syncVehicleState(
-    vehicle: Vehicle & { teslaAccount: import('@prisma/client').TeslaAccount },
+    vehicle: Vehicle & { teslaAccount: TeslaAccount },
     opts: { force?: boolean } = {},
   ) {
     // ── Eco lock: prevent concurrent syncs ───────────────────

@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client'
+import type { Prisma, PrismaClient } from '@prisma/client'
 
 export class SettingsRepository {
   constructor(private readonly db: PrismaClient) {}
@@ -11,7 +11,7 @@ export class SettingsRepository {
     })
   }
 
-  async update(userId: string, data: import('@prisma/client').Prisma.UserSettingsUpdateInput) {
+  async update(userId: string, data: Prisma.UserSettingsUpdateInput) {
     return this.db.userSettings.update({
       where: { userId },
       data,

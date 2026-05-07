@@ -70,7 +70,7 @@ export async function authRoutes(app: FastifyInstance) {
   })
 
   // ── Session ──────────────────────────────────────────────────
-  app.get('/session', { schema: { tags: ['auth'] } }, async (req, reply) => {
+  app.get('/session', { schema: { tags: ['auth'] } }, async (req) => {
     // If AUTH_DISABLED, always return a system session
     if (env.AUTH_DISABLED) {
       return ok({

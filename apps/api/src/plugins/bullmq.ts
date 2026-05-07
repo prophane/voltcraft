@@ -1,5 +1,5 @@
 import fp from 'fastify-plugin'
-import { Queue, Worker } from 'bullmq'
+import { Queue } from 'bullmq'
 import { Redis } from 'ioredis'
 import { env } from '../config/env.js'
 

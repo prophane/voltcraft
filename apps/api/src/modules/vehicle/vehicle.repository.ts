@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client'
+import type { Prisma, PrismaClient } from '@prisma/client'
 
 export class VehicleRepository {
   constructor(private readonly db: PrismaClient) {}
@@ -52,7 +52,7 @@ export class VehicleRepository {
 
   async createSnapshot(
     vehicleId: string,
-    data: Omit<import('@prisma/client').Prisma.VehicleStateSnapshotCreateInput, 'vehicle'>,
+    data: Omit<Prisma.VehicleStateSnapshotCreateInput, 'vehicle'>,
   ) {
     return this.db.vehicleStateSnapshot.create({
       data: { ...data, vehicle: { connect: { id: vehicleId } } },

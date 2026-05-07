@@ -3,11 +3,12 @@ import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/features/auth/store'
 import { api } from '@/lib/api-client'
-import { Card, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Zap, CheckCircle2, ArrowRight } from 'lucide-react'
 
 type Step = 'admin' | 'tesla' | 'optional' | 'complete'
+type TeslaRegion = 'na' | 'eu' | 'cn'
 
 export function SetupWizardPage() {
   const navigate = useNavigate()
@@ -20,7 +21,7 @@ export function SetupWizardPage() {
     password: '',
     passwordConfirm: '',
     teslaToken: '', // Single bearer token field
-    teslaRegion: 'na' as const,
+    teslaRegion: 'na' as TeslaRegion,
     mqttEnabled: false,
   })
   const [error, setError] = useState<string | null>(null)
@@ -252,7 +253,7 @@ export function SetupWizardPage() {
                       <label className="stat-label block mb-1.5">Region</label>
                       <select
                         value={formData.teslaRegion}
-                        onChange={(e) => setFormData({ ...formData, teslaRegion: e.target.value as any })}
+                        onChange={(e) => setFormData({ ...formData, teslaRegion: e.target.value as TeslaRegion })}
                         className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none"
                       >
                         <option value="na">North America</option>
@@ -298,7 +299,7 @@ export function SetupWizardPage() {
                       <label className="stat-label block mb-1.5">Region</label>
                       <select
                         value={formData.teslaRegion}
-                        onChange={(e) => setFormData({ ...formData, teslaRegion: e.target.value as any })}
+                        onChange={(e) => setFormData({ ...formData, teslaRegion: e.target.value as TeslaRegion })}
                         className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none"
                       >
                         <option value="na">North America</option>

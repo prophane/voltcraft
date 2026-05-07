@@ -28,7 +28,7 @@ export function CommandsPage() {
   })
 
   const makeMutation = (fn: () => Promise<unknown>) =>
-    useMutation({ // eslint-disable-line react-hooks/rules-of-hooks
+    useMutation({
       mutationFn: fn,
       onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle', 'commands'] }),
     })

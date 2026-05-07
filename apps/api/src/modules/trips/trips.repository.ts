@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client'
+import type { Prisma, PrismaClient } from '@prisma/client'
 
 export class TripsRepository {
   constructor(private readonly db: PrismaClient) {}
@@ -26,11 +26,11 @@ export class TripsRepository {
     return this.db.trip.findFirst({ where: { id, vehicleId } })
   }
 
-  async create(vehicleId: string, data: Omit<import('@prisma/client').Prisma.TripCreateInput, 'vehicle'>) {
+  async create(vehicleId: string, data: Omit<Prisma.TripCreateInput, 'vehicle'>) {
     return this.db.trip.create({ data: { ...data, vehicle: { connect: { id: vehicleId } } } })
   }
 
-  async update(id: string, data: import('@prisma/client').Prisma.TripUpdateInput) {
+  async update(id: string, data: Prisma.TripUpdateInput) {
     return this.db.trip.update({ where: { id }, data })
   }
 }

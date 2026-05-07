@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { setupSchema } from './auth.setup.service.js'
 import { AuthService } from './auth.service.js'
 import { AuthRepository } from './auth.repository.js'
+import { persistTeslaConfig } from '../../config/tesla-config.js'
 
 const COOKIE_NAME = 'voltcraft_session'
 
@@ -23,10 +24,15 @@ export async function registerSetupRoutes(app: FastifyInstance) {
     // Valider le payload
     const payload = setupSchema.parse(request.body)
 
+    if (payload.teslaToken) {
+      await persistTeslaConfig({
+        token: payload.teslaToken,
+        region: payload.teslaRegion ?? 'na',
+      })
+    }
+
     // If AUTH_DISABLED, just save Tesla token and return success
     if (process.env.AUTH_DISABLED === 'true') {
-      // In AUTH_DISABLED mode, Tesla token would be set via env var
-      // This is just a placeholder for future flexibility
       app.log.info('Setup in AUTH_DISABLED mode: Tesla token configured')
       return reply.status(201).send({
         success: true,

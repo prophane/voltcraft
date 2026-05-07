@@ -1,4 +1,4 @@
-import { Thermometer, Lock, Unlock, MapPin, Clock } from 'lucide-react'
+import { Thermometer, Lock, Unlock, Clock } from 'lucide-react'
 import { VehicleStateBadge } from '@/components/ui/badge'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDate } from '@/lib/utils'

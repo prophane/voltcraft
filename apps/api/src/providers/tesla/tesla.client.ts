@@ -1,6 +1,5 @@
 import type { PrismaClient, TeslaAccount } from '@prisma/client'
 import type { Redis } from 'ioredis'
-import { decryptToken } from './tesla-auth.service.js'
 import { TeslaApiError } from '../../common/errors/app-error.js'
 import { env } from '../../config/env.js'
 import type { TeslaVehicleData, TeslaCommandResponse } from './tesla.types.js'
