@@ -94,25 +94,29 @@ export async function buildApp() {
     return reply.send({ status: 'ok', service: 'voltcraft-api', timestamp: new Date().toISOString() })
   })
 
-  // ── Config endpoint (frontend setup detection) ───────────────
-  app.get('/config', async () => {
-    return { authDisabled: process.env.AUTH_DISABLED === 'true' }
-  })
-
-  // ── API routes ──────────────────────────────────────────────
-  // Setup routes (no auth required for initial setup)
-  await app.register(registerSetupRoutes, { prefix: '/auth' })
-  // Auth routes
-  await app.register(authRoutes, { prefix: '/auth' })
-  await app.register(vehicleRoutes, { prefix: '/vehicle' })
-  await app.register(commandsRoutes, { prefix: '/commands' })
-  await app.register(tripsRoutes, { prefix: '/trips' })
-  await app.register(chargesRoutes, { prefix: '/charges' })
-  await app.register(statsRoutes, { prefix: '/stats' })
-  await app.register(automationsRoutes, { prefix: '/automations' })
-  await app.register(integrationsRoutes, { prefix: '/integrations' })
-  await app.register(settingsRoutes, { prefix: '/settings' })
-  await app.register(diagnosticsRoutes, { prefix: '/diagnostics' })
+  // ── API routes with /api prefix ──────────────────────────────
+  await app.register(
+    async (app) => {
+      // ── Config endpoint (frontend setup detection) ───────────────
+      app.get('/config', async () => {
+        return { authDisabled: process.env.AUTH_DISABLED === 'true' }
+      })
+      // Setup routes (no auth required for initial setup)
+      await app.register(registerSetupRoutes, { prefix: '/auth' })
+      // Auth routes
+      await app.register(authRoutes, { prefix: '/auth' })
+      await app.register(vehicleRoutes, { prefix: '/vehicle' })
+      await app.register(commandsRoutes, { prefix: '/commands' })
+      await app.register(tripsRoutes, { prefix: '/trips' })
+      await app.register(chargesRoutes, { prefix: '/charges' })
+      await app.register(statsRoutes, { prefix: '/stats' })
+      await app.register(automationsRoutes, { prefix: '/automations' })
+      await app.register(integrationsRoutes, { prefix: '/integrations' })
+      await app.register(settingsRoutes, { prefix: '/settings' })
+      await app.register(diagnosticsRoutes, { prefix: '/diagnostics' })
+    },
+    { prefix: '/api' }
+  )
 
   // ── Error handler ────────────────────────────────────────────
   registerErrorHandler(app)
