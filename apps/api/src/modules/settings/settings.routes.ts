@@ -111,7 +111,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       app.log.error(`Tesla partner registration failed: ${message}`)
-      return reply.status(500).send({ error: message })
+      return reply.status(500).send({ error: { code: 'PARTNER_REGISTRATION_FAILED', message } })
     }
   })
 }
