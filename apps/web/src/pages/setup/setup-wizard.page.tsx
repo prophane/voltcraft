@@ -10,7 +10,11 @@ import { Zap, CheckCircle2, ArrowRight } from 'lucide-react'
 type Step = 'admin' | 'tesla' | 'optional' | 'complete'
 type TeslaRegion = 'na' | 'eu' | 'cn'
 
-export function SetupWizardPage() {
+interface SetupWizardPageProps {
+  onSetupComplete?: () => void
+}
+
+export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
   const navigate = useNavigate()
   const setUser = useAuthStore((s) => s.setUser)
   const [authDisabled, setAuthDisabled] = useState(false)
@@ -74,7 +78,8 @@ export function SetupWizardPage() {
         setUser(data.user)
       }
       setStep('complete')
-      setTimeout(() => navigate('/'), 2000)
+      onSetupComplete?.()
+      setTimeout(() => navigate('/', { replace: true }), 400)
     },
     onError: (err: Error) => {
       setError(err.message)

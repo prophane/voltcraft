@@ -79,7 +79,7 @@ export function AppRouter() {
 
   return (
     <Routes>
-      {setupRequired && <Route path="/*" element={<SetupWizardPage />} />}
+      {setupRequired && <Route path="/*" element={<SetupWizardPage onSetupComplete={() => setSetupRequired(false)} />} />}
       {!setupRequired && !authDisabled && !isAuthenticated && <Route path="/*" element={<LoginPage />} />}
       {!setupRequired && (authDisabled || isAuthenticated) && <Route path="/*" element={<ProtectedRoutes authDisabled={authDisabled} />} />}
     </Routes>
