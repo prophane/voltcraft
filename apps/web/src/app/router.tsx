@@ -40,16 +40,15 @@ export function AppRouter() {
   useEffect(() => {
     const checkSetup = async () => {
       try {
-        // Check if auth is disabled
-        const configRes = await api.get<{ authDisabled: boolean }>('/config')
+        // Single call to /config gets both authDisabled AND setupRequired
+        const configRes = await api.get<{
+          authDisabled: boolean
+          setupRequired: boolean
+        }>('/config')
         setAuthDisabled(configRes.authDisabled ?? false)
-
-        // Check if setup is required
-        const setupRes = await api.get<{ setupRequired: boolean }>('/auth/setup')
-        setSetupRequired(setupRes.setupRequired ?? false)
+        setSetupRequired(configRes.setupRequired ?? false)
       } catch (err) {
         console.error('Failed to check setup/config:', err)
-        // If request fails, assume setup not required and auth enabled
         setSetupRequired(false)
         setAuthDisabled(false)
       } finally {
