@@ -5,6 +5,9 @@ import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
+import staticPlugin from '@fastify/static'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
 
 import { env } from './config/env.js'
 import { registerErrorHandler } from './common/errors/error-handler.js'
@@ -118,6 +121,21 @@ export async function buildApp() {
     },
     { prefix: '/api' }
   )
+
+  // ── Serve frontend SPA (fallback to index.html) ──────────────
+  const __dirname = dirname(fileURLToPath(import.meta.url))
+  const distPath = join(__dirname, '../../apps/web/dist')
+
+  await app.register(staticPlugin, {
+    root: distPath,
+    prefix: '/',
+    constraints: {}, // serve all files
+  })
+
+  // Fallback: any unmatched route serves index.html for SPA routing
+  app.get('*', async (_req, reply) => {
+    reply.type('text/html').sendFile('index.html')
+  })
 
   // ── Error handler ────────────────────────────────────────────
   registerErrorHandler(app)
