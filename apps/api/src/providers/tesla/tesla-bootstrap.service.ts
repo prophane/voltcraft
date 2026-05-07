@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client'
+import { AppError } from '../../common/errors/app-error.js'
 import { TeslaApiError } from '../../common/errors/app-error.js'
 
 type TeslaRegion = 'na' | 'eu' | 'cn'
@@ -18,12 +19,72 @@ interface TeslaVehiclesResponse {
   response?: TeslaVehicleSummary[]
 }
 
+interface DecodedTeslaToken {
+  exp?: number
+  scp?: string[]
+  scope?: string
+  ou_code?: string
+}
+
+function decodeTeslaJwtPayload(token: string): DecodedTeslaToken {
+  const parts = token.split('.')
+  if (parts.length < 2) {
+    throw new AppError('INVALID_TESLA_TOKEN', 'Invalid Tesla token format', 400)
+  }
+
+  try {
+    const payloadB64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = payloadB64 + '='.repeat((4 - (payloadB64.length % 4)) % 4)
+    const decoded = Buffer.from(padded, 'base64').toString('utf8')
+    return JSON.parse(decoded) as DecodedTeslaToken
+  } catch {
+    throw new AppError('INVALID_TESLA_TOKEN', 'Unable to decode Tesla token payload', 400)
+  }
+}
+
+function validateTeslaTokenForFleetApi(token: string, region: TeslaRegion) {
+  const payload = decodeTeslaJwtPayload(token)
+
+  if (payload.exp && payload.exp * 1000 < Date.now()) {
+    throw new AppError('TESLA_TOKEN_EXPIRED', 'Tesla token is expired. Generate a new token.', 401)
+  }
+
+  const scopes = Array.isArray(payload.scp)
+    ? payload.scp
+    : typeof payload.scope === 'string'
+      ? payload.scope.split(' ').filter(Boolean)
+      : []
+
+  const hasVehicleScope = scopes.some((s) => s.includes('vehicle'))
+  if (!hasVehicleScope) {
+    throw new AppError(
+      'TESLA_TOKEN_SCOPE_INVALID',
+      'Token does not include vehicle scopes. Generate a Fleet API token with vehicle permissions (for example vehicle_device_data).',
+      400,
+      { scopes },
+    )
+  }
+
+  if (payload.ou_code) {
+    const tokenRegion = payload.ou_code.toLowerCase() === 'eu' ? 'eu' : payload.ou_code.toLowerCase() === 'cn' ? 'cn' : 'na'
+    if (tokenRegion !== region) {
+      throw new AppError(
+        'TESLA_REGION_MISMATCH',
+        `Region mismatch: token appears to be ${tokenRegion.toUpperCase()} but selected region is ${region.toUpperCase()}.`,
+        400,
+      )
+    }
+  }
+}
+
 export async function bootstrapTeslaInventory(
   db: PrismaClient,
   input: { token: string; region: TeslaRegion },
 ): Promise<{ userId: string; accountId: string; vehiclesCount: number }> {
   const token = input.token.trim()
   const region = input.region
+
+  validateTeslaTokenForFleetApi(token, region)
 
   const user = await db.user.upsert({
     where: { email: 'system@disabled' },
