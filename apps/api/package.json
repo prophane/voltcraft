@@ -25,6 +25,7 @@
     "prisma": "5.22.0",
     "@voltcraft/shared": "workspace:*",
     "bullmq": "^5.4.0",
+    "dotenv": "^16.4.0",
     "fastify": "^4.27.0",
     "fastify-plugin": "^4.5.1",
     "ioredis": "^5.3.2",
