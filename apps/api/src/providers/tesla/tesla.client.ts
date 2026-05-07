@@ -22,52 +22,20 @@ export class TeslaClient {
   }
 
   private async getAccessToken(account: TeslaAccount): Promise<string> {
-    const cacheKey = `tesla:token:${account.id}`
-    const cached = await this.redis.get(cacheKey)
-    if (cached) return cached
-
-    // Refresh if expired
-    if (account.tokenExpiry < new Date()) {
-      const refreshed = await this.refreshToken(account)
-      return refreshed
+    // Use token from env directly (no refresh needed for bearer token)
+    // In production, this would be fetched from the stored Tesla account
+    // For now, we use the env TESLA_TOKEN or the stored token
+    const token = env.TESLA_TOKEN || account.accessToken
+    if (!token) {
+      throw new TeslaApiError('Tesla token not configured', 'tesla_not_configured')
     }
-
-    const plain = decryptToken(account.accessToken, env.ENCRYPTION_KEY)
-    // Cache token for remainder of its validity (minus 60s buffer)
-    const ttl = Math.max(0, Math.floor((account.tokenExpiry.getTime() - Date.now()) / 1000) - 60)
-    if (ttl > 0) await this.redis.set(cacheKey, plain, 'EX', ttl)
-    return plain
+    return token
   }
 
   private async refreshToken(account: TeslaAccount): Promise<string> {
-    // Tesla OAuth token refresh
-    const refreshToken = decryptToken(account.refreshToken, env.ENCRYPTION_KEY)
-    const res = await fetch('https://auth.tesla.com/oauth2/v3/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        client_id: env.TESLA_CLIENT_ID,
-        refresh_token: refreshToken,
-      }),
-    })
-    if (!res.ok) throw new TeslaApiError(`Token refresh failed: ${res.status}`)
-    const data = (await res.json()) as { access_token: string; expires_in: number; refresh_token: string }
-
-    const { encryptToken } = await import('./tesla-auth.service.js')
-    const newExpiry = new Date(Date.now() + data.expires_in * 1000)
-    await this.db.teslaAccount.update({
-      where: { id: account.id },
-      data: {
-        accessToken: encryptToken(data.access_token, env.ENCRYPTION_KEY),
-        refreshToken: encryptToken(data.refresh_token, env.ENCRYPTION_KEY),
-        tokenExpiry: newExpiry,
-      },
-    })
-
-    const cacheKey = `tesla:token:${account.id}`
-    await this.redis.set(cacheKey, data.access_token, 'EX', data.expires_in - 60)
-    return data.access_token
+    // With bearer token auth, no refresh needed
+    // Just return the current token from env
+    return env.TESLA_TOKEN || account.accessToken
   }
 
   async getVehicleData(account: TeslaAccount, vin: string): Promise<TeslaVehicleData> {

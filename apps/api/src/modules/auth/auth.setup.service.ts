@@ -2,12 +2,10 @@ import { randomBytes } from 'crypto'
 import { z } from 'zod'
 
 export const setupSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  teslaClientId: z.string().optional(),
-  teslaClientSecret: z.string().optional(),
-  teslaRedirectUri: z.string().url().optional(),
-  teslaRegion: z.enum(['US', 'EU', 'CN']).optional(),
+  email: z.string().email().optional(),
+  password: z.string().min(8).optional(),
+  teslaToken: z.string().optional(),
+  teslaRegion: z.enum(['na', 'eu', 'cn']).optional(),
   mqttEnabled: z.boolean().optional(),
 })
 

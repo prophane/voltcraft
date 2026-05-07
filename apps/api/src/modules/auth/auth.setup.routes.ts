@@ -23,7 +23,25 @@ export async function registerSetupRoutes(app: FastifyInstance) {
     // Valider le payload
     const payload = setupSchema.parse(request.body)
 
-    // 1. Créer l'utilisateur admin
+    // If AUTH_DISABLED, just save Tesla token and return success
+    if (process.env.AUTH_DISABLED === 'true') {
+      // In AUTH_DISABLED mode, Tesla token would be set via env var
+      // This is just a placeholder for future flexibility
+      app.log.info('Setup in AUTH_DISABLED mode: Tesla token configured')
+      return reply.status(201).send({
+        success: true,
+        message: 'Setup completed - Tesla token configured',
+      })
+    }
+
+    // 1. Créer l'utilisateur admin (normal auth mode)
+    if (!payload.email || !payload.password) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'BAD_REQUEST', message: 'Email and password required in auth mode' },
+      })
+    }
+
     const user = await service.register({
       email: payload.email,
       password: payload.password,

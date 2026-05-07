@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/features/auth/store'
@@ -12,35 +12,64 @@ type Step = 'admin' | 'tesla' | 'optional' | 'complete'
 export function SetupWizardPage() {
   const navigate = useNavigate()
   const setUser = useAuthStore((s) => s.setUser)
+  const [authDisabled, setAuthDisabled] = useState(false)
+  const [loadingConfig, setLoadingConfig] = useState(true)
   const [step, setStep] = useState<Step>('admin')
   const [formData, setFormData] = useState({
     email: '',
     password: '',
     passwordConfirm: '',
-    teslaClientId: '',
-    teslaClientSecret: '',
-    teslaRedirectUri: 'http://localhost:3000/auth/callback',
-    teslaRegion: 'US' as const,
+    teslaToken: '', // Single bearer token field
+    teslaRegion: 'na' as const,
     mqttEnabled: false,
   })
   const [error, setError] = useState<string | null>(null)
 
+  // Load config on mount to detect AUTH_DISABLED
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const config = await api.get<{ authDisabled: boolean; setupRequired: boolean }>('/config')
+        setAuthDisabled(config.authDisabled ?? false)
+        // If auth disabled, skip directly to Tesla setup
+        if (config.authDisabled) {
+          setStep('tesla')
+        }
+      } catch (err) {
+        console.error('Failed to load config:', err)
+        setAuthDisabled(false)
+      } finally {
+        setLoadingConfig(false)
+      }
+    }
+    loadConfig()
+  }, [])
+
   const setupMutation = useMutation({
-    mutationFn: () =>
-      api.post<{ user: { id: string; email: string; name: string }; session: { token: string } }>(
+    mutationFn: () => {
+      // If auth disabled, only send Tesla token
+      if (authDisabled) {
+        return api.post<{ success: true }>('/auth/setup', {
+          teslaToken: formData.teslaToken,
+          teslaRegion: formData.teslaRegion,
+        })
+      }
+      // Otherwise, send full setup payload with admin account
+      return api.post<{ user: { id: string; email: string; name: string }; session: { token: string } }>(
         '/auth/setup',
         {
           email: formData.email,
           password: formData.password,
-          teslaClientId: formData.teslaClientId || undefined,
-          teslaClientSecret: formData.teslaClientSecret || undefined,
-          teslaRedirectUri: formData.teslaRedirectUri || undefined,
+          teslaToken: formData.teslaToken,
           teslaRegion: formData.teslaRegion,
           mqttEnabled: formData.mqttEnabled,
         }
-      ),
+      )
+    },
     onSuccess: (data) => {
-      setUser(data.user)
+      if (!authDisabled && 'user' in data) {
+        setUser(data.user)
+      }
       setStep('complete')
       setTimeout(() => navigate('/'), 2000)
     },
@@ -52,6 +81,19 @@ export function SetupWizardPage() {
   const handleContinue = async () => {
     setError(null)
 
+    // Auth disabled mode: skip admin, go straight to Tesla token
+    if (authDisabled) {
+      if (step === 'tesla') {
+        if (!formData.teslaToken.trim()) {
+          setError('Tesla bearer token is required')
+          return
+        }
+        setupMutation.mutate()
+      }
+      return
+    }
+
+    // Normal auth mode: full 3-step wizard
     if (step === 'admin') {
       if (!formData.email || !formData.password) {
         setError('Email and password are required')
@@ -75,6 +117,21 @@ export function SetupWizardPage() {
 
   const teslaDeveloperUrl = 'https://developer.tesla.com/console/am'
 
+  if (loadingConfig) {
+    return (
+      <div className="min-h-screen bg-bg-base flex items-center justify-center px-4 py-8">
+        <div className="w-full max-w-2xl space-y-8">
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-accent-500 mb-4 shadow-glow animate-pulse">
+              <Zap size={28} className="text-white" />
+            </div>
+            <p className="text-text-secondary">Loading setup wizard...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-bg-base flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-2xl space-y-8">
@@ -90,20 +147,22 @@ export function SetupWizardPage() {
         </div>
 
         {/* Progress indicator */}
-        <div className="flex gap-2 justify-center">
-          {(['admin', 'tesla', 'optional'] as const).map((s, i) => (
-            <div
-              key={s}
-              className={`h-2 w-12 rounded-full transition-colors ${
-                step === s
-                  ? 'bg-accent-500'
-                  : ['admin', 'tesla'].includes(step) && ['admin', 'tesla'].indexOf(step) > i
-                  ? 'bg-success'
-                  : 'bg-border-subtle'
-              }`}
-            />
-          ))}
-        </div>
+        {!authDisabled && (
+          <div className="flex gap-2 justify-center">
+            {(['admin', 'tesla', 'optional'] as const).map((s, i) => (
+              <div
+                key={s}
+                className={`h-2 w-12 rounded-full transition-colors ${
+                  step === s
+                    ? 'bg-accent-500'
+                    : ['admin', 'tesla'].includes(step) && ['admin', 'tesla'].indexOf(step) > i
+                    ? 'bg-success'
+                    : 'bg-border-subtle'
+                }`}
+              />
+            ))}
+          </div>
+        )}
 
         <Card className="p-8 space-y-6">
           {/* Step 1: Admin User */}
@@ -155,72 +214,99 @@ export function SetupWizardPage() {
           {/* Step 2: Tesla API Config */}
           {step === 'tesla' && (
             <>
-              <div className="space-y-1">
-                <h2 className="text-xl font-semibold text-text-primary">Tesla Fleet API Setup</h2>
-                <p className="text-sm text-text-secondary">Connect to your Tesla vehicles</p>
-              </div>
+              {authDisabled ? (
+                // AUTH_DISABLED: Single token field
+                <>
+                  <div className="space-y-1">
+                    <h2 className="text-xl font-semibold text-text-primary">Configure Tesla Token</h2>
+                    <p className="text-sm text-text-secondary">Enter your Tesla API bearer token</p>
+                  </div>
 
-              <div className="bg-bg-overlay border border-border-subtle rounded-lg p-4 space-y-2">
-                <p className="text-xs font-medium text-text-secondary">ℹ️ Need Tesla credentials?</p>
-                <p className="text-xs text-text-muted">
-                  Register at{' '}
-                  <a href={teslaDeveloperUrl} target="_blank" rel="noopener noreferrer" className="text-accent-500 hover:underline">
-                    Tesla Developer Console
-                  </a>{' '}
-                  to obtain your Client ID and Secret.
-                </p>
-              </div>
+                  <div className="bg-bg-overlay border border-border-subtle rounded-lg p-4 space-y-2">
+                    <p className="text-xs font-medium text-text-secondary">ℹ️ Get your token from</p>
+                    <p className="text-xs text-text-muted">
+                      Visit{' '}
+                      <a href="https://developer.tesla.com" target="_blank" rel="noopener noreferrer" className="text-accent-500 hover:underline">
+                        Tesla Developer Portal
+                      </a>{' '}
+                      to generate your bearer token.
+                    </p>
+                  </div>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="stat-label block mb-1.5">Tesla Client ID</label>
-                  <input
-                    type="text"
-                    value={formData.teslaClientId}
-                    onChange={(e) => setFormData({ ...formData, teslaClientId: e.target.value })}
-                    className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none"
-                    placeholder="your-client-id"
-                  />
-                </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="stat-label block mb-1.5">Tesla Bearer Token</label>
+                      <textarea
+                        value={formData.teslaToken}
+                        onChange={(e) => setFormData({ ...formData, teslaToken: e.target.value })}
+                        className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none font-mono"
+                        placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        rows={8}
+                      />
+                      <p className="text-xs text-text-muted mt-1">Paste your complete JWT token here</p>
+                    </div>
 
-                <div>
-                  <label className="stat-label block mb-1.5">Tesla Client Secret</label>
-                  <input
-                    type="password"
-                    value={formData.teslaClientSecret}
-                    onChange={(e) => setFormData({ ...formData, teslaClientSecret: e.target.value })}
-                    className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none"
-                    placeholder="••••••••"
-                  />
-                </div>
+                    <div>
+                      <label className="stat-label block mb-1.5">Region</label>
+                      <select
+                        value={formData.teslaRegion}
+                        onChange={(e) => setFormData({ ...formData, teslaRegion: e.target.value as any })}
+                        className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none"
+                      >
+                        <option value="na">North America</option>
+                        <option value="eu">Europe</option>
+                        <option value="cn">China</option>
+                      </select>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                // NORMAL AUTH: Full OAuth fields
+                <>
+                  <div className="space-y-1">
+                    <h2 className="text-xl font-semibold text-text-primary">Tesla Fleet API Setup</h2>
+                    <p className="text-sm text-text-secondary">Connect to your Tesla vehicles</p>
+                  </div>
 
-                <div>
-                  <label className="stat-label block mb-1.5">Redirect URI</label>
-                  <input
-                    type="text"
-                    value={formData.teslaRedirectUri}
-                    onChange={(e) => setFormData({ ...formData, teslaRedirectUri: e.target.value })}
-                    className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none"
-                    placeholder="http://localhost:3000/auth/callback"
-                  />
-                  <p className="text-xs text-text-muted mt-1">Must match Tesla app configuration</p>
-                </div>
+                  <div className="bg-bg-overlay border border-border-subtle rounded-lg p-4 space-y-2">
+                    <p className="text-xs font-medium text-text-secondary">ℹ️ Need Tesla credentials?</p>
+                    <p className="text-xs text-text-muted">
+                      Register at{' '}
+                      <a href={teslaDeveloperUrl} target="_blank" rel="noopener noreferrer" className="text-accent-500 hover:underline">
+                        Tesla Developer Console
+                      </a>{' '}
+                      to obtain your Client ID and Secret.
+                    </p>
+                  </div>
 
-                <div>
-                  <label className="stat-label block mb-1.5">Region</label>
-                  <select
-                    value={formData.teslaRegion}
-                    onChange={(e) => setFormData({ ...formData, teslaRegion: e.target.value as any })}
-                    className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none"
-                  >
-                    <option value="US">United States</option>
-                    <option value="EU">Europe</option>
-                    <option value="CN">China</option>
-                  </select>
-                </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="stat-label block mb-1.5">Tesla Bearer Token (Optional)</label>
+                      <textarea
+                        value={formData.teslaToken}
+                        onChange={(e) => setFormData({ ...formData, teslaToken: e.target.value })}
+                        className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none font-mono"
+                        placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        rows={4}
+                      />
+                      <p className="text-xs text-text-muted mt-1">Or use Client ID/Secret below for OAuth</p>
+                    </div>
 
-                <p className="text-xs text-text-muted">You can configure this later in Settings</p>
-              </div>
+                    <div>
+                      <label className="stat-label block mb-1.5">Region</label>
+                      <select
+                        value={formData.teslaRegion}
+                        onChange={(e) => setFormData({ ...formData, teslaRegion: e.target.value as any })}
+                        className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none"
+                      >
+                        <option value="na">North America</option>
+                        <option value="eu">Europe</option>
+                        <option value="cn">China</option>
+                      </select>
+                    </div>
+                  </div>
+                </>
+              )}
             </>
           )}
 
@@ -267,7 +353,7 @@ export function SetupWizardPage() {
           {/* Action buttons */}
           {step !== 'complete' && (
             <div className="flex gap-3 pt-4">
-              {step !== 'admin' && (
+              {step !== 'admin' && !authDisabled && (
                 <Button variant="secondary" className="flex-1" onClick={() => setStep(step === 'tesla' ? 'admin' : 'tesla')}>
                   Back
                 </Button>
@@ -278,7 +364,11 @@ export function SetupWizardPage() {
                 loading={setupMutation.isPending}
                 onClick={handleContinue}
               >
-                {step === 'optional' ? 'Complete Setup' : 'Continue'}
+                {authDisabled && step === 'tesla'
+                  ? 'Complete Setup'
+                  : step === 'optional'
+                    ? 'Complete Setup'
+                    : 'Continue'}
                 <ArrowRight size={14} />
               </Button>
             </div>
