@@ -106,10 +106,11 @@ export async function buildApp() {
         // If auth disabled, setup is required if Tesla not configured
         const teslaNeedsSetup = env.AUTH_DISABLED && !env.TESLA_TOKEN
 
-        return ok({
+        // Return directly without ok() wrapper to match frontend expectations
+        return {
           authDisabled: env.AUTH_DISABLED,
           setupRequired: teslaNeedsSetup,
-        })
+        }
       })
       // Setup routes (no auth required for initial setup)
       await app.register(registerSetupRoutes, { prefix: '/auth' })
