@@ -40,4 +40,4 @@ COPY --from=base /app/node_modules/.pnpm ./node_modules/.pnpm
 ENV NODE_ENV=production
 EXPOSE 3001
 
-CMD ["sh", "-c", "cd apps/api && npx prisma migrate deploy && node dist/server.js"]
+CMD ["sh", "-c", "cd apps/api && npx prisma db push --accept-data-loss && node dist/server.js"]
