@@ -1,15 +1,13 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Zap, Route, Battery, BarChart3, Bot, Settings } from 'lucide-react'
+import { LayoutDashboard, Route, Battery, Bot, Ellipsis } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
-  { to: '/',         label: 'Home',       icon: LayoutDashboard },
-  { to: '/commands', label: 'Commandes',  icon: Zap },
-  { to: '/trips',    label: 'Trajets',    icon: Route },
-  { to: '/charges',  label: 'Recharges',  icon: Battery },
-  { to: '/stats',    label: 'Stats',      icon: BarChart3 },
-  { to: '/automations', label: 'Auto',    icon: Bot },
-  { to: '/settings', label: 'Paramètres', icon: Settings },
+  { to: '/',            label: 'Dashboard',   icon: LayoutDashboard },
+  { to: '/trips',       label: 'Trips',       icon: Route },
+  { to: '/charges',     label: 'Charging',    icon: Battery },
+  { to: '/automations', label: 'Automations', icon: Bot },
+  { to: '/settings',    label: '...',         icon: Ellipsis },
 ]
 
 export function MobileBottomNav() {
