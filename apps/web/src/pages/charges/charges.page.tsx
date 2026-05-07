@@ -32,7 +32,7 @@ export function ChargesPage() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-text-primary">
-                      {session['startBatteryLevel'] ?? '—'}% → {session['endBatteryLevel'] ?? '—'}%
+                      {String(session['startBatteryLevel'] ?? '—')}% → {String(session['endBatteryLevel'] ?? '—')}%
                     </p>
                     <p className="text-xs text-text-muted mt-0.5">{formatDate(session['startedAt'] as string)}</p>
                   </div>
@@ -42,19 +42,19 @@ export function ChargesPage() {
                   {session['energyAddedKwh'] && (
                     <div className="flex items-center gap-1.5 text-text-secondary">
                       <Zap size={12} />
-                      +{(session['energyAddedKwh'] as number).toFixed(1)} kWh
+                      +{Number(session['energyAddedKwh']).toFixed(1)} kWh
                     </div>
                   )}
                   {session['durationMin'] && (
                     <div className="flex items-center gap-1.5 text-text-secondary">
                       <Clock size={12} />
-                      {formatDuration(session['durationMin'] as number)}
+                      {formatDuration(Number(session['durationMin']))}
                     </div>
                   )}
                   {session['estimatedCost'] && (
                     <div className="flex items-center gap-1.5 text-success">
                       <Euro size={12} />
-                      {(session['estimatedCost'] as number).toFixed(2)} €
+                      {Number(session['estimatedCost']).toFixed(2)} €
                     </div>
                   )}
                 </div>

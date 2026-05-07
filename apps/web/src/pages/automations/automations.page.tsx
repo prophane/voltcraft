@@ -79,7 +79,7 @@ export function AutomationsPage() {
                   </p>
                   {rule['lastExecutedAt'] && (
                     <p className="text-xs text-text-muted mt-1">
-                      Dernière exécution: {formatDate(rule['lastExecutedAt'] as string)}
+                      Dernière exécution: {formatDate(String(rule['lastExecutedAt']))}
                     </p>
                   )}
                 </div>

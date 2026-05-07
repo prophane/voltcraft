@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 const BASE = import.meta.env.VITE_API_URL ?? '/api'
 
 class ApiError extends Error {
@@ -33,7 +34,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, data?: unknown) =>
-    request<T>(path, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
+    request<T>(path, { method: 'POST', ...(data !== undefined ? { body: JSON.stringify(data) } : {}) }),
   patch: <T>(path: string, data: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(data) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
