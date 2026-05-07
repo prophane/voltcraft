@@ -1,6 +1,20 @@
 import { api } from '@/lib/api-client'
 import type { VehicleStateSnapshot, VehicleSummary } from '@voltcraft/shared'
 
+type TeslaRegion = 'na' | 'eu' | 'cn'
+
+interface TeslaConnectionStatus {
+  connected: boolean
+  tokenConfigured: boolean
+  accountConfigured: boolean
+  region: TeslaRegion
+  dbVehicleCount: number
+  apiVehicleCount?: number
+  apiReachable: boolean
+  httpStatus?: number
+  error?: string
+}
+
 export const vehicleApi = {
   getCurrent: () => api.get<VehicleSummary>('/vehicle/current'),
   getState: () => api.get<VehicleStateSnapshot & { isCached: boolean }>('/vehicle/state'),
@@ -62,4 +76,5 @@ export const settingsApi = {
 export const diagnosticsApi = {
   status: () => api.get<unknown>('/diagnostics'),
   apiUsage: () => api.get<unknown>('/diagnostics/api-usage'),
+  teslaConnection: () => api.get<TeslaConnectionStatus>('/diagnostics/tesla-connection'),
 }

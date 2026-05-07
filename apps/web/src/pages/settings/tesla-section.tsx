@@ -4,9 +4,22 @@ import { useLocation } from 'react-router-dom'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api-client'
+import { diagnosticsApi } from '@/features/vehicle/api'
 import { AlertCircle, CheckCircle2, Zap } from 'lucide-react'
 
 type TeslaRegion = 'na' | 'eu' | 'cn'
+
+interface TeslaConnectionStatus {
+  connected: boolean
+  tokenConfigured: boolean
+  accountConfigured: boolean
+  region: TeslaRegion
+  dbVehicleCount: number
+  apiVehicleCount?: number
+  apiReachable: boolean
+  httpStatus?: number
+  error?: string
+}
 
 export function TeslaSettingsSection() {
   const location = useLocation()
@@ -14,6 +27,16 @@ export function TeslaSettingsSection() {
   const [teslaRegion, setTeslaRegion] = useState<TeslaRegion>('na')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+
+  const {
+    data: teslaHealth,
+    refetch: refetchTeslaHealth,
+    isFetching: isCheckingTeslaHealth,
+  } = useQuery({
+    queryKey: ['diagnostics', 'tesla-connection'],
+    queryFn: diagnosticsApi.teslaConnection,
+    retry: false,
+  })
 
   // Load current Tesla config
   const { data: teslaConfig } = useQuery({
@@ -87,6 +110,33 @@ export function TeslaSettingsSection() {
       </CardHeader>
 
       <div className="space-y-4">
+        <div className="rounded-lg border border-border bg-bg-overlay/40 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-text-primary">Validation connexion API Tesla</p>
+            <Button size="sm" variant="secondary" onClick={() => refetchTeslaHealth()} loading={isCheckingTeslaHealth}>
+              Tester la connexion
+            </Button>
+          </div>
+
+          {teslaHealth ? (
+            <div className="space-y-1 text-xs text-text-secondary">
+              <p>
+                Statut: {teslaHealth.connected ? <span className="text-success">Connecté</span> : <span className="text-error">Non connecté</span>}
+              </p>
+              <p>Token configuré: {teslaHealth.tokenConfigured ? 'oui' : 'non'}</p>
+              <p>Compte Tesla en base: {teslaHealth.accountConfigured ? 'oui' : 'non'}</p>
+              <p>Région: {teslaHealth.region?.toUpperCase?.() ?? 'N/A'}</p>
+              <p>Véhicules en base: {teslaHealth.dbVehicleCount ?? 0}</p>
+              <p>Véhicules vus par l'API Tesla: {teslaHealth.apiVehicleCount ?? 0}</p>
+              {!teslaHealth.connected && teslaHealth.error && (
+                <p className="text-error">Détail erreur: {teslaHealth.error}</p>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-text-muted">Aucun diagnostic disponible pour le moment.</p>
+          )}
+        </div>
+
         {/* Token Input */}
         <div>
           <label className="stat-label block mb-1.5">Bearer Token</label>
