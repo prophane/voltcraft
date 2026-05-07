@@ -46,16 +46,17 @@ export function SetupWizardPage() {
   }, [])
 
   const setupMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       // If auth disabled, only send Tesla token
       if (authDisabled) {
-        return api.post<{ success: true }>('/auth/setup', {
+        await api.post<{ success: true }>('/auth/setup', {
           teslaToken: formData.teslaToken,
           teslaRegion: formData.teslaRegion,
         })
+        return { success: true as const }
       }
       // Otherwise, send full setup payload with admin account
-      return api.post<{ user: { id: string; email: string; name: string }; session: { token: string } }>(
+      const response = await api.post<{ user: { id: string; email: string; name: string }; session: { token: string } }>(
         '/auth/setup',
         {
           email: formData.email,
@@ -65,9 +66,10 @@ export function SetupWizardPage() {
           mqttEnabled: formData.mqttEnabled,
         }
       )
+      return { success: true as const, user: response.user }
     },
     onSuccess: (data) => {
-      if (!authDisabled && 'user' in data) {
+      if (!authDisabled && data.user) {
         setUser(data.user)
       }
       setStep('complete')
