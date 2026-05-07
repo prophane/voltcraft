@@ -34,6 +34,16 @@ function ProtectedRoutes({ authDisabled }: { authDisabled: boolean }) {
 }
 
 export function AppRouter() {
+  if (typeof window !== 'undefined' && window.location.pathname === '/auth/tesla/callback') {
+    const target = `/api/auth/tesla/callback${window.location.search}`
+    window.location.replace(target)
+    return (
+      <div className="min-h-screen bg-bg-base flex items-center justify-center">
+        <div className="text-text-secondary">Finalizing Tesla OAuth...</div>
+      </div>
+    )
+  }
+
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null)
   const [authDisabled, setAuthDisabled] = useState(FORCE_NO_AUTH)
