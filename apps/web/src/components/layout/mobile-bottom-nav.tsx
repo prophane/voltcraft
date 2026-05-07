@@ -14,7 +14,7 @@ const NAV_ITEMS = [
 
 export function MobileBottomNav() {
   return (
-    <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-bg-surface border-t border-border-subtle flex items-center overflow-x-auto px-2 pb-safe">
+    <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-bg-surface border-t border-border-subtle flex items-center px-1 pb-safe">
       {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
         <NavLink
           key={to}
@@ -22,13 +22,13 @@ export function MobileBottomNav() {
           end={to === '/'}
           className={({ isActive }) =>
             cn(
-              'flex flex-col items-center gap-1 py-3 px-3 text-xs font-medium transition-colors min-w-[72px] flex-shrink-0',
+              'flex-1 min-w-0 flex flex-col items-center gap-1 py-2 px-1 text-[10px] font-medium transition-colors',
               isActive ? 'text-accent-400' : 'text-text-muted',
             )
           }
         >
-          <Icon size={20} />
-          {label}
+          <Icon size={18} />
+          <span className="max-w-full truncate">{label}</span>
         </NavLink>
       ))}
     </nav>
