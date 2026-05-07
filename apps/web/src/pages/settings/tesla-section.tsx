@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { diagnosticsApi } from '@/features/vehicle/api'
@@ -9,6 +9,7 @@ import { AlertCircle, CheckCircle2, Zap } from 'lucide-react'
 
 export function TeslaSettingsSection() {
   const location = useLocation()
+  const navigate = useNavigate()
   const [testResult, setTestResult] = useState<TeslaConnectionStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -28,6 +29,10 @@ export function TeslaSettingsSection() {
     const oauthState = params.get('tesla_oauth')
     const reason = params.get('reason')
 
+    if (!oauthState) {
+      return
+    }
+
     if (oauthState === 'success') {
       setSuccess(true)
       setError(null)
@@ -37,10 +42,13 @@ export function TeslaSettingsSection() {
       setSuccess(false)
       setError(reason ? decodeURIComponent(reason) : 'Tesla OAuth connection failed')
     }
-  }, [location.search, refetchTeslaHealth])
+
+    void navigate(location.pathname, { replace: true })
+  }, [location.pathname, location.search, navigate, refetchTeslaHealth])
 
   const displayedHealth = testResult ?? teslaHealth
   const oauthConnectUrl = `/api/auth/tesla/connect?returnTo=${encodeURIComponent('/settings')}`
+  const teslaDeveloperPortalUrl = 'https://developer.tesla.com/'
 
   const handleConnectOAuth = () => {
     window.location.assign(oauthConnectUrl)
@@ -63,10 +71,10 @@ export function TeslaSettingsSection() {
               size="sm"
               variant="secondary"
               onClick={async () => {
+                setError(null)
                 try {
                   const result = await refetchTeslaHealth()
                   setTestResult((result.data ?? null) as TeslaConnectionStatus | null)
-                  setError(null)
                 } catch (err) {
                   setError(err instanceof Error ? err.message : 'Tesla connection test failed')
                 }
@@ -112,8 +120,31 @@ export function TeslaSettingsSection() {
           <p className="text-[11px] text-text-muted mt-2 break-all">If click fails, open directly: {oauthConnectUrl}</p>
         </div>
 
+        {displayedHealth?.partnerRegistrationRequired && (
+          <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 space-y-2">
+            <p className="text-sm font-medium text-text-primary">Étape restante côté Tesla Developer</p>
+            <p className="text-sm text-text-secondary">
+              L&apos;OAuth utilisateur fonctionne. Le blocage restant est l&apos;enregistrement partner Fleet de ton application pour la région EU.
+            </p>
+            <p className="text-sm text-text-secondary">
+              1. Vérifie que cette URL répond publiquement: {displayedHealth.partnerPublicKeyUrl ?? 'URL de clé partner indisponible'}
+            </p>
+            <p className="text-sm text-text-secondary">
+              2. Ouvre le portail Tesla Developer et finalise la registration partner pour le domaine public de Voltcraft.
+            </p>
+            <a
+              href={teslaDeveloperPortalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-accent-500 hover:underline"
+            >
+              Ouvrir Tesla Developer
+            </a>
+          </div>
+        )}
+
         {/* Status Messages */}
-        {error && (
+        {error && !displayedHealth?.partnerRegistrationRequired && (
           <div className="bg-error/10 border border-error/30 rounded-lg p-3 flex gap-2">
             <AlertCircle size={16} className="text-error flex-shrink-0 mt-0.5" />
             <p className="text-sm text-error">{error}</p>
