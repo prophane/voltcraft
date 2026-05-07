@@ -94,7 +94,9 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:-voltcraft_session_secret_change_in_prod}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-voltcraft_encryption_key_change_in_prod}
       AUTH_DISABLED: ${AUTH_DISABLED:-true}
-      TESLA_TOKEN: ${TESLA_TOKEN:-}
+      TESLA_CLIENT_ID: ${TESLA_CLIENT_ID:-}
+      TESLA_CLIENT_SECRET: ${TESLA_CLIENT_SECRET:-}
+      TESLA_REDIRECT_URI: ${TESLA_REDIRECT_URI:-}
       TESLA_REGION: ${TESLA_REGION:-na}
       MQTT_BROKER: mqtt
       MQTT_PORT: 1883

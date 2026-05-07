@@ -104,12 +104,10 @@ export async function buildApp() {
       // ── Config endpoint (frontend setup detection) ───────────────
       app.get('/config', async () => {
         // If auth disabled, setup is required if Tesla not configured
-        const teslaNeedsSetup =
-          process.env.AUTH_DISABLED === 'true' &&
-          !process.env.TESLA_TOKEN
+        const teslaNeedsSetup = env.AUTH_DISABLED && !env.TESLA_CLIENT_ID
 
         return ok({
-          authDisabled: process.env.AUTH_DISABLED === 'true',
+          authDisabled: env.AUTH_DISABLED,
           setupRequired: teslaNeedsSetup,
         })
       })
