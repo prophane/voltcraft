@@ -106,7 +106,7 @@ export async function buildApp() {
         // If auth disabled, setup is required if Tesla not configured
         const teslaNeedsSetup =
           process.env.AUTH_DISABLED === 'true' &&
-          (!process.env.TESLA_CLIENT_ID || !process.env.TESLA_CLIENT_SECRET)
+          !process.env.TESLA_TOKEN
 
         return ok({
           authDisabled: process.env.AUTH_DISABLED === 'true',
