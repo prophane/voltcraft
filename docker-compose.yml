@@ -85,8 +85,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      mqtt:
-        condition: service_started
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-voltcraft}:${POSTGRES_PASSWORD:-voltcraft_db_secret}@db:5432/${POSTGRES_DB:-voltcraft}
@@ -96,6 +94,7 @@ services:
       AUTH_DISABLED: ${AUTH_DISABLED:-true}
       TESLA_TOKEN: ${TESLA_TOKEN:-}
       TESLA_REGION: ${TESLA_REGION:-na}
+      MQTT_ENABLED: ${MQTT_ENABLED:-false}
       MQTT_BROKER: mqtt
       MQTT_PORT: 1883
       MQTT_USERNAME: ${MQTT_USERNAME:-}

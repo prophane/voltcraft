@@ -12,19 +12,21 @@ const REGION_BASE: Record<TeslaRegion, string> = {
 
 export async function diagnosticsRoutes(app: FastifyInstance) {
   app.get('/', { schema: { tags: ['diagnostics'] } }, async (_req, reply) => {
+    const mqttStatus = env.MQTT_ENABLED
+      ? (app.mqtt.connected ? 'ok' : 'disconnected')
+      : 'disabled'
+
     const checks = await Promise.allSettled([
       app.prisma.$queryRaw`SELECT 1`.then(() => 'ok'),
       app.redis.ping().then((r) => (r === 'PONG' ? 'ok' : 'error')),
-      new Promise<string>((resolve) =>
-        app.mqtt.connected ? resolve('ok') : resolve('disconnected'),
-      ),
+      Promise.resolve(mqttStatus),
     ])
 
     const [db, redis, mqtt] = checks.map((r) =>
       r.status === 'fulfilled' ? r.value : 'error',
     )
 
-    const allOk = [db, redis, mqtt].every((s) => s === 'ok')
+    const allOk = db === 'ok' && redis === 'ok' && (mqtt === 'ok' || mqtt === 'disabled')
 
     return reply.status(allOk ? 200 : 503).send(
       ok({

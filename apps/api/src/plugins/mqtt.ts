@@ -9,6 +9,12 @@ declare module 'fastify' {
 }
 
 export const mqttPlugin = fp(async (app) => {
+  if (!env.MQTT_ENABLED) {
+    app.log.info('MQTT disabled by configuration (MQTT_ENABLED=false)')
+    app.decorate('mqtt', { connected: false } as MqttClient)
+    return
+  }
+
   const brokerUrl = `mqtt://${env.MQTT_BROKER}:${env.MQTT_PORT}`
 
   const client = mqtt.connect(brokerUrl, {

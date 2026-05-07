@@ -3,6 +3,7 @@ import { ok } from '../../common/http/response.js'
 import { AuthRepository } from '../auth/auth.repository.js'
 import { AuthService } from '../auth/auth.service.js'
 import { requireAuth } from '../auth/auth.routes.js'
+import { env } from '../../config/env.js'
 
 export async function integrationsRoutes(app: FastifyInstance) {
   const authService = new AuthService(new AuthRepository(app.prisma))
@@ -19,7 +20,8 @@ export async function integrationsRoutes(app: FastifyInstance) {
       enabled: config.enabled,
       lastTestedAt: config.lastTestedAt,
       lastStatus: config.lastStatus,
-      mqttConnected: app.mqtt.connected,
+      mqttConnected: env.MQTT_ENABLED ? app.mqtt.connected : false,
+      mqttEnabled: env.MQTT_ENABLED,
     })
   })
 
@@ -27,8 +29,8 @@ export async function integrationsRoutes(app: FastifyInstance) {
     const token = await requireAuth(req)
     await authService.validateSession(token)
 
-    const connected = app.mqtt.connected
-    const status = connected ? 'connected' : 'error'
+    const connected = env.MQTT_ENABLED ? app.mqtt.connected : false
+    const status = env.MQTT_ENABLED ? (connected ? 'connected' : 'error') : 'disabled'
 
     await app.prisma.integrationConfig.upsert({
       where: { name: 'home_assistant' },
@@ -36,8 +38,14 @@ export async function integrationsRoutes(app: FastifyInstance) {
       update: { lastTestedAt: new Date(), lastStatus: status },
     })
 
-    return reply.status(connected ? 200 : 503).send(
-      ok({ connected, status, message: connected ? 'MQTT broker reachable' : 'MQTT broker unreachable' }),
+    return reply.status(env.MQTT_ENABLED ? (connected ? 200 : 503) : 200).send(
+      ok({
+        connected,
+        status,
+        message: env.MQTT_ENABLED
+          ? (connected ? 'MQTT broker reachable' : 'MQTT broker unreachable')
+          : 'MQTT disabled by configuration',
+      }),
     )
   })
 }

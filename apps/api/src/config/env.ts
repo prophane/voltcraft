@@ -25,6 +25,10 @@ const envSchema = z.object({
   TESLA_CLIENT_SECRET: z.string().default(''),
   TESLA_REDIRECT_URI: z.string().url().default('http://localhost:3001/api/auth/tesla/callback'),
 
+  MQTT_ENABLED: z
+    .string()
+    .transform((v) => v !== 'false')
+    .default('true'),
   MQTT_BROKER: z.string().default('localhost'),
   MQTT_PORT: z.coerce.number().default(1883),
   MQTT_USERNAME: z.string().default(''),
