@@ -1,0 +1,158 @@
+# =================================================================
+# Voltcraft — Docker Compose (local-only, no public reverse proxy)
+# =================================================================
+# Expose only internal ports. Public access is handled externally
+# by your own reverse proxy / tunnel solution (e.g. Pangolin).
+# =================================================================
+
+services:
+
+  # ---------------------------------------------------------------
+  # PostgreSQL — primary database
+  # ---------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: voltcraft-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-voltcraft}
+      POSTGRES_USER: ${POSTGRES_USER:-voltcraft}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-voltcraft} -d ${POSTGRES_DB:-voltcraft}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - voltcraft-net
+
+  # ---------------------------------------------------------------
+  # Redis — cache + BullMQ queues
+  # ---------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: voltcraft-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD} --maxmemory ${REDIS_MAX_MEMORY:-256mb} --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - voltcraft-net
+
+  # ---------------------------------------------------------------
+  # Mosquitto — MQTT broker for Home Assistant integration
+  # ---------------------------------------------------------------
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: voltcraft-mqtt
+    restart: unless-stopped
+    volumes:
+      - ./infra/docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mqtt-data:/mosquitto/data
+      - mqtt-logs:/mosquitto/log
+    ports:
+      - "127.0.0.1:${MQTT_PORT:-1883}:1883"
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -t '$$SYS/broker/uptime' -n 2>/dev/null && echo ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - voltcraft-net
+
+  # ---------------------------------------------------------------
+  # API — Fastify backend
+  # ---------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: voltcraft-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-voltcraft}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-voltcraft}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      SESSION_SECRET: ${SESSION_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      TESLA_CLIENT_ID: ${TESLA_CLIENT_ID}
+      TESLA_CLIENT_SECRET: ${TESLA_CLIENT_SECRET}
+      TESLA_REDIRECT_URI: ${TESLA_REDIRECT_URI}
+      TESLA_REGION: ${TESLA_REGION:-na}
+      MQTT_BROKER: mqtt
+      MQTT_PORT: 1883
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      API_PORT: ${API_PORT:-3001}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "127.0.0.1:${API_PORT:-3001}:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - voltcraft-net
+
+  # ---------------------------------------------------------------
+  # Web — React frontend (served by Vite preview / static)
+  # ---------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3001}
+    container_name: voltcraft-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+    networks:
+      - voltcraft-net
+
+# =================================================================
+# Volumes
+# =================================================================
+volumes:
+  db-data:
+    name: voltcraft-db-data
+  redis-data:
+    name: voltcraft-redis-data
+  mqtt-data:
+    name: voltcraft-mqtt-data
+  mqtt-logs:
+    name: voltcraft-mqtt-logs
+
+# =================================================================
+# Networks — single internal bridge, no external routing
+# =================================================================
+networks:
+  voltcraft-net:
+    name: voltcraft-net
+    driver: bridge

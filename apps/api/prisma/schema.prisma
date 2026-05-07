@@ -1,0 +1,466 @@
+// ============================================================
+// Voltcraft — Prisma Schema
+// ============================================================
+// Database: PostgreSQL
+// Generated migrations via: pnpm db:migrate
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// AUTH
+// ============================================================
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         UserRole  @default(ADMIN)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  sessions      Session[]
+  teslaAccounts TeslaAccount[]
+  settings      UserSettings?
+  notifications NotificationLog[]
+
+  @@index([email])
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  VIEWER
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  ipAddress String?
+  userAgent String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("sessions")
+}
+
+// ============================================================
+// TESLA ACCOUNT
+// ============================================================
+
+model TeslaAccount {
+  id           String    @id @default(cuid())
+  userId       String
+  email        String
+  accessToken  String    // encrypted at rest
+  refreshToken String    // encrypted at rest
+  tokenExpiry  DateTime
+  region       String    @default("na") // na | eu | cn
+  linkedAt     DateTime  @default(now())
+  lastSyncAt   DateTime?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicles Vehicle[]
+
+  @@index([userId])
+  @@map("tesla_accounts")
+}
+
+// ============================================================
+// VEHICLE
+// ============================================================
+
+model Vehicle {
+  id             String    @id @default(cuid())
+  teslaAccountId String
+  vin            String    @unique
+  displayName    String
+  model          String?   // Model 3, Model Y, Model S, Model X
+  year           Int?
+  color          String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  teslaAccount     TeslaAccount           @relation(fields: [teslaAccountId], references: [id])
+  stateSnapshots   VehicleStateSnapshot[]
+  commandLogs      VehicleCommandLog[]
+  trips            Trip[]
+  chargeSessions   ChargeSession[]
+  automationRules  AutomationRule[]
+  locations        Location[]
+  apiUsageLogs     ApiUsageLog[]
+
+  @@index([teslaAccountId])
+  @@index([vin])
+  @@map("vehicles")
+}
+
+// ============================================================
+// VEHICLE STATE SNAPSHOT
+// ============================================================
+
+model VehicleStateSnapshot {
+  id        String   @id @default(cuid())
+  vehicleId String
+  capturedAt DateTime @default(now())
+  source    SnapshotSource @default(POLL)
+
+  // Vehicle state
+  vehicleState  String  // online | asleep | offline | charging | driving
+  odometer      Float?  // km
+
+  // Battery
+  batteryLevel       Int
+  batteryRange       Float   // km (estimated)
+  usableBatteryLevel Int?
+  chargeLimitSoc     Int?
+  chargeState        String?
+  isCharging         Boolean @default(false)
+  isPluggedIn        Boolean @default(false)
+  chargeRate         Float?  // km/h
+  chargeAmps         Float?
+  chargeVoltage      Float?
+  timeToFullCharge   Float?  // hours
+
+  // Climate
+  climateOn   Boolean @default(false)
+  insideTemp  Float?  // °C
+  outsideTemp Float?  // °C
+
+  // Locks & doors
+  isLocked     Boolean @default(true)
+  isTrunkOpen  Boolean @default(false)
+  isFrunkOpen  Boolean @default(false)
+
+  // Drive
+  isDriving Boolean @default(false)
+  speed     Float?  // km/h
+  power     Float?  // kW
+
+  // Location
+  latitude   Float?
+  longitude  Float?
+  heading    Int?
+  atHome     Boolean @default(false)
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, capturedAt(sort: Desc)])
+  @@index([capturedAt])
+  @@map("vehicle_state_snapshots")
+}
+
+enum SnapshotSource {
+  POLL
+  WEBHOOK
+  COMMAND
+  MANUAL
+}
+
+// ============================================================
+// COMMAND LOG
+// ============================================================
+
+model VehicleCommandLog {
+  id          String        @id @default(cuid())
+  vehicleId   String
+  command     String        // lock | unlock | honk | ...
+  params      Json?
+  status      CommandStatus @default(PENDING)
+  executedAt  DateTime      @default(now())
+  resolvedAt  DateTime?
+  errorMessage String?
+  triggeredBy String        @default("user") // user | automation | mqtt
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, executedAt(sort: Desc)])
+  @@map("vehicle_command_logs")
+}
+
+enum CommandStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REJECTED
+}
+
+// ============================================================
+// TRIPS
+// ============================================================
+
+model Trip {
+  id          String    @id @default(cuid())
+  vehicleId   String
+  startedAt   DateTime
+  endedAt     DateTime?
+  durationMin Int?
+
+  // Distance & energy
+  distanceKm          Float?
+  energyUsedKwh       Float?
+  avgConsumptionKwh100 Float?
+  maxSpeedKmh         Float?
+  avgSpeedKmh         Float?
+
+  // Start point
+  startLatitude  Float?
+  startLongitude Float?
+  startAddress   String?
+
+  // End point
+  endLatitude  Float?
+  endLongitude Float?
+  endAddress   String?
+
+  // Battery
+  startBatteryLevel Int?
+  endBatteryLevel   Int?
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, startedAt(sort: Desc)])
+  @@map("trips")
+}
+
+// ============================================================
+// CHARGE SESSIONS
+// ============================================================
+
+model ChargeSession {
+  id        String    @id @default(cuid())
+  vehicleId String
+  startedAt DateTime
+  endedAt   DateTime?
+
+  // Energy
+  energyAddedKwh Float?
+  startBatteryLevel Int?
+  endBatteryLevel   Int?
+  chargeLimitSoc    Int?
+
+  // Charge details
+  chargeType    ChargeType?
+  maxChargeKw   Float?
+  avgChargeKw   Float?
+  chargerPower  Float?
+  durationMin   Int?
+
+  // Location
+  latitude  Float?
+  longitude Float?
+  address   String?
+
+  // Cost estimate
+  pricePerKwh  Float?
+  estimatedCost Float?
+  currency      String  @default("EUR")
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, startedAt(sort: Desc)])
+  @@map("charge_sessions")
+}
+
+enum ChargeType {
+  AC_LEVEL_1
+  AC_LEVEL_2
+  DC_FAST
+  SUPERCHARGER
+  UNKNOWN
+}
+
+// ============================================================
+// AUTOMATIONS
+// ============================================================
+
+model AutomationRule {
+  id          String   @id @default(cuid())
+  vehicleId   String
+  name        String
+  description String?
+  enabled     Boolean  @default(true)
+
+  trigger       String   // schedule_recurring | schedule_once | arrive_home | battery_below | ...
+  triggerConfig Json     @default("{}")
+
+  action       String   // start_climate | set_charge_limit | start_charge | notify | ...
+  actionConfig Json     @default("{}")
+
+  executionCount  Int       @default(0)
+  lastExecutedAt  DateTime?
+  lastStatus      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  vehicle        Vehicle                  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  executionLogs  AutomationExecutionLog[]
+
+  @@index([vehicleId])
+  @@index([enabled])
+  @@map("automation_rules")
+}
+
+model AutomationExecutionLog {
+  id         String   @id @default(cuid())
+  ruleId     String
+  executedAt DateTime @default(now())
+  success    Boolean
+  output     String?
+  error      String?
+  durationMs Int?
+
+  rule AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId, executedAt(sort: Desc)])
+  @@map("automation_execution_logs")
+}
+
+// ============================================================
+// LOCATIONS (Geofences)
+// ============================================================
+
+model Location {
+  id        String   @id @default(cuid())
+  vehicleId String
+  name      String
+  isHome    Boolean  @default(false)
+  latitude  Float
+  longitude Float
+  radiusM   Float    @default(150) // detection radius in meters
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId])
+  @@map("locations")
+}
+
+// ============================================================
+// USER SETTINGS
+// ============================================================
+
+model UserSettings {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  // Units
+  distanceUnit    String @default("km")      // km | miles
+  temperatureUnit String @default("celsius") // celsius | fahrenheit
+
+  // Energy & cost
+  pricePerKwh Float  @default(0.15)
+  currency    String @default("EUR")
+
+  // Home geofence
+  homeLatitude  Float?
+  homeLongitude Float?
+  homeRadiusM   Float  @default(150)
+
+  // App
+  timezone     String @default("Europe/Paris")
+  ecoModeEnabled Boolean @default(true)
+
+  // MQTT / Home Assistant
+  mqttEnabled  Boolean @default(false)
+  mqttBroker   String?
+  mqttPort     Int     @default(1883)
+  mqttUsername String?
+  mqttPassword String? // encrypted
+  mqttClientId String  @default("voltcraft")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+// ============================================================
+// API USAGE LOG
+// ============================================================
+
+model ApiUsageLog {
+  id          String   @id @default(cuid())
+  vehicleId   String?
+  endpoint    String
+  method      String   @default("GET")
+  statusCode  Int?
+  durationMs  Int?
+  cached      Boolean  @default(false)
+  triggeredBy String   @default("sync") // sync | command | user | automation
+  calledAt    DateTime @default(now())
+
+  vehicle Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId, calledAt(sort: Desc)])
+  @@index([calledAt])
+  @@map("api_usage_logs")
+}
+
+// ============================================================
+// NOTIFICATION LOG
+// ============================================================
+
+model NotificationLog {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  type      String   @default("info") // info | success | warning | error
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notification_logs")
+}
+
+// ============================================================
+// INTEGRATION CONFIG
+// ============================================================
+
+model IntegrationConfig {
+  id        String   @id @default(cuid())
+  name      String   @unique // home_assistant | future integrations
+  enabled   Boolean  @default(false)
+  config    Json     @default("{}")
+  lastTestedAt DateTime?
+  lastStatus   String?   // connected | error | unknown
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("integration_configs")
+}
