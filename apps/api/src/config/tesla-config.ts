@@ -1,4 +1,5 @@
-import { access, readFile, writeFile } from 'node:fs/promises'
+import { generateKeyPairSync } from 'node:crypto'
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import path from 'node:path'
 import { appConfigPath, env } from './env.js'
@@ -12,6 +13,17 @@ const ENV_KEYS = {
   clientSecret: 'TESLA_CLIENT_SECRET',
   redirectUri: 'TESLA_REDIRECT_URI',
 } as const
+
+export const TESLA_PARTNER_PUBLIC_KEY_ROUTE = '/.well-known/appspecific/com.tesla.3p.public-key.pem'
+
+function getTeslaPartnerKeyPaths() {
+  const baseDir = path.resolve(path.dirname(appConfigPath), 'tesla')
+  return {
+    baseDir,
+    publicKeyPath: path.join(baseDir, 'partner-public-key.pem'),
+    privateKeyPath: path.join(baseDir, 'partner-private-key.pem'),
+  }
+}
 
 async function canRead(filePath: string): Promise<boolean> {
   try {
@@ -94,6 +106,10 @@ export async function persistTeslaOAuthConfig(input: {
 
   const envPath = await resolveEnvFilePath()
 
+  await ensureTeslaPartnerKeyPair().catch(() => {
+    // Best effort: OAuth config should still be saved even if key generation fails.
+  })
+
   try {
     const current = (await canRead(envPath)) ? await readFile(envPath, 'utf8') : ''
     let next = upsertEnvLine(current, ENV_KEYS.clientId, clientId)
@@ -103,5 +119,45 @@ export async function persistTeslaOAuthConfig(input: {
     return { envPath, persistedToFile: true }
   } catch {
     return { envPath, persistedToFile: false }
+  }
+}
+
+export async function ensureTeslaPartnerKeyPair(): Promise<{ publicKeyPath: string; privateKeyPath: string }> {
+  const { baseDir, publicKeyPath, privateKeyPath } = getTeslaPartnerKeyPaths()
+  const hasPublic = await canRead(publicKeyPath)
+  const hasPrivate = await canRead(privateKeyPath)
+
+  if (hasPublic && hasPrivate) {
+    return { publicKeyPath, privateKeyPath }
+  }
+
+  await mkdir(baseDir, { recursive: true })
+
+  const { publicKey, privateKey } = generateKeyPairSync('ec', {
+    namedCurve: 'prime256v1',
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  })
+
+  await writeFile(publicKeyPath, publicKey, 'utf8')
+  await writeFile(privateKeyPath, privateKey, 'utf8')
+
+  return { publicKeyPath, privateKeyPath }
+}
+
+export async function readTeslaPartnerPublicKey(): Promise<string | null> {
+  const { publicKeyPath } = getTeslaPartnerKeyPaths()
+  if (!(await canRead(publicKeyPath))) {
+    return null
+  }
+  return readFile(publicKeyPath, 'utf8')
+}
+
+export function getTeslaPartnerPublicKeyUrl(): string | null {
+  try {
+    const redirectUrl = new URL(env.TESLA_REDIRECT_URI)
+    return new URL(TESLA_PARTNER_PUBLIC_KEY_ROUTE, redirectUrl.origin).toString()
+  } catch {
+    return null
   }
 }

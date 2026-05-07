@@ -30,6 +30,7 @@ import { automationsRoutes } from './modules/automations/automations.routes.js'
 import { integrationsRoutes } from './modules/integrations/integrations.routes.js'
 import { settingsRoutes } from './modules/settings/settings.routes.js'
 import { diagnosticsRoutes } from './modules/diagnostics/diagnostics.routes.js'
+import { TESLA_PARTNER_PUBLIC_KEY_ROUTE, readTeslaPartnerPublicKey } from './config/tesla-config.js'
 
 export async function buildApp() {
   const app = fastify({
@@ -134,6 +135,18 @@ export async function buildApp() {
     },
     { prefix: '/api' }
   )
+
+  app.get(TESLA_PARTNER_PUBLIC_KEY_ROUTE, async (_req, reply) => {
+    const publicKey = await readTeslaPartnerPublicKey()
+    if (!publicKey) {
+      return reply.status(404).type('text/plain').send('Tesla partner public key not configured\n')
+    }
+
+    return reply
+      .type('application/x-pem-file')
+      .header('Cache-Control', 'public, max-age=300')
+      .send(publicKey)
+  })
 
   // ── Serve frontend SPA (fallback to index.html) ──────────────
   const __dirname = dirname(fileURLToPath(import.meta.url))

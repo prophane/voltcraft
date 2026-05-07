@@ -85,6 +85,8 @@ export function TeslaSettingsSection() {
               <p>OAuth configure: {displayedHealth.oauthConfigured ? 'oui' : 'non'}</p>
               <p>Compte Tesla en base: {displayedHealth.accountConfigured ? 'oui' : 'non'}</p>
               <p>Région: {displayedHealth.region?.toUpperCase?.() ?? 'N/A'}</p>
+              <p>Clé partner Tesla: {displayedHealth.partnerPublicKeyConfigured ? 'oui' : 'non'}</p>
+              {displayedHealth.partnerPublicKeyUrl && <p>URL clé partner: {displayedHealth.partnerPublicKeyUrl}</p>}
               <p>Véhicules en base: {displayedHealth.dbVehicleCount ?? 0}</p>
               <p>Véhicules vus par l'API Tesla: {displayedHealth.apiVehicleCount ?? 0}</p>
               {!displayedHealth.connected && displayedHealth.error && (

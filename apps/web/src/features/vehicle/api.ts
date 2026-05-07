@@ -12,6 +12,9 @@ export interface TeslaConnectionStatus {
   dbVehicleCount: number
   apiVehicleCount?: number
   apiReachable: boolean
+  partnerPublicKeyConfigured: boolean
+  partnerPublicKeyUrl?: string
+  partnerRegistrationRequired?: boolean
   httpStatus?: number
   error?: string
 }

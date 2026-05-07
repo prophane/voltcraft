@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { ok } from '../../common/http/response.js'
 import { env } from '../../config/env.js'
+import { getTeslaPartnerPublicKeyUrl, readTeslaPartnerPublicKey } from '../../config/tesla-config.js'
 import { TeslaClient } from '../../providers/tesla/tesla.client.js'
 
 type TeslaRegion = 'na' | 'eu' | 'cn'
@@ -14,6 +15,9 @@ interface TeslaConnectionResult {
   dbVehicleCount: number
   apiVehicleCount?: number
   apiReachable: boolean
+  partnerPublicKeyConfigured: boolean
+  partnerPublicKeyUrl?: string
+  partnerRegistrationRequired?: boolean
   httpStatus?: number
   error?: string
 }
@@ -51,6 +55,7 @@ async function probeTeslaConnection(
       region: input.region,
       dbVehicleCount: input.dbVehicleCount,
       apiReachable: false,
+      partnerPublicKeyConfigured: false,
       error: 'Tesla token not configured',
     }
   }
@@ -65,6 +70,7 @@ async function probeTeslaConnection(
         region: input.region,
         dbVehicleCount: input.dbVehicleCount,
         apiReachable: false,
+        partnerPublicKeyConfigured: false,
         error: 'Tesla account not found in database',
       }
     }
@@ -81,6 +87,7 @@ async function probeTeslaConnection(
       dbVehicleCount: input.dbVehicleCount,
       apiVehicleCount,
       apiReachable: true,
+      partnerPublicKeyConfigured: false,
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown Tesla API network error'
@@ -92,6 +99,7 @@ async function probeTeslaConnection(
       region: input.region,
       dbVehicleCount: input.dbVehicleCount,
       apiReachable: false,
+      partnerPublicKeyConfigured: false,
       error: `Unable to reach Tesla Fleet API: ${message}`,
     }
   }
@@ -146,6 +154,8 @@ export async function diagnosticsRoutes(app: FastifyInstance) {
     const token = (activeAccount?.accessToken || '').trim()
     const oauthConfigured = Boolean(env.TESLA_CLIENT_ID && env.TESLA_CLIENT_SECRET && env.TESLA_REDIRECT_URI)
     const dbVehicleCount = await app.prisma.vehicle.count({ where: { isActive: true } })
+    const publicKey = await readTeslaPartnerPublicKey()
+    const partnerPublicKeyUrl = getTeslaPartnerPublicKeyUrl() ?? undefined
 
     const result = await probeTeslaConnection(client, {
       accountConfigured: !!activeAccount,
@@ -156,8 +166,18 @@ export async function diagnosticsRoutes(app: FastifyInstance) {
       account: activeAccount ?? undefined,
     })
 
+    result.partnerPublicKeyConfigured = Boolean(publicKey)
+    result.partnerPublicKeyUrl = partnerPublicKeyUrl
+
     if (!result.connected && oauthConfigured && !result.tokenConfigured) {
       result.error = 'OAuth Fleet is configured but no Tesla account is connected yet. Click Connect With Tesla OAuth first.'
+    }
+
+    if (!result.connected && result.error?.includes('must be registered in the current region')) {
+      result.partnerRegistrationRequired = true
+      result.error = result.partnerPublicKeyConfigured
+        ? `Tesla OAuth is working, but your Tesla Developer app is not registered as a Fleet partner in region ${region.toUpperCase()}. Publish and verify the partner public key at ${partnerPublicKeyUrl ?? 'your public domain'}, then complete Tesla partner registration in the Tesla Developer portal.`
+        : 'Tesla OAuth is working, but the Tesla partner public key is not configured yet. Save Tesla OAuth settings again to generate it, then complete Tesla partner registration in the Tesla Developer portal.'
     }
 
     return reply.status(200).send(ok(result))

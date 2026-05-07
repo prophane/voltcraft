@@ -10,6 +10,8 @@ const REGION_BASE: Record<string, string> = {
   cn: 'https://fleet-api.prd.cn.vn.cloud.tesla.cn',
 }
 
+const TESLA_FLEET_AUTH_URL = 'https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token'
+
 export class TeslaClient {
   constructor(
     private readonly db: PrismaClient,
@@ -38,18 +40,17 @@ export class TeslaClient {
     if (!account.refreshToken) {
       throw new TeslaApiError('Tesla refresh token is missing. Reconnect with Tesla OAuth.', 'tesla_refresh_missing')
     }
-    if (!env.TESLA_CLIENT_ID || !env.TESLA_CLIENT_SECRET) {
-      throw new TeslaApiError('Tesla OAuth app credentials are missing on server.', 'tesla_oauth_not_configured')
+    if (!env.TESLA_CLIENT_ID) {
+      throw new TeslaApiError('Tesla OAuth app client ID is missing on server.', 'tesla_oauth_not_configured')
     }
 
     const body = new URLSearchParams({
       grant_type: 'refresh_token',
       client_id: env.TESLA_CLIENT_ID,
-      client_secret: env.TESLA_CLIENT_SECRET,
       refresh_token: account.refreshToken,
     })
 
-    const res = await fetch('https://auth.tesla.com/oauth2/v3/token', {
+    const res = await fetch(TESLA_FLEET_AUTH_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),

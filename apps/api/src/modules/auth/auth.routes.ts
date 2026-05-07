@@ -15,6 +15,14 @@ const TESLA_OAUTH_RETURN_COOKIE = 'voltcraft_tesla_oauth_return'
 
 type TeslaRegion = 'na' | 'eu' | 'cn'
 
+const REGION_AUDIENCE: Record<TeslaRegion, string> = {
+  na: 'https://fleet-api.prd.na.vn.cloud.tesla.com',
+  eu: 'https://fleet-api.prd.eu.vn.cloud.tesla.com',
+  cn: 'https://fleet-api.prd.cn.vn.cloud.tesla.cn',
+}
+
+const TESLA_FLEET_AUTH_URL = 'https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token'
+
 interface TeslaOAuthTokenResponse {
   access_token: string
   refresh_token?: string
@@ -33,6 +41,10 @@ function inferRegionFromToken(token: string): TeslaRegion {
   } catch {
     return env.TESLA_REGION
   }
+}
+
+function audienceForRegion(region: TeslaRegion): string {
+  return REGION_AUDIENCE[region] ?? REGION_AUDIENCE.na
 }
 
 export async function authRoutes(app: FastifyInstance) {
@@ -120,15 +132,17 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     try {
+      const requestedRegion = env.TESLA_REGION as TeslaRegion
       const body = new URLSearchParams({
         grant_type: 'authorization_code',
         client_id: env.TESLA_CLIENT_ID,
         client_secret: env.TESLA_CLIENT_SECRET,
         code: query.code,
+        audience: audienceForRegion(requestedRegion),
         redirect_uri: env.TESLA_REDIRECT_URI,
       })
 
-      const tokenRes = await fetch('https://auth.tesla.com/oauth2/v3/token', {
+      const tokenRes = await fetch(TESLA_FLEET_AUTH_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body.toString(),
