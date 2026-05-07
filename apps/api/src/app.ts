@@ -8,6 +8,7 @@ import swaggerUi from '@fastify/swagger-ui'
 
 import { env } from './config/env.js'
 import { registerErrorHandler } from './common/errors/error-handler.js'
+import { ok } from './common/http/response.js'
 
 // Plugins
 import { prismaPlugin } from './plugins/prisma.js'
