@@ -2,7 +2,7 @@ import type { CommandName } from '@voltcraft/shared'
 import type { CommandRepository } from './commands.repository.js'
 import type { TeslaCommandService } from '../../providers/tesla/tesla-command.service.js'
 import type { VehicleRepository } from '../vehicle/vehicle.repository.js'
-import type Redis from 'ioredis'
+import type { Redis } from 'ioredis'
 import { NotFoundError, RateLimitError, VehicleAsleepError } from '../../common/errors/app-error.js'
 import { APP_DEFAULTS } from '@voltcraft/shared'
 

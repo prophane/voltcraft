@@ -77,7 +77,7 @@ export function AutomationsPage() {
                     {' → '}
                     {ACTION_LABELS[rule['action'] as string] ?? rule['action'] as string}
                   </p>
-                  {rule['lastExecutedAt'] && (
+                  {Boolean(rule['lastExecutedAt']) && (
                     <p className="text-xs text-text-muted mt-1">
                       Dernière exécution: {formatDate(String(rule['lastExecutedAt']))}
                     </p>

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import type { Prisma } from '@prisma/client'
 import { AutomationsRepository } from './automations.repository.js'
 import { VehicleRepository } from '../vehicle/vehicle.repository.js'
 import { AuthRepository } from '../auth/auth.repository.js'
@@ -33,7 +34,11 @@ export async function automationsRoutes(app: FastifyInstance) {
     const session = await authService.validateSession(token)
     const input = createAutomationSchema.parse(req.body)
     const vehicle = await getVehicle(session.userId)
-    const rule = await repo.create(vehicle.id, input)
+    const rule = await repo.create(vehicle.id, {
+      ...input,
+      triggerConfig: input.triggerConfig as Prisma.InputJsonValue,
+      actionConfig: input.actionConfig as Prisma.InputJsonValue,
+    })
     return reply.status(201).send(ok(rule))
   })
 
@@ -46,7 +51,14 @@ export async function automationsRoutes(app: FastifyInstance) {
     const vehicle = await getVehicle(session.userId)
     const existing = await repo.findById(id, vehicle.id)
     if (!existing) throw new NotFoundError('Automation rule')
-    return ok(await repo.update(id, input))
+    return ok(await repo.update(id, (() => {
+      const { triggerConfig, actionConfig, ...rest } = input
+      return {
+        ...rest,
+        ...(triggerConfig !== undefined ? { triggerConfig: triggerConfig as Prisma.InputJsonValue } : {}),
+        ...(actionConfig !== undefined ? { actionConfig: actionConfig as Prisma.InputJsonValue } : {}),
+      }
+    })()))
   })
 
   // DELETE /automations/:id

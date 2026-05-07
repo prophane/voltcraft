@@ -43,13 +43,13 @@ export function TripsPage() {
                     <Route size={12} />
                     {formatKm(trip['distanceKm'] as number ?? 0)}
                   </div>
-                  {trip['durationMin'] && (
+                  {Boolean(trip['durationMin']) && (
                     <div className="flex items-center gap-1.5 text-text-secondary">
                       <Clock size={12} />
                       {formatDuration(Number(trip['durationMin']))}
                     </div>
                   )}
-                  {trip['energyUsedKwh'] && (
+                  {Boolean(trip['energyUsedKwh']) && (
                     <div className="flex items-center gap-1.5 text-text-secondary">
                       <Zap size={12} />
                       {Number(trip['energyUsedKwh']).toFixed(1)} kWh

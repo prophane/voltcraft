@@ -39,19 +39,19 @@ export function ChargesPage() {
                 </div>
 
                 <div className="flex items-center gap-5 text-sm">
-                  {session['energyAddedKwh'] && (
+                  {Boolean(session['energyAddedKwh']) && (
                     <div className="flex items-center gap-1.5 text-text-secondary">
                       <Zap size={12} />
                       +{Number(session['energyAddedKwh']).toFixed(1)} kWh
                     </div>
                   )}
-                  {session['durationMin'] && (
+                  {Boolean(session['durationMin']) && (
                     <div className="flex items-center gap-1.5 text-text-secondary">
                       <Clock size={12} />
                       {formatDuration(Number(session['durationMin']))}
                     </div>
                   )}
-                  {session['estimatedCost'] && (
+                  {Boolean(session['estimatedCost']) && (
                     <div className="flex items-center gap-1.5 text-success">
                       <Euro size={12} />
                       {Number(session['estimatedCost']).toFixed(2)} €

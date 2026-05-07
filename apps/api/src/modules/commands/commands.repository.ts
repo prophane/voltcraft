@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client'
+import type { Prisma } from '@prisma/client'
 import type { CommandName } from '@voltcraft/shared'
 
 export class CommandRepository {
@@ -9,7 +10,7 @@ export class CommandRepository {
       data: {
         vehicleId,
         command,
-        params: params ?? {},
+        params: (params ?? {}) as Prisma.InputJsonValue,
         status: 'PENDING',
         triggeredBy: 'user',
       },

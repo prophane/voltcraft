@@ -27,6 +27,6 @@ export const mqttPlugin = fp(async (app) => {
 
   app.decorate('mqtt', client)
   app.addHook('onClose', async () => {
-    await new Promise<void>((resolve) => client.end(false, {}, resolve))
+    await new Promise<void>((resolve) => client.end(false, {}, () => resolve()))
   })
 })
