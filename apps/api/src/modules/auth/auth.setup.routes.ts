@@ -5,10 +5,38 @@ import { AuthRepository } from './auth.repository.js'
 import { persistTeslaConfig, persistTeslaOAuthConfig } from '../../config/tesla-config.js'
 import { bootstrapTeslaInventory } from '../../providers/tesla/tesla-bootstrap.service.js'
 import { env } from '../../config/env.js'
+import { z } from 'zod'
 
 const COOKIE_NAME = 'voltcraft_session'
+const oauthSetupSchema = z.object({
+  teslaClientId: z.string().min(1),
+  teslaClientSecret: z.string().min(1),
+  teslaRedirectUri: z.string().url(),
+  teslaRegion: z.enum(['na', 'eu', 'cn']).optional(),
+})
 
 export async function registerSetupRoutes(app: FastifyInstance) {
+  app.post('/setup/oauth-config', async (request, reply) => {
+    const payload = oauthSetupSchema.parse(request.body)
+
+    const persistence = await persistTeslaOAuthConfig({
+      clientId: payload.teslaClientId,
+      clientSecret: payload.teslaClientSecret,
+      redirectUri: payload.teslaRedirectUri,
+    })
+
+    if (payload.teslaRegion) {
+      env.TESLA_REGION = payload.teslaRegion
+    }
+
+    return reply.status(201).send({
+      success: true,
+      message: 'Tesla OAuth settings saved for setup test',
+      persistedToFile: persistence.persistedToFile,
+      region: env.TESLA_REGION,
+    })
+  })
+
   // POST /setup - Effectuer le setup initial (premier lancement)
   app.post('/setup', async (request, reply) => {
     const repo = new AuthRepository(app.prisma)

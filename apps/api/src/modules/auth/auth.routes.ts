@@ -39,6 +39,8 @@ export async function authRoutes(app: FastifyInstance) {
   const repo = new AuthRepository(app.prisma)
   const service = new AuthService(repo)
 
+  const oauthCookieSameSite = env.NODE_ENV === 'production' ? 'none' : 'lax'
+
   app.get('/tesla/connect', { schema: { tags: ['auth'] } }, async (req, reply) => {
     app.log.info({ path: '/api/auth/tesla/connect' }, 'Tesla OAuth connect requested')
 
@@ -53,14 +55,14 @@ export async function authRoutes(app: FastifyInstance) {
     reply.setCookie(TESLA_OAUTH_STATE_COOKIE, state, {
       httpOnly: true,
       secure: env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: oauthCookieSameSite,
       path: '/',
       maxAge: 10 * 60,
     })
     reply.setCookie(TESLA_OAUTH_RETURN_COOKIE, returnTo, {
       httpOnly: true,
       secure: env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: oauthCookieSameSite,
       path: '/',
       maxAge: 10 * 60,
     })
@@ -106,9 +108,15 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const expectedState = req.cookies[TESLA_OAUTH_STATE_COOKIE]
-    if (!expectedState || expectedState !== query.state) {
-      cleanupCookies()
-      return reply.redirect(`${returnTo}?tesla_oauth=error&reason=invalid_state`)
+    const stateIsValid = Boolean(expectedState && expectedState === query.state)
+    if (!stateIsValid) {
+      if (!env.AUTH_DISABLED) {
+        cleanupCookies()
+        return reply.redirect(`${returnTo}?tesla_oauth=error&reason=invalid_state`)
+      }
+      app.log.warn({
+        expectedStatePresent: Boolean(expectedState),
+      }, 'Tesla OAuth state validation bypassed in AUTH_DISABLED mode')
     }
 
     try {
@@ -148,6 +156,8 @@ export async function authRoutes(app: FastifyInstance) {
         refreshToken: tokenJson.refresh_token,
         tokenExpiry: tokenJson.expires_in ? new Date(Date.now() + tokenJson.expires_in * 1000) : undefined,
       })
+
+      app.log.info({ region }, 'Tesla OAuth callback completed successfully')
 
       cleanupCookies()
       return reply.redirect(`${returnTo}?tesla_oauth=success`)
