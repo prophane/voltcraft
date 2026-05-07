@@ -6,7 +6,6 @@ import { AuthService } from './auth.service.js'
 import { loginSchema, registerSchema } from './auth.schemas.js'
 import { ok } from '../../common/http/response.js'
 import { env } from '../../config/env.js'
-import { persistTeslaConfig } from '../../config/tesla-config.js'
 import { bootstrapTeslaInventory } from '../../providers/tesla/tesla-bootstrap.service.js'
 import { AppError } from '../../common/errors/app-error.js'
 
@@ -139,7 +138,6 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       const region = inferRegionFromToken(tokenJson.access_token)
-      await persistTeslaConfig({ token: tokenJson.access_token, region })
       await bootstrapTeslaInventory(app.prisma, {
         token: tokenJson.access_token,
         region,

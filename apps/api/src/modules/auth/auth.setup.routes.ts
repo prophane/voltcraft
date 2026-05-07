@@ -38,6 +38,16 @@ export async function registerSetupRoutes(app: FastifyInstance) {
       })
     }
 
+    if (env.AUTH_DISABLED) {
+      const oauthConfigured = Boolean(payload.teslaClientId && payload.teslaClientSecret && payload.teslaRedirectUri)
+      if (!oauthConfigured) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'BAD_REQUEST', message: 'Tesla OAuth client settings are required in AUTH_DISABLED mode' },
+        })
+      }
+    }
+
     if (payload.teslaToken) {
       await persistTeslaConfig({
         token: payload.teslaToken,
@@ -50,9 +60,9 @@ export async function registerSetupRoutes(app: FastifyInstance) {
       })
     }
 
-    // If AUTH_DISABLED, just save Tesla token and return success
+    // If AUTH_DISABLED, OAuth setup is enough; account link happens via OAuth connect flow.
     if (env.AUTH_DISABLED) {
-      app.log.info('Setup in AUTH_DISABLED mode: Tesla token configured')
+      app.log.info('Setup in AUTH_DISABLED mode: Tesla OAuth configured')
       return reply.status(201).send({
         success: true,
         message: 'Setup completed',

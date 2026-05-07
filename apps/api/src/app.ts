@@ -102,8 +102,15 @@ export async function buildApp() {
     async (app) => {
       // ── Config endpoint (frontend setup detection) ───────────────
       app.get('/config', async () => {
-        // If auth disabled, setup is required if Tesla not configured
-        const teslaNeedsSetup = env.AUTH_DISABLED && !env.TESLA_TOKEN
+        // In AUTH_DISABLED mode, setup is required only when neither OAuth app
+        // credentials nor an active Tesla account/token are available.
+        let teslaNeedsSetup = false
+        if (env.AUTH_DISABLED) {
+          const oauthConfigured = Boolean(env.TESLA_CLIENT_ID && env.TESLA_CLIENT_SECRET && env.TESLA_REDIRECT_URI)
+          const hasActiveAccount =
+            (await app.prisma.teslaAccount.count({ where: { isActive: true } })) > 0
+          teslaNeedsSetup = !oauthConfigured && !hasActiveAccount
+        }
 
         // Return directly without ok() wrapper to match frontend expectations
         return {

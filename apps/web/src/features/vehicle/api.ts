@@ -7,6 +7,7 @@ export interface TeslaConnectionStatus {
   connected: boolean
   tokenConfigured: boolean
   accountConfigured: boolean
+  oauthConfigured: boolean
   region: TeslaRegion
   dbVehicleCount: number
   apiVehicleCount?: number
@@ -77,6 +78,4 @@ export const diagnosticsApi = {
   status: () => api.get<unknown>('/diagnostics'),
   apiUsage: () => api.get<unknown>('/diagnostics/api-usage'),
   teslaConnection: () => api.get<TeslaConnectionStatus>('/diagnostics/tesla-connection'),
-  teslaConnectionTest: (payload: { token: string; region: TeslaRegion }) =>
-    api.post<TeslaConnectionStatus>('/diagnostics/tesla-connection/test', payload),
 }

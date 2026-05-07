@@ -21,10 +21,9 @@ export class TeslaClient {
   }
 
   private async getAccessToken(account: TeslaAccount): Promise<string> {
-    // Use token from env directly (no refresh needed for bearer token)
-    // In production, this would be fetched from the stored Tesla account
-    // For now, we use the env TESLA_TOKEN or the stored token
-    const token = env.TESLA_TOKEN || account.accessToken
+    // OAuth/Fleet token from the linked Tesla account is the primary source.
+    // Keep env fallback only for legacy/manual setups.
+    const token = account.accessToken || env.TESLA_TOKEN
     if (!token) {
       throw new TeslaApiError('Tesla token not configured', 'tesla_not_configured')
     }
@@ -32,9 +31,7 @@ export class TeslaClient {
   }
 
   private async refreshToken(account: TeslaAccount): Promise<string> {
-    // With bearer token auth, no refresh needed
-    // Just return the current token from env
-    return env.TESLA_TOKEN || account.accessToken
+    return account.accessToken || env.TESLA_TOKEN
   }
 
   async getVehicleData(account: TeslaAccount, vin: string): Promise<TeslaVehicleData> {

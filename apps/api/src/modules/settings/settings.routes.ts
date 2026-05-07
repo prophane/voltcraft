@@ -6,12 +6,13 @@ import { requireAuth } from '../auth/auth.routes.js'
 import { updateSettingsSchema } from './settings.schemas.js'
 import { ok } from '../../common/http/response.js'
 import { env } from '../../config/env.js'
-import { persistTeslaConfig } from '../../config/tesla-config.js'
-import { bootstrapTeslaInventory } from '../../providers/tesla/tesla-bootstrap.service.js'
+import { persistTeslaOAuthConfig } from '../../config/tesla-config.js'
 import { z } from 'zod'
 
-const teslaCfgSchema = z.object({
-  token: z.string().min(1),
+const teslaOAuthCfgSchema = z.object({
+  clientId: z.string().min(1),
+  clientSecret: z.string().min(1),
+  redirectUri: z.string().url(),
   region: z.enum(['na', 'eu', 'cn']).optional(),
 })
 
@@ -42,10 +43,18 @@ export async function settingsRoutes(app: FastifyInstance) {
       await authService.validateSession(token)
     }
 
+    const activeAccount = await app.prisma.teslaAccount.findFirst({
+      where: { isActive: true },
+      orderBy: { updatedAt: 'desc' },
+    })
+
+    const oauthConfigured = Boolean(env.TESLA_CLIENT_ID && env.TESLA_CLIENT_SECRET && env.TESLA_REDIRECT_URI)
+
     return ok({
-      token: env.TESLA_TOKEN ? '••••••••' : '',
-      region: env.TESLA_REGION,
-      configured: !!env.TESLA_TOKEN,
+      oauthConfigured,
+      connected: Boolean(activeAccount?.accessToken),
+      region: activeAccount?.region ?? env.TESLA_REGION,
+      accountEmail: activeAccount?.email ?? null,
     })
   })
 
@@ -56,23 +65,25 @@ export async function settingsRoutes(app: FastifyInstance) {
       await authService.validateSession(token)
     }
 
-    const input = teslaCfgSchema.parse(req.body)
-    const token = input.token.replace(/\s+/g, '').trim()
+    const input = teslaOAuthCfgSchema.parse(req.body)
     const region = input.region ?? env.TESLA_REGION
 
-    const persistence = await persistTeslaConfig({ token, region })
-    const bootstrap = await bootstrapTeslaInventory(app.prisma, { token, region })
+    const persistence = await persistTeslaOAuthConfig({
+      clientId: input.clientId,
+      clientSecret: input.clientSecret,
+      redirectUri: input.redirectUri,
+    })
 
-    app.log.info(`Tesla config updated: region=${region}; persisted=${persistence.persistedToFile}`)
+    env.TESLA_REGION = region
+    app.log.info(`Tesla OAuth config updated: region=${region}; persisted=${persistence.persistedToFile}`)
 
     return reply.status(201).send(ok({
-      message: 'Tesla configuration updated. Service restart may be required.',
+      message: 'Tesla OAuth configuration updated. Click Connect With Tesla OAuth to link account.',
       applied: {
         region,
-        configured: true,
+        oauthConfigured: true,
       },
       persistedToFile: persistence.persistedToFile,
-      vehiclesDetected: bootstrap.vehiclesCount,
     }))
   })
 }

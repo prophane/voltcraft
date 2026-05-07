@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { ok } from '../../common/http/response.js'
 import { env } from '../../config/env.js'
-import { z } from 'zod'
 
 type TeslaRegion = 'na' | 'eu' | 'cn'
 
@@ -15,6 +14,7 @@ interface TeslaConnectionResult {
   connected: boolean
   tokenConfigured: boolean
   accountConfigured: boolean
+  oauthConfigured: boolean
   region: TeslaRegion
   dbVehicleCount: number
   apiVehicleCount?: number
@@ -27,6 +27,7 @@ async function probeTeslaConnection(input: {
   token: string
   region: TeslaRegion
   accountConfigured: boolean
+  oauthConfigured: boolean
   dbVehicleCount: number
 }): Promise<TeslaConnectionResult> {
   const token = input.token.trim()
@@ -36,6 +37,7 @@ async function probeTeslaConnection(input: {
       connected: false,
       tokenConfigured: false,
       accountConfigured: input.accountConfigured,
+      oauthConfigured: input.oauthConfigured,
       region: input.region,
       dbVehicleCount: input.dbVehicleCount,
       apiReachable: false,
@@ -57,6 +59,7 @@ async function probeTeslaConnection(input: {
         connected: false,
         tokenConfigured: true,
         accountConfigured: input.accountConfigured,
+        oauthConfigured: input.oauthConfigured,
         region: input.region,
         dbVehicleCount: input.dbVehicleCount,
         apiReachable: false,
@@ -72,6 +75,7 @@ async function probeTeslaConnection(input: {
       connected: true,
       tokenConfigured: true,
       accountConfigured: input.accountConfigured,
+      oauthConfigured: input.oauthConfigured,
       region: input.region,
       dbVehicleCount: input.dbVehicleCount,
       apiVehicleCount,
@@ -83,6 +87,7 @@ async function probeTeslaConnection(input: {
       connected: false,
       tokenConfigured: true,
       accountConfigured: input.accountConfigured,
+      oauthConfigured: input.oauthConfigured,
       region: input.region,
       dbVehicleCount: input.dbVehicleCount,
       apiReachable: false,
@@ -90,11 +95,6 @@ async function probeTeslaConnection(input: {
     }
   }
 }
-
-const teslaConnectionTestSchema = z.object({
-  token: z.string().min(1),
-  region: z.enum(['na', 'eu', 'cn']),
-})
 
 export async function diagnosticsRoutes(app: FastifyInstance) {
   app.get('/', { schema: { tags: ['diagnostics'] } }, async (_req, reply) => {
@@ -141,32 +141,22 @@ export async function diagnosticsRoutes(app: FastifyInstance) {
     })
 
     const region = (activeAccount?.region ?? env.TESLA_REGION) as TeslaRegion
-    const token = (env.TESLA_TOKEN || activeAccount?.accessToken || '').trim()
+    const token = (activeAccount?.accessToken || '').trim()
+    const oauthConfigured = Boolean(env.TESLA_CLIENT_ID && env.TESLA_CLIENT_SECRET && env.TESLA_REDIRECT_URI)
     const dbVehicleCount = await app.prisma.vehicle.count({ where: { isActive: true } })
+
     const result = await probeTeslaConnection({
       token,
       region,
       accountConfigured: !!activeAccount,
+      oauthConfigured,
       dbVehicleCount,
     })
+
+    if (!result.connected && oauthConfigured && !result.tokenConfigured) {
+      result.error = 'OAuth Fleet is configured but no Tesla account is connected yet. Click Connect With Tesla OAuth first.'
+    }
 
     return reply.status(200).send(ok(result))
-  })
-
-  app.post('/tesla-connection/test', { schema: { tags: ['diagnostics'] } }, async (req, reply) => {
-    const payload = teslaConnectionTestSchema.parse(req.body)
-    const dbVehicleCount = await app.prisma.vehicle.count({ where: { isActive: true } })
-
-    const result = await probeTeslaConnection({
-      token: payload.token,
-      region: payload.region,
-      accountConfigured: false,
-      dbVehicleCount,
-    })
-
-    return reply.status(200).send(ok({
-      ...result,
-      persisted: false,
-    }))
   })
 }

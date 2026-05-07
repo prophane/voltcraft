@@ -24,7 +24,6 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
     email: '',
     password: '',
     passwordConfirm: '',
-    teslaToken: '',
     teslaClientId: '',
     teslaClientSecret: '',
     teslaRedirectUri: '',
@@ -55,10 +54,9 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
 
   const setupMutation = useMutation({
     mutationFn: async () => {
-      // If auth disabled, only send Tesla token
+      // If auth disabled, configure OAuth app settings only
       if (authDisabled) {
         await api.post<{ success: true }>('/auth/setup', {
-          teslaToken: formData.teslaToken,
           teslaClientId: formData.teslaClientId,
           teslaClientSecret: formData.teslaClientSecret,
           teslaRedirectUri: formData.teslaRedirectUri,
@@ -72,7 +70,9 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
         {
           email: formData.email,
           password: formData.password,
-          teslaToken: formData.teslaToken,
+          teslaClientId: formData.teslaClientId,
+          teslaClientSecret: formData.teslaClientSecret,
+          teslaRedirectUri: formData.teslaRedirectUri,
           teslaRegion: formData.teslaRegion,
           mqttEnabled: formData.mqttEnabled,
         }
@@ -103,10 +103,9 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
           && formData.teslaClientSecret.trim()
           && formData.teslaRedirectUri.trim(),
         )
-        const hasToken = Boolean(formData.teslaToken.trim())
 
-        if (!hasOAuthConfig && !hasToken) {
-          setError('Provide Tesla OAuth client settings (recommended) or a temporary bearer token')
+        if (!hasOAuthConfig) {
+          setError('Provide Tesla OAuth client settings to continue')
           return
         }
         setupMutation.mutate()
@@ -130,6 +129,15 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
       }
       setStep('tesla')
     } else if (step === 'tesla') {
+      const hasOAuthConfig = Boolean(
+        formData.teslaClientId.trim()
+        && formData.teslaClientSecret.trim()
+        && formData.teslaRedirectUri.trim(),
+      )
+      if (!hasOAuthConfig) {
+        setError('Tesla OAuth Client ID, Secret and Redirect URI are required')
+        return
+      }
       setStep('optional')
     } else if (step === 'optional') {
       setupMutation.mutate()
@@ -287,18 +295,6 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
                     </div>
 
                     <div>
-                      <label className="stat-label block mb-1.5">Tesla Bearer Token (Optional fallback)</label>
-                      <textarea
-                        value={formData.teslaToken}
-                        onChange={(e) => setFormData({ ...formData, teslaToken: e.target.value })}
-                        className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none font-mono"
-                        placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
-                        rows={5}
-                      />
-                      <p className="text-xs text-text-muted mt-1">Optional if you want immediate bootstrap without OAuth connect click</p>
-                    </div>
-
-                    <div>
                       <label className="stat-label block mb-1.5">Region</label>
                       <select
                         value={formData.teslaRegion}
@@ -333,15 +329,34 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
 
                   <div className="space-y-4">
                     <div>
-                      <label className="stat-label block mb-1.5">Tesla Bearer Token (Optional)</label>
-                      <textarea
-                        value={formData.teslaToken}
-                        onChange={(e) => setFormData({ ...formData, teslaToken: e.target.value })}
-                        className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none font-mono"
-                        placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
-                        rows={4}
+                      <label className="stat-label block mb-1.5">Tesla Client ID</label>
+                      <input
+                        value={formData.teslaClientId}
+                        onChange={(e) => setFormData({ ...formData, teslaClientId: e.target.value })}
+                        className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none"
+                        placeholder="your-client-id"
                       />
-                      <p className="text-xs text-text-muted mt-1">Or use Client ID/Secret below for OAuth</p>
+                    </div>
+
+                    <div>
+                      <label className="stat-label block mb-1.5">Tesla Client Secret</label>
+                      <input
+                        type="password"
+                        value={formData.teslaClientSecret}
+                        onChange={(e) => setFormData({ ...formData, teslaClientSecret: e.target.value })}
+                        className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none"
+                        placeholder="your-client-secret"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="stat-label block mb-1.5">Tesla Redirect URI</label>
+                      <input
+                        value={formData.teslaRedirectUri}
+                        onChange={(e) => setFormData({ ...formData, teslaRedirectUri: e.target.value })}
+                        className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none"
+                        placeholder="https://your-domain/api/auth/tesla/callback"
+                      />
                     </div>
 
                     <div>
