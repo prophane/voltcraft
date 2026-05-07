@@ -1,7 +1,7 @@
 import { access, readFile, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import path from 'node:path'
-import { env } from './env.js'
+import { appConfigPath, env } from './env.js'
 
 export type TeslaRegion = 'na' | 'eu' | 'cn'
 
@@ -23,7 +23,9 @@ async function canRead(filePath: string): Promise<boolean> {
 }
 
 async function resolveEnvFilePath(): Promise<string> {
+  const configured = appConfigPath
   const candidates = [
+    configured,
     path.resolve(process.cwd(), '.env'),
     path.resolve(process.cwd(), '../.env'),
     path.resolve(process.cwd(), '../../.env'),

@@ -1,5 +1,11 @@
-import 'dotenv/config'
+import dotenv from 'dotenv'
 import { z } from 'zod'
+
+const runtimeConfigPath = process.env['APP_CONFIG_PATH'] || '/app/data/runtime.env'
+
+// Load the repository .env first, then overlay persisted runtime config if present.
+dotenv.config()
+dotenv.config({ path: runtimeConfigPath, override: true })
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -53,3 +59,4 @@ if (!parsed.success) {
 export const env = parsed.data
 
 export type Env = typeof env
+export const appConfigPath = runtimeConfigPath

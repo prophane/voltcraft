@@ -33,6 +33,7 @@ FROM node:20-alpine AS production
 RUN apk add --no-cache openssl
 RUN corepack enable && corepack prepare pnpm@9 --activate
 WORKDIR /app
+RUN mkdir -p /app/data
 
 COPY package.json pnpm-workspace.yaml ./
 COPY packages/shared/package.json ./packages/shared/
