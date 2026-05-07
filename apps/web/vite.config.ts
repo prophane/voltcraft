@@ -42,6 +42,12 @@ export default defineConfig({
   preview: {
     port: 3000,
     host: '0.0.0.0',
+    proxy: {
+      '/api': {
+        target: 'http://api:3001',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     outDir: 'dist',

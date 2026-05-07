@@ -13,10 +13,11 @@ COPY tsconfig.base.json ./
 
 RUN pnpm --filter @voltcraft/web build
 
-# ─── Serve with Nginx reverse proxy ──────────────────────────────
-FROM nginx:1.27-alpine AS production
-COPY --from=build /app/apps/web/dist /app/dist
-COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+# ─── Serve with Vite preview (includes /api proxy) ──────────────
+FROM node:20-alpine AS production
+RUN corepack enable && corepack prepare pnpm@9 --activate
+WORKDIR /app
+COPY --from=build /app ./
 
 EXPOSE 3000
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["pnpm", "--filter", "@voltcraft/web", "preview"]
