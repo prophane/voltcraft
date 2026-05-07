@@ -4,6 +4,7 @@ import { AuthService } from './auth.service.js'
 import { AuthRepository } from './auth.repository.js'
 import { persistTeslaConfig, persistTeslaOAuthConfig } from '../../config/tesla-config.js'
 import { bootstrapTeslaInventory } from '../../providers/tesla/tesla-bootstrap.service.js'
+import { env } from '../../config/env.js'
 
 const COOKIE_NAME = 'voltcraft_session'
 
@@ -13,13 +14,15 @@ export async function registerSetupRoutes(app: FastifyInstance) {
     const repo = new AuthRepository(app.prisma)
     const service = new AuthService(repo)
 
-    // Vérifier que c'est le premier lancement
-    const required = await service.isSetupRequired()
-    if (!required) {
-      return reply.status(409).send({
-        success: false,
-        error: { code: 'CONFLICT', message: 'Setup already completed' },
-      })
+    if (!env.AUTH_DISABLED) {
+      // In auth-enabled mode setup is only allowed once.
+      const required = await service.isSetupRequired()
+      if (!required) {
+        return reply.status(409).send({
+          success: false,
+          error: { code: 'CONFLICT', message: 'Setup already completed' },
+        })
+      }
     }
 
     // Valider le payload
@@ -48,7 +51,7 @@ export async function registerSetupRoutes(app: FastifyInstance) {
     }
 
     // If AUTH_DISABLED, just save Tesla token and return success
-    if (process.env.AUTH_DISABLED === 'true') {
+    if (env.AUTH_DISABLED) {
       app.log.info('Setup in AUTH_DISABLED mode: Tesla token configured')
       return reply.status(201).send({
         success: true,
