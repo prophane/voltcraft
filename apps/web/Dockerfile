@@ -7,7 +7,7 @@ ARG VITE_API_URL=http://localhost:3001
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/web/package.json ./apps/web/
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 COPY packages/shared ./packages/shared
 COPY apps/web ./apps/web
