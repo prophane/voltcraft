@@ -17,7 +17,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-voltcraft}
       POSTGRES_USER: ${POSTGRES_USER:-voltcraft}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-voltcraft_db_secret}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - db-data:/var/lib/postgresql/data
     ports:
@@ -37,13 +37,13 @@ services:
     image: redis:7-alpine
     container_name: voltcraft-redis
     restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD:-voltcraft_redis_secret} --maxmemory ${REDIS_MAX_MEMORY:-256mb} --maxmemory-policy allkeys-lru
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required} --maxmemory ${REDIS_MAX_MEMORY:-256mb} --maxmemory-policy allkeys-lru
     volumes:
       - redis-data:/data
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-voltcraft_redis_secret}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -88,10 +88,10 @@ services:
     environment:
       NODE_ENV: production
       APP_CONFIG_PATH: /app/data/runtime.env
-      DATABASE_URL: postgresql://${POSTGRES_USER:-voltcraft}:${POSTGRES_PASSWORD:-voltcraft_db_secret}@db:5432/${POSTGRES_DB:-voltcraft}
-      REDIS_URL: redis://:${REDIS_PASSWORD:-voltcraft_redis_secret}@redis:6379
-      SESSION_SECRET: ${SESSION_SECRET:-voltcraft_session_secret_change_in_prod}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-voltcraft_encryption_key_change_in_prod}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-voltcraft}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-voltcraft}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
       AUTH_DISABLED: ${AUTH_DISABLED:-true}
       TESLA_TOKEN: ${TESLA_TOKEN:-}
       TESLA_REGION: ${TESLA_REGION:-na}

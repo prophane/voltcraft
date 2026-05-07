@@ -15,8 +15,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
 
-  SESSION_SECRET: z.string().min(16).default('voltcraft_session_secret_change_in_production'),
-  ENCRYPTION_KEY: z.string().min(16).default('voltcraft_encryption_key_change_in_production_!!'),
+  SESSION_SECRET: z.string().min(16),
+  ENCRYPTION_KEY: z.string().min(16),
 
   // Authentication mode — default disabled (handled by reverse proxy)
   AUTH_DISABLED: z

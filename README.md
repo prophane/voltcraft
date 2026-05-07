@@ -73,6 +73,8 @@ cp .env.example .env
 docker compose up -d
 ```
 
+Si une variable requise manque, Docker Compose refusera maintenant de démarrer avec un message explicite. C'est volontaire: aucun secret par défaut n'est embarqué dans le dépôt.
+
 Les services démarrent dans cet ordre : PostgreSQL → Redis → Mosquitto → API → Web.
 
 ### 4. Premier accès
