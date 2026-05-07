@@ -8,7 +8,10 @@ import { StatsPage } from '@/pages/stats/stats.page'
 import { AutomationsPage } from '@/pages/automations/automations.page'
 import { SettingsPage } from '@/pages/settings/settings.page'
 import { LoginPage } from '@/pages/login/login.page'
+import { SetupWizardPage } from '@/pages/setup/setup-wizard.page'
 import { useAuthStore } from '@/features/auth/store'
+import { useEffect, useState } from 'react'
+import { api } from '@/lib/api-client'
 
 function ProtectedRoutes() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -29,10 +32,38 @@ function ProtectedRoutes() {
 }
 
 export function AppRouter() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const [setupRequired, setSetupRequired] = useState<boolean | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const checkSetup = async () => {
+      try {
+        const response = await api.get<{ setupRequired: boolean }>('/auth/setup')
+        setSetupRequired(response.setupRequired)
+      } catch {
+        // If request fails, assume setup not required
+        setSetupRequired(false)
+      } finally {
+        setLoading(false)
+      }
+    }
+    checkSetup()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-bg-base flex items-center justify-center">
+        <div className="text-text-secondary">Initializing...</div>
+      </div>
+    )
+  }
+
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/*" element={<ProtectedRoutes />} />
+      {setupRequired && <Route path="/*" element={<SetupWizardPage />} />}
+      {!setupRequired && !isAuthenticated && <Route path="/*" element={<LoginPage />} />}
+      {!setupRequired && isAuthenticated && <Route path="/*" element={<ProtectedRoutes />} />}
     </Routes>
   )
 }

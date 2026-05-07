@@ -17,6 +17,7 @@ import { bullmqPlugin } from './plugins/bullmq.js'
 
 // Routes
 import { authRoutes } from './modules/auth/auth.routes.js'
+import { registerSetupRoutes } from './modules/auth/auth.setup.routes.js'
 import { vehicleRoutes } from './modules/vehicle/vehicle.routes.js'
 import { commandsRoutes } from './modules/commands/commands.routes.js'
 import { tripsRoutes } from './modules/trips/trips.routes.js'
@@ -94,6 +95,9 @@ export async function buildApp() {
   })
 
   // ── API routes ──────────────────────────────────────────────
+  // Setup routes (no auth required for initial setup)
+  await app.register(registerSetupRoutes, { prefix: '/auth' })
+  // Auth routes
   await app.register(authRoutes, { prefix: '/auth' })
   await app.register(vehicleRoutes, { prefix: '/vehicle' })
   await app.register(commandsRoutes, { prefix: '/commands' })
