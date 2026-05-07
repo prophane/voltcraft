@@ -21,19 +21,42 @@ export async function vehicleRoutes(app: FastifyInstance) {
   const syncService = new TeslaSyncService(teslaClient, repo, ecoPolicy, app.prisma)
   const service = new VehicleService(repo, ecoPolicy, syncService)
 
+  async function bootstrapFromActiveAccount() {
+    const activeAccount = await app.prisma.teslaAccount.findFirst({
+      where: { isActive: true },
+      orderBy: { updatedAt: 'desc' },
+    })
+
+    if (!activeAccount?.accessToken) {
+      return false
+    }
+
+    await bootstrapTeslaInventory(app.prisma, {
+      token: activeAccount.accessToken,
+      region: (activeAccount.region as 'na' | 'eu' | 'cn') ?? env.TESLA_REGION,
+      refreshToken: activeAccount.refreshToken,
+      tokenExpiry: activeAccount.tokenExpiry,
+      accountEmail: activeAccount.email,
+    })
+
+    return true
+  }
+
   async function withAutoBootstrap<T>(userId: string, run: (uid: string) => Promise<T>) {
     try {
       return await run(userId)
     } catch (err) {
       if (
         env.AUTH_DISABLED
-        && env.TESLA_TOKEN
         && err instanceof NotFoundError
       ) {
-        await bootstrapTeslaInventory(app.prisma, {
-          token: env.TESLA_TOKEN,
-          region: env.TESLA_REGION,
-        })
+        const bootstrapped = await bootstrapFromActiveAccount()
+        if (!bootstrapped && env.TESLA_TOKEN) {
+          await bootstrapTeslaInventory(app.prisma, {
+            token: env.TESLA_TOKEN,
+            region: env.TESLA_REGION,
+          })
+        }
 
         try {
           return await run(userId)
