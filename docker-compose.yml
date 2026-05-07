@@ -85,6 +85,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mqtt:
+        condition: service_started
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-voltcraft}:${POSTGRES_PASSWORD:-voltcraft_db_secret}@db:5432/${POSTGRES_DB:-voltcraft}
@@ -104,11 +106,11 @@ services:
     ports:
       - "127.0.0.1:${API_PORT:-3001}:3001"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
-      interval: 20s
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))\""]
+      interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 45s
     networks:
       - voltcraft-net
 
