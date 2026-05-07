@@ -99,7 +99,7 @@ export async function buildApp() {
     async (app) => {
       // ── Config endpoint (frontend setup detection) ───────────────
       app.get('/config', async () => {
-        return { authDisabled: process.env.AUTH_DISABLED === 'true' }
+        return ok({ authDisabled: process.env.AUTH_DISABLED === 'true' })
       })
       // Setup routes (no auth required for initial setup)
       await app.register(registerSetupRoutes, { prefix: '/auth' })

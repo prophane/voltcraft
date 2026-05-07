@@ -13,9 +13,9 @@ import { useAuthStore } from '@/features/auth/store'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api-client'
 
-function ProtectedRoutes() {
+function ProtectedRoutes({ authDisabled }: { authDisabled: boolean }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
-  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (!authDisabled && !isAuthenticated) return <Navigate to="/login" replace />
   return (
     <MainLayout>
       <Routes>
@@ -42,12 +42,13 @@ export function AppRouter() {
       try {
         // Check if auth is disabled
         const configRes = await api.get<{ authDisabled: boolean }>('/config')
-        setAuthDisabled(configRes.authDisabled)
+        setAuthDisabled(configRes.authDisabled ?? false)
 
         // Check if setup is required
         const setupRes = await api.get<{ setupRequired: boolean }>('/auth/setup')
-        setSetupRequired(setupRes.setupRequired)
-      } catch {
+        setSetupRequired(setupRes.setupRequired ?? false)
+      } catch (err) {
+        console.error('Failed to check setup/config:', err)
         // If request fails, assume setup not required and auth enabled
         setSetupRequired(false)
         setAuthDisabled(false)
@@ -70,7 +71,7 @@ export function AppRouter() {
     <Routes>
       {setupRequired && <Route path="/*" element={<SetupWizardPage />} />}
       {!setupRequired && !authDisabled && !isAuthenticated && <Route path="/*" element={<LoginPage />} />}
-      {!setupRequired && (authDisabled || isAuthenticated) && <Route path="/*" element={<ProtectedRoutes />} />}
+      {!setupRequired && (authDisabled || isAuthenticated) && <Route path="/*" element={<ProtectedRoutes authDisabled={authDisabled} />} />}
     </Routes>
   )
 }
