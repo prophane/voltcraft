@@ -1,4 +1,4 @@
-import type Redis from 'ioredis'
+import type { Redis } from 'ioredis'
 import { CACHE_TTL } from '@voltcraft/shared'
 
 /**

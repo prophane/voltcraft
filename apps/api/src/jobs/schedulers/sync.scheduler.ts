@@ -1,5 +1,5 @@
 import { Queue } from 'bullmq'
-import Redis from 'ioredis'
+import { Redis } from 'ioredis'
 import { PrismaClient } from '@prisma/client'
 import { AutomationsRepository } from '../../modules/automations/automations.repository.js'
 import { env } from '../../config/env.js'

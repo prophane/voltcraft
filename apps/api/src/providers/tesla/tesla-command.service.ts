@@ -1,6 +1,6 @@
 import type { TeslaAccount } from '@prisma/client'
 import type { TeslaClient } from './tesla.client.js'
-import type Redis from 'ioredis'
+import type { Redis } from 'ioredis'
 import type { CommandName } from '@voltcraft/shared'
 import { TeslaApiError } from '../../common/errors/app-error.js'
 

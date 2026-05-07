@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq'
-import Redis from 'ioredis'
+import { Redis } from 'ioredis'
 import { PrismaClient } from '@prisma/client'
 import { TeslaClient } from '../../providers/tesla/tesla.client.js'
 import { TeslaEcoPolicyService } from '../../providers/tesla/tesla-eco-policy.service.js'

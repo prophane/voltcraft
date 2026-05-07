@@ -1,6 +1,6 @@
 import fp from 'fastify-plugin'
 import { Queue, Worker } from 'bullmq'
-import Redis from 'ioredis'
+import { Redis } from 'ioredis'
 import { env } from '../config/env.js'
 
 export type QueueName = 'vehicle-sync' | 'automation' | 'mqtt-republish'

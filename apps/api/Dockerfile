@@ -16,7 +16,10 @@ COPY tsconfig.base.json ./
 # Generate Prisma client
 RUN pnpm --filter @voltcraft/api prisma:generate
 
-# Build
+# Build shared package first (api depends on it)
+RUN pnpm --filter @voltcraft/shared build
+
+# Build api
 RUN pnpm --filter @voltcraft/api build
 
 # ─── Production image ────────────────────────────────────────────
@@ -31,6 +34,7 @@ RUN pnpm install --no-frozen-lockfile --prod
 
 COPY --from=base /app/apps/api/dist ./apps/api/dist
 COPY --from=base /app/apps/api/prisma ./apps/api/prisma
+COPY --from=base /app/packages/shared/dist ./packages/shared/dist
 COPY --from=base /app/node_modules/.pnpm ./node_modules/.pnpm
 
 ENV NODE_ENV=production
