@@ -16,6 +16,7 @@ export default defineConfig({
           /^\/api\//,
           /^\/health$/,
           /^\/docs(?:\/|$)/,
+          /^\/.well-known\//,
         ],
       },
       manifest: {

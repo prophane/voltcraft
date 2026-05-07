@@ -72,9 +72,18 @@ export const automationsApi = {
   executions: (id: string) => api.get<unknown[]>(`/automations/${id}/executions`),
 }
 
+export interface TeslaOAuthConfig {
+  clientId: string
+  clientSecret: string
+  redirectUri: string
+  region?: 'na' | 'eu' | 'cn'
+}
+
 export const settingsApi = {
   get: () => api.get<unknown>('/settings'),
   update: (data: unknown) => api.patch('/settings', data),
+  getTeslaOAuth: () => api.get<{ oauthConfigured: boolean; connected: boolean; region: TeslaRegion; accountEmail: string | null }>('/settings/tesla'),
+  updateTeslaOAuth: (data: TeslaOAuthConfig) => api.post('/settings/tesla', data),
 }
 
 export const diagnosticsApi = {

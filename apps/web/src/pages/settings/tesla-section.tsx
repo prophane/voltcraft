@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { diagnosticsApi } from '@/features/vehicle/api'
-import type { TeslaConnectionStatus } from '@/features/vehicle/api'
-import { AlertCircle, CheckCircle2, Zap } from 'lucide-react'
+import { diagnosticsApi, settingsApi } from '@/features/vehicle/api'
+import type { TeslaConnectionStatus, TeslaOAuthConfig } from '@/features/vehicle/api'
+import { AlertCircle, CheckCircle2, Zap, ChevronDown, ChevronUp } from 'lucide-react'
 
 export function TeslaSettingsSection() {
   const location = useLocation()
@@ -13,6 +13,14 @@ export function TeslaSettingsSection() {
   const [testResult, setTestResult] = useState<TeslaConnectionStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [showOAuthForm, setShowOAuthForm] = useState(false)
+  const [oauthForm, setOAuthForm] = useState<TeslaOAuthConfig>({
+    clientId: '',
+    clientSecret: '',
+    redirectUri: '',
+    region: 'eu',
+  })
+  const [oauthSaveSuccess, setOAuthSaveSuccess] = useState(false)
 
   const {
     data: teslaHealth,
@@ -22,6 +30,16 @@ export function TeslaSettingsSection() {
     queryKey: ['diagnostics', 'tesla-connection'],
     queryFn: diagnosticsApi.teslaConnection,
     retry: false,
+  })
+
+  const oauthMutation = useMutation({
+    mutationFn: (data: TeslaOAuthConfig) => settingsApi.updateTeslaOAuth(data),
+    onSuccess: () => {
+      setOAuthSaveSuccess(true)
+      setShowOAuthForm(false)
+      setTimeout(() => setOAuthSaveSuccess(false), 4000)
+      void refetchTeslaHealth()
+    },
   })
 
   useEffect(() => {
@@ -107,6 +125,90 @@ export function TeslaSettingsSection() {
         </div>
 
         <div className="pt-1">
+          {/* OAuth config collapsible form */}
+          <button
+            type="button"
+            className="flex items-center gap-1 text-xs text-text-muted hover:text-text-secondary mb-2"
+            onClick={() => setShowOAuthForm((v) => !v)}
+          >
+            {showOAuthForm ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            Modifier la configuration OAuth (Client ID / Secret)
+          </button>
+
+          {showOAuthForm && (
+            <form
+              className="space-y-3 mb-4 p-3 rounded-lg border border-border bg-bg-overlay/40"
+              onSubmit={(e) => {
+                e.preventDefault()
+                oauthMutation.mutate(oauthForm)
+              }}
+            >
+              <div className="space-y-1">
+                <label className="text-xs text-text-secondary">Tesla Client ID</label>
+                <input
+                  className="w-full rounded border border-border bg-bg-base px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-500"
+                  value={oauthForm.clientId}
+                  onChange={(e) => setOAuthForm((f) => ({ ...f, clientId: e.target.value }))}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  autoComplete="off"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-text-secondary">Tesla Client Secret</label>
+                <input
+                  type="password"
+                  className="w-full rounded border border-border bg-bg-base px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-500"
+                  value={oauthForm.clientSecret}
+                  onChange={(e) => setOAuthForm((f) => ({ ...f, clientSecret: e.target.value }))}
+                  placeholder="ta-xxxxxxxxxxxxxxxxxxxx"
+                  autoComplete="new-password"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-text-secondary">Redirect URI</label>
+                <input
+                  className="w-full rounded border border-border bg-bg-base px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-500"
+                  value={oauthForm.redirectUri}
+                  onChange={(e) => setOAuthForm((f) => ({ ...f, redirectUri: e.target.value }))}
+                  placeholder="https://voltcraft.ph4.fr/api/auth/tesla/callback"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-text-secondary">Région</label>
+                <select
+                  className="w-full rounded border border-border bg-bg-base px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-500"
+                  value={oauthForm.region}
+                  onChange={(e) => setOAuthForm((f) => ({ ...f, region: e.target.value as 'na' | 'eu' | 'cn' }))}
+                >
+                  <option value="eu">EU (Europe)</option>
+                  <option value="na">NA (Amérique du Nord)</option>
+                  <option value="cn">CN (Chine)</option>
+                </select>
+              </div>
+              {oauthMutation.isError && (
+                <p className="text-xs text-error">Erreur lors de la sauvegarde: {(oauthMutation.error as Error).message}</p>
+              )}
+              <div className="flex gap-2">
+                <Button type="submit" size="sm" loading={oauthMutation.isPending}>
+                  Enregistrer
+                </Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setShowOAuthForm(false)}>
+                  Annuler
+                </Button>
+              </div>
+            </form>
+          )}
+
+          {oauthSaveSuccess && (
+            <div className="bg-success/10 border border-success/30 rounded-lg p-2 flex gap-2 mb-3">
+              <CheckCircle2 size={14} className="text-success flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-success">Configuration OAuth enregistrée. Tu peux maintenant te connecter.</p>
+            </div>
+          )}
+
           <p className="text-xs text-text-muted mb-2">
             OAuth Fleet only: connect Voltcraft directly to your Tesla account.
           </p>
