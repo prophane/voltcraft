@@ -9,6 +9,15 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/*.png'],
+      workbox: {
+        // Never serve SPA fallback for backend/API routes.
+        // This avoids swallowing OAuth connect/callback navigations.
+        navigateFallbackDenylist: [
+          /^\/api\//,
+          /^\/health$/,
+          /^\/docs(?:\/|$)/,
+        ],
+      },
       manifest: {
         name: 'Voltcraft',
         short_name: 'Voltcraft',
