@@ -34,16 +34,23 @@ function ProtectedRoutes() {
 export function AppRouter() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null)
+  const [authDisabled, setAuthDisabled] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const checkSetup = async () => {
       try {
-        const response = await api.get<{ setupRequired: boolean }>('/auth/setup')
-        setSetupRequired(response.setupRequired)
+        // Check if auth is disabled
+        const configRes = await api.get<{ authDisabled: boolean }>('/config')
+        setAuthDisabled(configRes.authDisabled)
+
+        // Check if setup is required
+        const setupRes = await api.get<{ setupRequired: boolean }>('/auth/setup')
+        setSetupRequired(setupRes.setupRequired)
       } catch {
-        // If request fails, assume setup not required
+        // If request fails, assume setup not required and auth enabled
         setSetupRequired(false)
+        setAuthDisabled(false)
       } finally {
         setLoading(false)
       }
@@ -62,8 +69,8 @@ export function AppRouter() {
   return (
     <Routes>
       {setupRequired && <Route path="/*" element={<SetupWizardPage />} />}
-      {!setupRequired && !isAuthenticated && <Route path="/*" element={<LoginPage />} />}
-      {!setupRequired && isAuthenticated && <Route path="/*" element={<ProtectedRoutes />} />}
+      {!setupRequired && !authDisabled && !isAuthenticated && <Route path="/*" element={<LoginPage />} />}
+      {!setupRequired && (authDisabled || isAuthenticated) && <Route path="/*" element={<ProtectedRoutes />} />}
     </Routes>
   )
 }

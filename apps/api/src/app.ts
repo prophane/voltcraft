@@ -94,6 +94,11 @@ export async function buildApp() {
     return reply.send({ status: 'ok', service: 'voltcraft-api', timestamp: new Date().toISOString() })
   })
 
+  // ── Config endpoint (frontend setup detection) ───────────────
+  app.get('/config', async () => {
+    return { authDisabled: process.env.AUTH_DISABLED === 'true' }
+  })
+
   // ── API routes ──────────────────────────────────────────────
   // Setup routes (no auth required for initial setup)
   await app.register(registerSetupRoutes, { prefix: '/auth' })
