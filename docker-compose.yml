@@ -94,6 +94,9 @@ services:
       AUTH_DISABLED: ${AUTH_DISABLED:-true}
       TESLA_TOKEN: ${TESLA_TOKEN:-}
       TESLA_REGION: ${TESLA_REGION:-na}
+      TESLA_CLIENT_ID: ${TESLA_CLIENT_ID:-}
+      TESLA_CLIENT_SECRET: ${TESLA_CLIENT_SECRET:-}
+      TESLA_REDIRECT_URI: ${TESLA_REDIRECT_URI:-https://voltcraft.ph4.fr/api/auth/tesla/callback}
       MQTT_ENABLED: ${MQTT_ENABLED:-false}
       MQTT_BROKER: mqtt
       MQTT_PORT: 1883
