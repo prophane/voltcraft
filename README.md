@@ -64,9 +64,8 @@ cp .env.example .env
 - `REDIS_PASSWORD` — mot de passe Redis fort
 - `SESSION_SECRET` — 64 caractères hex aléatoires (`openssl rand -hex 32`)
 - `ENCRYPTION_KEY` — 64 caractères hex aléatoires (`openssl rand -hex 32`)
-- `TESLA_CLIENT_ID` — depuis [developer.tesla.com](https://developer.tesla.com/)
-- `TESLA_CLIENT_SECRET` — depuis le portail Tesla Developer
-- `TESLA_REDIRECT_URI` — l'URL de callback configurée dans votre app Tesla
+- `TESLA_TOKEN` — bearer token Tesla Fleet API (optionnel au boot, peut être défini depuis l'UI)
+- `TESLA_REGION` — `na`, `eu` ou `cn`
 
 ### 3. Démarrer
 
@@ -82,6 +81,8 @@ Les services démarrent dans cet ordre : PostgreSQL → Redis → Mosquitto → 
 2. L'application détecte qu'aucun compte n'existe et ouvre le formulaire de création
 3. Créer le compte administrateur
 4. Configurer la liaison Tesla depuis les Paramètres
+
+> La configuration Tesla saisie dans l'UI est persistée dans le fichier `.env` local quand celui-ci est accessible en écriture.
 
 ---
 
@@ -212,6 +213,12 @@ Règles supplémentaires :
 ## Variables d'environnement complètes
 
 Voir [.env.example](.env.example) pour la liste complète documentée.
+
+### Notes Tesla
+
+- Le backend utilise `TESLA_TOKEN` + `TESLA_REGION`.
+- En mode setup/UI, l'API `POST /api/settings/tesla` met à jour la configuration runtime et tente de persister ces valeurs dans `.env`.
+- Après modification via UI en environnement Docker, un redémarrage du service API peut être nécessaire selon votre mode de déploiement.
 
 ---
 
