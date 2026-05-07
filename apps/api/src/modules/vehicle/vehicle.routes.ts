@@ -8,6 +8,9 @@ import { AuthService } from '../auth/auth.service.js'
 import { AuthRepository } from '../auth/auth.repository.js'
 import { requireAuth } from '../auth/auth.routes.js'
 import { ok } from '../../common/http/response.js'
+import { env } from '../../config/env.js'
+import { bootstrapTeslaInventory } from '../../providers/tesla/tesla-bootstrap.service.js'
+import { AppError, NotFoundError } from '../../common/errors/app-error.js'
 
 export async function vehicleRoutes(app: FastifyInstance) {
   const repo = new VehicleRepository(app.prisma)
@@ -18,11 +21,43 @@ export async function vehicleRoutes(app: FastifyInstance) {
   const syncService = new TeslaSyncService(teslaClient, repo, ecoPolicy, app.prisma)
   const service = new VehicleService(repo, ecoPolicy, syncService)
 
+  async function withAutoBootstrap<T>(userId: string, run: (uid: string) => Promise<T>) {
+    try {
+      return await run(userId)
+    } catch (err) {
+      if (
+        env.AUTH_DISABLED
+        && env.TESLA_TOKEN
+        && err instanceof NotFoundError
+      ) {
+        await bootstrapTeslaInventory(app.prisma, {
+          token: env.TESLA_TOKEN,
+          region: env.TESLA_REGION,
+        })
+
+        try {
+          return await run(userId)
+        } catch (retryErr) {
+          if (retryErr instanceof NotFoundError) {
+            throw new AppError(
+              'NO_VEHICLE_LINKED',
+              'No Tesla vehicle detected for current token. Check Tesla token permissions and selected region, then save Tesla settings again.',
+              404,
+            )
+          }
+          throw retryErr
+        }
+      }
+
+      throw err
+    }
+  }
+
   // ── GET /vehicle/current ──────────────────────────────────────
   app.get('/current', { schema: { tags: ['vehicle'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
-    const vehicle = await service.getCurrentVehicle(session.userId)
+    const vehicle = await withAutoBootstrap(session.userId, (uid) => service.getCurrentVehicle(uid))
     return ok(vehicle)
   })
 
@@ -30,7 +65,7 @@ export async function vehicleRoutes(app: FastifyInstance) {
   app.get('/state', { schema: { tags: ['vehicle'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
-    const state = await service.getVehicleState(session.userId)
+    const state = await withAutoBootstrap(session.userId, (uid) => service.getVehicleState(uid))
     return ok(state)
   })
 
@@ -38,7 +73,7 @@ export async function vehicleRoutes(app: FastifyInstance) {
   app.get('/location', { schema: { tags: ['vehicle'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
-    const location = await service.getVehicleLocation(session.userId)
+    const location = await withAutoBootstrap(session.userId, (uid) => service.getVehicleLocation(uid))
     return ok(location)
   })
 
@@ -46,7 +81,7 @@ export async function vehicleRoutes(app: FastifyInstance) {
   app.post('/sync', { schema: { tags: ['vehicle'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
-    const result = await service.forceSync(session.userId)
+    const result = await withAutoBootstrap(session.userId, (uid) => service.forceSync(uid))
     return ok(result)
   })
 }

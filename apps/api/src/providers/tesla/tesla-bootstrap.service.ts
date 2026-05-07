@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client'
+import { TeslaApiError } from '../../common/errors/app-error.js'
 
 type TeslaRegion = 'na' | 'eu' | 'cn'
 
@@ -64,18 +65,36 @@ export async function bootstrapTeslaInventory(
         },
       })
 
-  const url = `${REGION_BASE[region]}/api/1/vehicles`
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(15_000),
-  })
+  let vehicles: TeslaVehicleSummary[] = []
 
-  if (!res.ok) {
-    throw new Error(`Failed to list Tesla vehicles (${res.status})`)
+  try {
+    const url = `${REGION_BASE[region]}/api/1/vehicles`
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(15_000),
+    })
+
+    if (!res.ok) {
+      const details = await res.text().catch(() => '')
+      throw new TeslaApiError(
+        `Failed to list Tesla vehicles (${res.status}). Verify token scope and region (${region}).${details ? ` Details: ${details.slice(0, 180)}` : ''}`,
+        'tesla_list_vehicles_failed',
+      )
+    }
+
+    const payload = (await res.json()) as TeslaVehiclesResponse
+    vehicles = Array.isArray(payload.response) ? payload.response : []
+  } catch (error) {
+    if (error instanceof TeslaApiError) {
+      throw error
+    }
+
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    throw new TeslaApiError(
+      `Unable to contact Tesla Fleet API. Verify outbound network access and token validity. Details: ${message}`,
+      'tesla_network_error',
+    )
   }
-
-  const payload = (await res.json()) as TeslaVehiclesResponse
-  const vehicles = payload.response ?? []
 
   for (const item of vehicles) {
     if (!item.vin) continue
