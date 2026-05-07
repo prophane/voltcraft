@@ -1,6 +1,6 @@
 # Voltcraft — Self-hosted Tesla Fleet Companion
 
-**Latest update**: Setup Wizard MVP with first-time initialization ✨
+**Latest update**: OAuth Tesla + Partner Fleet flow + visual refresh ✨
 
 ## Quick Start
 
@@ -19,17 +19,28 @@ docker compose up -d
 
 On first access, you'll see an interactive **Setup Wizard** that guides you through:
 - Admin account creation
-- Tesla Fleet API configuration
+- Tesla OAuth configuration
 - Optional MQTT/Home Assistant setup
+
+Then in Settings:
+- Connect with Tesla OAuth
+- Register Tesla Fleet partner (if required)
+- Run first sync
 
 ## Features
 
-- ⚡ **Premium dark UI** with automotive design
+- ⚡ **Premium dark UI** with refreshed mobile visuals
 - 🔋 Real-time battery & charge tracking
 - 🗺️ Trip history & energy analytics
 - 🤖 Local automation rules (no SaaS)
 - 🏠 Home Assistant MQTT integration
 - 💰 Tesla Fleet API cost awareness
+
+## Notes
+
+- Partner public key must be publicly reachable at:
+	`https://<your-domain>/.well-known/appspecific/com.tesla.3p.public-key.pem`
+- If lock/unlock fails, reconnect OAuth and verify command scope (`vehicle_cmds`).
 
 ## Architecture
 

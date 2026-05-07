@@ -19,6 +19,17 @@ Voltcraft est une application web auto-hébergée permettant de gérer vos véhi
 - Intégration Home Assistant via MQTT
 - Mode Éco API par défaut pour limiter les coûts Fleet API Tesla
 
+### Nouveautés (Mai 2026)
+
+- Refonte visuelle mobile/desktop sur les écrans coeur (Dashboard, Trajets, Recharges, Automations)
+- Édition de la configuration OAuth Tesla directement dans Paramètres
+- Enregistrement Partner Fleet Tesla depuis l'UI (avec diagnostics)
+- Publication de la clé partner sur `/.well-known/appspecific/com.tesla.3p.public-key.pem`
+- Auto-bootstrap véhicule en mode `AUTH_DISABLED` pour éviter les 404 au premier démarrage
+- Tolérance aux payloads Tesla partiels dans `vehicle_data` (plus de crash `drive_state.speed`)
+- Messages d'erreur commandes Tesla plus explicites (permissions/scope/region)
+- Navigation mobile corrigée (onglet Paramètres toujours visible)
+
 ---
 
 ## Stack technique
@@ -64,8 +75,10 @@ cp .env.example .env
 - `REDIS_PASSWORD` — mot de passe Redis fort
 - `SESSION_SECRET` — 64 caractères hex aléatoires (`openssl rand -hex 32`)
 - `ENCRYPTION_KEY` — 64 caractères hex aléatoires (`openssl rand -hex 32`)
-- `TESLA_TOKEN` — bearer token Tesla Fleet API (optionnel au boot, peut être défini depuis l'UI)
-- `TESLA_REGION` — `na`, `eu` ou `cn`
+- `TESLA_CLIENT_ID` — OAuth App Client ID Tesla
+- `TESLA_CLIENT_SECRET` — OAuth App Client Secret Tesla
+- `TESLA_REDIRECT_URI` — callback OAuth (`https://<domaine>/api/auth/tesla/callback`)
+- `TESLA_REGION` — `na`, `eu` ou `cn` (alignée ensuite sur le compte OAuth actif)
 
 ### 3. Démarrer
 
@@ -83,6 +96,8 @@ Les services démarrent dans cet ordre : PostgreSQL → Redis → Mosquitto → 
 2. L'application détecte qu'aucun compte n'existe et ouvre le formulaire de création
 3. Créer le compte administrateur
 4. Configurer la liaison Tesla depuis les Paramètres
+5. Cliquer sur `Connect With Tesla OAuth`
+6. Si requis, finaliser `Enregistrer le partner Tesla Fleet` depuis la même page
 
 > La configuration Tesla saisie dans l'UI est persistée dans le fichier `.env` local quand celui-ci est accessible en écriture.
 
@@ -218,9 +233,22 @@ Voir [.env.example](.env.example) pour la liste complète documentée.
 
 ### Notes Tesla
 
-- Le backend utilise `TESLA_TOKEN` + `TESLA_REGION`.
-- En mode setup/UI, l'API `POST /api/settings/tesla` met à jour la configuration runtime et tente de persister ces valeurs dans `.env`.
-- Après modification via UI en environnement Docker, un redémarrage du service API peut être nécessaire selon votre mode de déploiement.
+- Le flux principal utilise OAuth (`TESLA_CLIENT_ID`, `TESLA_CLIENT_SECRET`, `TESLA_REDIRECT_URI`).
+- L'endpoint `POST /api/settings/tesla` met à jour la config OAuth runtime et tente de la persister dans `.env`.
+- L'endpoint `POST /api/settings/tesla/register-partner` enregistre l'application en partner Fleet dans la région active.
+- La clé partner est servie sur `/.well-known/appspecific/com.tesla.3p.public-key.pem` et doit être accessible publiquement en HTTP `200` (pas de redirection SSO).
+- Le fallback `TESLA_TOKEN` est conservé pour compat legacy/debug, mais n'est plus le chemin recommandé.
+
+### Dépannage commandes (Lock/Unlock)
+
+Si les commandes retournent `Request failed`, vérifier :
+
+1. OAuth reconnecté récemment avec scope commandes (`vehicle_cmds`)
+2. Partner Fleet enregistré dans la bonne région (`eu`/`na`/`cn`)
+3. Véhicule réveillé (`wake`) avant un lock/unlock si nécessaire
+4. Détail API dans les logs (`docker compose logs api --tail=100`)
+
+Depuis les derniers patchs, les erreurs commandes incluent un message explicite en cas de scope/permission insuffisante.
 
 ---
 
