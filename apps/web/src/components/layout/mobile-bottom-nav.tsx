@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Zap, Route, Battery, BarChart3 } from 'lucide-react'
+import { LayoutDashboard, Zap, Route, Battery, BarChart3, Bot, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
@@ -8,11 +8,13 @@ const NAV_ITEMS = [
   { to: '/trips',    label: 'Trajets',    icon: Route },
   { to: '/charges',  label: 'Recharges',  icon: Battery },
   { to: '/stats',    label: 'Stats',      icon: BarChart3 },
+  { to: '/automations', label: 'Auto',    icon: Bot },
+  { to: '/settings', label: 'Paramètres', icon: Settings },
 ]
 
 export function MobileBottomNav() {
   return (
-    <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-bg-surface border-t border-border-subtle flex items-center justify-around px-2 pb-safe">
+    <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-bg-surface border-t border-border-subtle flex items-center overflow-x-auto px-2 pb-safe">
       {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
         <NavLink
           key={to}
@@ -20,7 +22,7 @@ export function MobileBottomNav() {
           end={to === '/'}
           className={({ isActive }) =>
             cn(
-              'flex flex-col items-center gap-1 py-3 px-3 text-xs font-medium transition-colors',
+              'flex flex-col items-center gap-1 py-3 px-3 text-xs font-medium transition-colors min-w-[72px] flex-shrink-0',
               isActive ? 'text-accent-400' : 'text-text-muted',
             )
           }
