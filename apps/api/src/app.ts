@@ -124,15 +124,21 @@ export async function buildApp() {
 
   // ── Serve frontend SPA (fallback to index.html) ──────────────
   const __dirname = dirname(fileURLToPath(import.meta.url))
-  const distPath = join(__dirname, '../../apps/web/dist')
+  const distPath = join(__dirname, '../../web/dist')
 
   await app.register(staticPlugin, {
     root: distPath,
   })
 
-  // Fallback: any unmatched route serves index.html for SPA routing
+  // Keep JSON 404s for API routes; serve SPA for non-API routes.
   app.setNotFoundHandler((req, reply) => {
-    reply.sendFile('index.html')
+    if (req.url.startsWith('/api')) {
+      return reply.status(404).send({
+        success: false,
+        error: { code: 'NOT_FOUND', message: `Route ${req.method}:${req.url} not found` },
+      })
+    }
+    return reply.sendFile('index.html')
   })
 
   // ── Error handler ────────────────────────────────────────────
