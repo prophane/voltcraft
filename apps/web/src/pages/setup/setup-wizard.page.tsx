@@ -24,7 +24,10 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
     email: '',
     password: '',
     passwordConfirm: '',
-    teslaToken: '', // Single bearer token field
+    teslaToken: '',
+    teslaClientId: '',
+    teslaClientSecret: '',
+    teslaRedirectUri: '',
     teslaRegion: 'na' as TeslaRegion,
     mqttEnabled: false,
   })
@@ -56,6 +59,9 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
       if (authDisabled) {
         await api.post<{ success: true }>('/auth/setup', {
           teslaToken: formData.teslaToken,
+          teslaClientId: formData.teslaClientId,
+          teslaClientSecret: formData.teslaClientSecret,
+          teslaRedirectUri: formData.teslaRedirectUri,
           teslaRegion: formData.teslaRegion,
         })
         return { success: true as const }
@@ -92,8 +98,15 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
     // Auth disabled mode: skip admin, go straight to Tesla token
     if (authDisabled) {
       if (step === 'tesla') {
-        if (!formData.teslaToken.trim()) {
-          setError('Tesla bearer token is required')
+        const hasOAuthConfig = Boolean(
+          formData.teslaClientId.trim()
+          && formData.teslaClientSecret.trim()
+          && formData.teslaRedirectUri.trim(),
+        )
+        const hasToken = Boolean(formData.teslaToken.trim())
+
+        if (!hasOAuthConfig && !hasToken) {
+          setError('Provide Tesla OAuth client settings (recommended) or a temporary bearer token')
           return
         }
         setupMutation.mutate()
@@ -223,35 +236,66 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
           {step === 'tesla' && (
             <>
               {authDisabled ? (
-                // AUTH_DISABLED: Single token field
+                // AUTH_DISABLED: OAuth-first setup
                 <>
                   <div className="space-y-1">
-                    <h2 className="text-xl font-semibold text-text-primary">Configure Tesla Token</h2>
-                    <p className="text-sm text-text-secondary">Enter your Tesla API bearer token</p>
+                    <h2 className="text-xl font-semibold text-text-primary">Configure Tesla OAuth</h2>
+                    <p className="text-sm text-text-secondary">Enter Tesla OAuth app settings (recommended)</p>
                   </div>
 
                   <div className="bg-bg-overlay border border-border-subtle rounded-lg p-4 space-y-2">
-                    <p className="text-xs font-medium text-text-secondary">ℹ️ Get your token from</p>
+                    <p className="text-xs font-medium text-text-secondary">ℹ️ Required for one-click Tesla connect after setup</p>
                     <p className="text-xs text-text-muted">
                       Visit{' '}
                       <a href="https://developer.tesla.com" target="_blank" rel="noopener noreferrer" className="text-accent-500 hover:underline">
                         Tesla Developer Portal
                       </a>{' '}
-                      to generate your bearer token.
+                      to create OAuth app credentials.
                     </p>
                   </div>
 
                   <div className="space-y-4">
                     <div>
-                      <label className="stat-label block mb-1.5">Tesla Bearer Token</label>
+                      <label className="stat-label block mb-1.5">Tesla Client ID</label>
+                      <input
+                        value={formData.teslaClientId}
+                        onChange={(e) => setFormData({ ...formData, teslaClientId: e.target.value })}
+                        className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none"
+                        placeholder="your-client-id"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="stat-label block mb-1.5">Tesla Client Secret</label>
+                      <input
+                        type="password"
+                        value={formData.teslaClientSecret}
+                        onChange={(e) => setFormData({ ...formData, teslaClientSecret: e.target.value })}
+                        className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none"
+                        placeholder="your-client-secret"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="stat-label block mb-1.5">Tesla Redirect URI</label>
+                      <input
+                        value={formData.teslaRedirectUri}
+                        onChange={(e) => setFormData({ ...formData, teslaRedirectUri: e.target.value })}
+                        className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none"
+                        placeholder="https://your-domain/api/auth/tesla/callback"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="stat-label block mb-1.5">Tesla Bearer Token (Optional fallback)</label>
                       <textarea
                         value={formData.teslaToken}
                         onChange={(e) => setFormData({ ...formData, teslaToken: e.target.value })}
                         className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none font-mono"
                         placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
-                        rows={8}
+                        rows={5}
                       />
-                      <p className="text-xs text-text-muted mt-1">Paste your complete JWT token here</p>
+                      <p className="text-xs text-text-muted mt-1">Optional if you want immediate bootstrap without OAuth connect click</p>
                     </div>
 
                     <div>

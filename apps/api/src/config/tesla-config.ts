@@ -8,6 +8,9 @@ export type TeslaRegion = 'na' | 'eu' | 'cn'
 const ENV_KEYS = {
   token: 'TESLA_TOKEN',
   region: 'TESLA_REGION',
+  clientId: 'TESLA_CLIENT_ID',
+  clientSecret: 'TESLA_CLIENT_SECRET',
+  redirectUri: 'TESLA_REDIRECT_URI',
 } as const
 
 async function canRead(filePath: string): Promise<boolean> {
@@ -64,6 +67,36 @@ export async function persistTeslaConfig(input: {
     const current = (await canRead(envPath)) ? await readFile(envPath, 'utf8') : ''
     let next = upsertEnvLine(current, ENV_KEYS.token, token)
     next = upsertEnvLine(next, ENV_KEYS.region, region)
+    await writeFile(envPath, next, 'utf8')
+    return { envPath, persistedToFile: true }
+  } catch {
+    return { envPath, persistedToFile: false }
+  }
+}
+
+export async function persistTeslaOAuthConfig(input: {
+  clientId: string
+  clientSecret: string
+  redirectUri: string
+}): Promise<{ envPath: string; persistedToFile: boolean }> {
+  const clientId = input.clientId.trim()
+  const clientSecret = input.clientSecret.trim()
+  const redirectUri = input.redirectUri.trim()
+
+  process.env[ENV_KEYS.clientId] = clientId
+  process.env[ENV_KEYS.clientSecret] = clientSecret
+  process.env[ENV_KEYS.redirectUri] = redirectUri
+  env.TESLA_CLIENT_ID = clientId
+  env.TESLA_CLIENT_SECRET = clientSecret
+  env.TESLA_REDIRECT_URI = redirectUri
+
+  const envPath = await resolveEnvFilePath()
+
+  try {
+    const current = (await canRead(envPath)) ? await readFile(envPath, 'utf8') : ''
+    let next = upsertEnvLine(current, ENV_KEYS.clientId, clientId)
+    next = upsertEnvLine(next, ENV_KEYS.clientSecret, clientSecret)
+    next = upsertEnvLine(next, ENV_KEYS.redirectUri, redirectUri)
     await writeFile(envPath, next, 'utf8')
     return { envPath, persistedToFile: true }
   } catch {

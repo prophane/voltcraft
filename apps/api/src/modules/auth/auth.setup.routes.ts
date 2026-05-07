@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { setupSchema } from './auth.setup.service.js'
 import { AuthService } from './auth.service.js'
 import { AuthRepository } from './auth.repository.js'
-import { persistTeslaConfig } from '../../config/tesla-config.js'
+import { persistTeslaConfig, persistTeslaOAuthConfig } from '../../config/tesla-config.js'
 import { bootstrapTeslaInventory } from '../../providers/tesla/tesla-bootstrap.service.js'
 
 const COOKIE_NAME = 'voltcraft_session'
@@ -27,6 +27,14 @@ export async function registerSetupRoutes(app: FastifyInstance) {
 
     let bootstrapResult: { vehiclesCount: number } | null = null
 
+    if (payload.teslaClientId && payload.teslaClientSecret && payload.teslaRedirectUri) {
+      await persistTeslaOAuthConfig({
+        clientId: payload.teslaClientId,
+        clientSecret: payload.teslaClientSecret,
+        redirectUri: payload.teslaRedirectUri,
+      })
+    }
+
     if (payload.teslaToken) {
       await persistTeslaConfig({
         token: payload.teslaToken,
@@ -44,7 +52,7 @@ export async function registerSetupRoutes(app: FastifyInstance) {
       app.log.info('Setup in AUTH_DISABLED mode: Tesla token configured')
       return reply.status(201).send({
         success: true,
-        message: 'Setup completed - Tesla token configured',
+        message: 'Setup completed',
         vehiclesDetected: bootstrapResult?.vehiclesCount ?? 0,
       })
     }

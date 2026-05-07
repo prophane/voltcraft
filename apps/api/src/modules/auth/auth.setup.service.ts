@@ -6,6 +6,9 @@ export const setupSchema = z.object({
   password: z.string().min(8).optional(),
   teslaToken: z.string().optional(),
   teslaRegion: z.enum(['na', 'eu', 'cn']).optional(),
+  teslaClientId: z.string().optional(),
+  teslaClientSecret: z.string().optional(),
+  teslaRedirectUri: z.string().url().optional(),
   mqttEnabled: z.boolean().optional(),
 })
 
