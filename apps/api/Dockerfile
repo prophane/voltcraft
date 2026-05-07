@@ -38,7 +38,9 @@ COPY --from=base /app/apps/api/dist ./apps/api/dist
 COPY --from=base /app/apps/api/prisma ./apps/api/prisma
 COPY --from=base /app/packages/shared/dist ./packages/shared/dist
 COPY --from=base /app/node_modules/.pnpm ./node_modules/.pnpm
-COPY --from=base /app/node_modules/.prisma ./node_modules/.prisma
+
+# Generate Prisma client in production image (ensures correct OpenSSL binaries)
+RUN cd apps/api && npx prisma generate
 
 ENV NODE_ENV=production
 EXPOSE 3001
