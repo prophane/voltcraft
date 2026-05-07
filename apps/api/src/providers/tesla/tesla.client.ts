@@ -183,7 +183,30 @@ export class TeslaClient {
       signal: AbortSignal.timeout(30_000),
     })
 
-    if (!res.ok) throw new TeslaApiError(`Command failed: ${res.status}`)
+    if (!res.ok) {
+      const details = await res.text().catch(() => '')
+      const lower = details.toLowerCase()
+
+      if (res.status === 403 || lower.includes('scope') || lower.includes('forbidden')) {
+        throw new TeslaApiError(
+          `Tesla command rejected (${res.status}): missing permission/scope for command endpoint. Reconnect Tesla OAuth and ensure command scopes are granted.${details ? ` Details: ${details.slice(0, 280)}` : ''}`,
+          'tesla_command_scope_denied',
+        )
+      }
+
+      if (res.status === 412 || lower.includes('must be registered in the current region')) {
+        throw new TeslaApiError(
+          `Tesla command rejected (${res.status}): partner account not registered in the active region (${account.region.toUpperCase()}).${details ? ` Details: ${details.slice(0, 280)}` : ''}`,
+          'tesla_partner_region_missing',
+        )
+      }
+
+      throw new TeslaApiError(
+        `Tesla command failed (${res.status})${details ? `: ${details.slice(0, 280)}` : ''}`,
+        'tesla_command_failed',
+      )
+    }
+
     const data = (await res.json()) as { response: TeslaCommandResponse }
     if (!data.response.result) throw new TeslaApiError(`Command rejected: ${data.response.reason}`)
     return data.response
