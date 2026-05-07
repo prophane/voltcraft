@@ -96,7 +96,14 @@ export async function settingsRoutes(app: FastifyInstance) {
     }
 
     const { domain } = z.object({ domain: z.string().min(1) }).parse(req.body)
-    const region = env.TESLA_REGION ?? 'eu'
+
+    // Prefer the active account's region (set during OAuth), fall back to env
+    const activeAccount = await app.prisma.teslaAccount.findFirst({
+      where: { isActive: true },
+      orderBy: { updatedAt: 'desc' },
+      select: { region: true },
+    })
+    const region = activeAccount?.region ?? env.TESLA_REGION ?? 'eu'
 
     const client = new TeslaClient(app.prisma, app.redis)
 
