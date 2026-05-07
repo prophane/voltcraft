@@ -1,14 +1,9 @@
 import type { FastifyInstance } from 'fastify'
 import { ok } from '../../common/http/response.js'
 import { env } from '../../config/env.js'
+import { TeslaClient } from '../../providers/tesla/tesla.client.js'
 
 type TeslaRegion = 'na' | 'eu' | 'cn'
-
-const REGION_BASE: Record<TeslaRegion, string> = {
-  na: 'https://fleet-api.prd.na.vn.cloud.tesla.com',
-  eu: 'https://fleet-api.prd.eu.vn.cloud.tesla.com',
-  cn: 'https://fleet-api.prd.cn.vn.cloud.tesla.cn',
-}
 
 interface TeslaConnectionResult {
   connected: boolean
@@ -23,16 +18,31 @@ interface TeslaConnectionResult {
   error?: string
 }
 
-async function probeTeslaConnection(input: {
-  token: string
-  region: TeslaRegion
-  accountConfigured: boolean
-  oauthConfigured: boolean
-  dbVehicleCount: number
-}): Promise<TeslaConnectionResult> {
-  const token = input.token.trim()
-
-  if (!token) {
+async function probeTeslaConnection(
+  client: TeslaClient,
+  input: {
+    accountConfigured: boolean
+    oauthConfigured: boolean
+    dbVehicleCount: number
+    region: TeslaRegion
+    accessToken: string
+    account?: {
+      id: string
+      userId: string
+      email: string
+      accessToken: string
+      refreshToken: string
+      tokenExpiry: Date
+      region: string
+      linkedAt: Date
+      lastSyncAt: Date | null
+      isActive: boolean
+      createdAt: Date
+      updatedAt: Date
+    }
+  },
+): Promise<TeslaConnectionResult> {
+  if (!input.accessToken.trim()) {
     return {
       connected: false,
       tokenConfigured: false,
@@ -45,31 +55,22 @@ async function probeTeslaConnection(input: {
     }
   }
 
-  const url = `${REGION_BASE[input.region]}/api/1/vehicles`
-
   try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(15_000),
-    })
-
-    if (!res.ok) {
-      const details = await res.text().catch(() => '')
+    if (!input.account) {
       return {
         connected: false,
         tokenConfigured: true,
-        accountConfigured: input.accountConfigured,
+        accountConfigured: false,
         oauthConfigured: input.oauthConfigured,
         region: input.region,
         dbVehicleCount: input.dbVehicleCount,
         apiReachable: false,
-        httpStatus: res.status,
-        error: `Tesla Fleet API rejected request (${res.status})${details ? `: ${details.slice(0, 180)}` : ''}`,
+        error: 'Tesla account not found in database',
       }
     }
 
-    const payload = (await res.json()) as { response?: unknown[] }
-    const apiVehicleCount = Array.isArray(payload.response) ? payload.response.length : 0
+    const vehicles = await client.listVehicles(input.account)
+    const apiVehicleCount = vehicles.length
 
     return {
       connected: true,
@@ -140,17 +141,19 @@ export async function diagnosticsRoutes(app: FastifyInstance) {
       orderBy: { updatedAt: 'desc' },
     })
 
+    const client = new TeslaClient(app.prisma, app.redis)
     const region = (activeAccount?.region ?? env.TESLA_REGION) as TeslaRegion
     const token = (activeAccount?.accessToken || '').trim()
     const oauthConfigured = Boolean(env.TESLA_CLIENT_ID && env.TESLA_CLIENT_SECRET && env.TESLA_REDIRECT_URI)
     const dbVehicleCount = await app.prisma.vehicle.count({ where: { isActive: true } })
 
-    const result = await probeTeslaConnection({
-      token,
-      region,
+    const result = await probeTeslaConnection(client, {
       accountConfigured: !!activeAccount,
       oauthConfigured,
       dbVehicleCount,
+      region,
+      accessToken: token,
+      account: activeAccount ?? undefined,
     })
 
     if (!result.connected && oauthConfigured && !result.tokenConfigured) {
