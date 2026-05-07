@@ -13,6 +13,8 @@ import { useAuthStore } from '@/features/auth/store'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api-client'
 
+const FORCE_NO_AUTH = import.meta.env.VITE_FORCE_NO_AUTH === 'true'
+
 function ProtectedRoutes({ authDisabled }: { authDisabled: boolean }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   if (!authDisabled && !isAuthenticated) return <Navigate to="/login" replace />
@@ -34,11 +36,18 @@ function ProtectedRoutes({ authDisabled }: { authDisabled: boolean }) {
 export function AppRouter() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null)
-  const [authDisabled, setAuthDisabled] = useState(false)
+  const [authDisabled, setAuthDisabled] = useState(FORCE_NO_AUTH)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const checkSetup = async () => {
+      if (FORCE_NO_AUTH) {
+        setAuthDisabled(true)
+        setSetupRequired(false)
+        setLoading(false)
+        return
+      }
+
       try {
         // Single call to /config gets both authDisabled AND setupRequired
         const configRes = await api.get<{
@@ -49,8 +58,10 @@ export function AppRouter() {
         setSetupRequired(configRes.setupRequired ?? false)
       } catch (err) {
         console.error('Failed to check setup/config:', err)
+        // Behind some reverse proxies, /config can fail while auth is managed upstream.
+        // Default to no-auth mode to avoid forcing the local login screen.
         setSetupRequired(false)
-        setAuthDisabled(false)
+        setAuthDisabled(true)
       } finally {
         setLoading(false)
       }

@@ -22,13 +22,41 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     },
   })
 
-  const body = await res.json()
+  const contentType = res.headers.get('content-type') ?? ''
+  const isJson = contentType.includes('application/json')
 
-  if (!res.ok) {
-    throw new ApiError(res.status, body?.error?.code ?? 'UNKNOWN', body?.error?.message ?? 'Request failed')
+  let body: unknown = null
+  let rawText = ''
+
+  if (isJson) {
+    try {
+      body = await res.json()
+    } catch {
+      body = null
+    }
+  } else {
+    rawText = await res.text()
   }
 
-  return body.data as T
+  if (!res.ok) {
+    const maybeError = body as { error?: { code?: string; message?: string } } | null
+    const fallbackMessage = rawText
+      ? `${res.status} ${res.statusText}: ${rawText.slice(0, 160)}`
+      : `Request failed (${res.status} ${res.statusText})`
+
+    throw new ApiError(
+      res.status,
+      maybeError?.error?.code ?? 'UNKNOWN',
+      maybeError?.error?.message ?? fallbackMessage,
+    )
+  }
+
+  const dataWrapper = body as { data?: T } | null
+  if (dataWrapper && typeof dataWrapper === 'object' && 'data' in dataWrapper) {
+    return dataWrapper.data as T
+  }
+
+  return body as T
 }
 
 export const api = {
