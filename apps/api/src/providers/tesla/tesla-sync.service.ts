@@ -278,7 +278,7 @@ export class TeslaSyncService {
       if (current.isCharging || previous.isCharging || snapshot.isCharging) return
 
       const spanMinutes = (current.capturedAt.getTime() - previous.capturedAt.getTime()) / 60_000
-      if (spanMinutes <= 0 || spanMinutes > 180) return
+      if (spanMinutes <= 0 || spanMinutes > 720) return
 
       let distanceKm: number | null = null
       if (current.odometer != null && previous.odometer != null) {
@@ -293,12 +293,12 @@ export class TeslaSyncService {
           current.latitude ?? null,
           current.longitude ?? null,
         )
-        if (movedKm >= 0.5) {
+        if (movedKm >= 0.3) {
           distanceKm = Math.round(movedKm * 100) / 100
         }
       }
 
-      if (distanceKm == null || distanceKm < 0.5) return
+      if (distanceKm == null || distanceKm < 0.3) return
 
       const alreadySaved = await this.db.trip.findFirst({
         where: {
@@ -310,12 +310,17 @@ export class TeslaSyncService {
       })
       if (alreadySaved) return
 
+      const recoveredStartedAt =
+        spanMinutes > 120
+          ? new Date(current.capturedAt.getTime() - 30 * 60_000)
+          : previous.capturedAt
+
       const live = await this.computeTripLiveMetrics(vehicleId, previous.capturedAt, current.odometer)
 
       await this.db.trip.create({
         data: {
           vehicleId,
-          startedAt: previous.capturedAt,
+          startedAt: recoveredStartedAt,
           endedAt: current.capturedAt,
           durationMin: Math.max(1, Math.round(spanMinutes)),
           distanceKm: live.distanceKm ?? distanceKm,
