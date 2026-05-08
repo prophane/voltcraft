@@ -2,8 +2,6 @@ import type { PrismaClient, TeslaAccount, Vehicle } from '@prisma/client'
 import type { TeslaClient } from './tesla.client.js'
 import type { VehicleRepository } from '../../modules/vehicle/vehicle.repository.js'
 import type { TeslaEcoPolicyService } from './tesla-eco-policy.service.js'
-import { TeslaApiError } from '../../common/errors/app-error.js'
-
 export class TeslaSyncService {
   constructor(
     private readonly client: TeslaClient,
@@ -40,10 +38,18 @@ export class TeslaSyncService {
           : copModeRaw.includes('on') || copModeRaw.includes('a/c') || copModeRaw.includes('ac') ? 'on'
             : 'off'
       const shiftState = (driveState.shift_state ?? '').toString().toLowerCase()
-      const isDrivingNow = (driveState.speed ?? 0) > 0 || shiftState === 'd' || shiftState === 'r'
       const latitude = driveState.latitude ?? driveState.native_latitude ?? locationData.latitude ?? locationData.native_latitude ?? null
       const longitude = driveState.longitude ?? driveState.native_longitude ?? locationData.longitude ?? locationData.native_longitude ?? null
       const headingRaw = driveState.heading ?? driveState.native_heading ?? locationData.heading ?? locationData.native_heading ?? null
+      const previousSnapshot = await this.vehicleRepo.getLatestSnapshot(vehicle.id)
+      const movedKm = this.computeDistanceKm(
+        previousSnapshot?.latitude ?? null,
+        previousSnapshot?.longitude ?? null,
+        latitude,
+        longitude,
+      )
+      const inferredDrivingFromMotion = movedKm >= 0.05 && data.state !== 'asleep' && data.state !== 'offline'
+      const isDrivingNow = (driveState.speed ?? 0) > 0 || shiftState === 'd' || shiftState === 'r' || inferredDrivingFromMotion
 
       const isAsleep = data.state === 'asleep' || data.state === 'offline'
       const snapshotForDb = {
@@ -102,6 +108,89 @@ export class TeslaSyncService {
     }
   }
 
+  private computeDistanceKm(
+    lat1: number | null,
+    lon1: number | null,
+    lat2: number | null,
+    lon2: number | null,
+  ): number {
+    if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 0
+
+    const toRad = (d: number) => d * (Math.PI / 180)
+    const dLat = toRad(lat2 - lat1)
+    const dLon = toRad(lon2 - lon1)
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return 6371 * c
+  }
+
+  private async computeTripLiveMetrics(vehicleId: string, startedAt: Date, currentOdometer: number | null) {
+    const snapshots = await this.db.vehicleStateSnapshot.findMany({
+      where: { vehicleId, capturedAt: { gte: startedAt } },
+      orderBy: { capturedAt: 'asc' },
+      select: {
+        capturedAt: true,
+        odometer: true,
+        latitude: true,
+        longitude: true,
+        power: true,
+      },
+    })
+
+    if (snapshots.length === 0) {
+      return {
+        distanceKm: null as number | null,
+        energyUsedKwh: null as number | null,
+        avgConsumptionKwh100: null as number | null,
+      }
+    }
+
+    let distanceKm: number | null = null
+    const firstWithOdometer = snapshots.find((s) => s.odometer != null)
+    if (currentOdometer != null && firstWithOdometer?.odometer != null) {
+      const delta = currentOdometer - firstWithOdometer.odometer
+      if (delta > 0) distanceKm = Math.round(delta * 100) / 100
+    }
+
+    if (distanceKm == null) {
+      let gpsKm = 0
+      for (let i = 1; i < snapshots.length; i++) {
+        const segKm = this.computeDistanceKm(
+          snapshots[i - 1]?.latitude ?? null,
+          snapshots[i - 1]?.longitude ?? null,
+          snapshots[i]?.latitude ?? null,
+          snapshots[i]?.longitude ?? null,
+        )
+        if (segKm >= 0.03) gpsKm += segKm
+      }
+      if (gpsKm > 0) distanceKm = Math.round(gpsKm * 100) / 100
+    }
+
+    let energyKwh = 0
+    for (let i = 1; i < snapshots.length; i++) {
+      const prev = snapshots[i - 1]
+      const curr = snapshots[i]
+      if (!prev || !curr) continue
+
+      const dtHours = (curr.capturedAt.getTime() - prev.capturedAt.getTime()) / 3_600_000
+      if (dtHours <= 0 || dtHours > 0.5) continue
+
+      const pPrev = Math.max(0, prev.power ?? 0)
+      const pCurr = Math.max(0, curr.power ?? 0)
+      energyKwh += ((pPrev + pCurr) / 2) * dtHours
+    }
+    const energyUsedKwh = energyKwh > 0 ? Math.round(energyKwh * 100) / 100 : null
+
+    const avgConsumptionKwh100 =
+      distanceKm != null && distanceKm > 0 && energyUsedKwh != null
+        ? Math.round(((energyUsedKwh / distanceKm) * 100) * 10) / 10
+        : null
+
+    return { distanceKm, energyUsedKwh, avgConsumptionKwh100 }
+  }
+
   private async updateTripTracking(vehicleId: string, snapshot: {
     isDriving: boolean
     speed: number | null
@@ -130,10 +219,34 @@ export class TeslaSyncService {
         return
       }
 
+      const live = await this.computeTripLiveMetrics(vehicleId, openTrip.startedAt, snapshot.odometer)
+
       if (snapshot.speed != null && (openTrip.maxSpeedKmh == null || snapshot.speed > openTrip.maxSpeedKmh)) {
         await this.db.trip.update({
           where: { id: openTrip.id },
-          data: { maxSpeedKmh: snapshot.speed },
+          data: {
+            maxSpeedKmh: snapshot.speed,
+            distanceKm: live.distanceKm,
+            energyUsedKwh: live.energyUsedKwh,
+            avgConsumptionKwh100: live.avgConsumptionKwh100,
+            durationMin: Math.max(1, Math.round((Date.now() - openTrip.startedAt.getTime()) / 60_000)),
+            endLatitude: snapshot.latitude,
+            endLongitude: snapshot.longitude,
+            endBatteryLevel: snapshot.batteryLevel,
+          },
+        })
+      } else {
+        await this.db.trip.update({
+          where: { id: openTrip.id },
+          data: {
+            distanceKm: live.distanceKm,
+            energyUsedKwh: live.energyUsedKwh,
+            avgConsumptionKwh100: live.avgConsumptionKwh100,
+            durationMin: Math.max(1, Math.round((Date.now() - openTrip.startedAt.getTime()) / 60_000)),
+            endLatitude: snapshot.latitude,
+            endLongitude: snapshot.longitude,
+            endBatteryLevel: snapshot.batteryLevel,
+          },
         })
       }
       return
@@ -146,31 +259,16 @@ export class TeslaSyncService {
     const endedAt = new Date()
     const durationMin = Math.max(1, Math.round((endedAt.getTime() - openTrip.startedAt.getTime()) / 60_000))
 
-    // Estimate trip distance from odometer delta over trip period when available.
-    let distanceKm: number | null = openTrip.distanceKm ?? null
-    if (snapshot.odometer != null) {
-      const firstSnapshot = await this.db.vehicleStateSnapshot.findFirst({
-        where: {
-          vehicleId,
-          capturedAt: { gte: openTrip.startedAt },
-          odometer: { not: null },
-        },
-        orderBy: { capturedAt: 'asc' },
-        select: { odometer: true },
-      })
-
-      if (firstSnapshot?.odometer != null) {
-        const delta = snapshot.odometer - firstSnapshot.odometer
-        distanceKm = delta > 0 ? Math.round(delta * 100) / 100 : distanceKm
-      }
-    }
+    const live = await this.computeTripLiveMetrics(vehicleId, openTrip.startedAt, snapshot.odometer)
 
     await this.db.trip.update({
       where: { id: openTrip.id },
       data: {
         endedAt,
         durationMin,
-        distanceKm,
+        distanceKm: live.distanceKm,
+        energyUsedKwh: live.energyUsedKwh,
+        avgConsumptionKwh100: live.avgConsumptionKwh100,
         endLatitude: snapshot.latitude,
         endLongitude: snapshot.longitude,
         endBatteryLevel: snapshot.batteryLevel,
