@@ -137,6 +137,10 @@ export function DashboardPage() {
     return vehicle.state === 'online' ? 'Online' : vehicle.state
   }, [hasTelemetry, vehicle?.state])
 
+  const syncErrorMessage = syncMutation.isError
+    ? (syncMutation.error instanceof Error ? syncMutation.error.message : 'Sync failed')
+    : null
+
   return (
     <div className="max-w-md lg:max-w-5xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
@@ -171,6 +175,12 @@ export function DashboardPage() {
               Lancer premiere synchro
             </Button>
           </div>
+        )}
+
+        {syncErrorMessage && (
+          <p className="text-center text-xs text-error -mt-1 mb-2">
+            Echec synchronisation: {syncErrorMessage}
+          </p>
         )}
 
         <p className="text-center text-sm text-text-muted -mt-2">

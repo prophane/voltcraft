@@ -2,6 +2,7 @@ import type { PrismaClient, TeslaAccount, Vehicle } from '@prisma/client'
 import type { TeslaClient } from './tesla.client.js'
 import type { VehicleRepository } from '../../modules/vehicle/vehicle.repository.js'
 import type { TeslaEcoPolicyService } from './tesla-eco-policy.service.js'
+import { TeslaApiError } from '../../common/errors/app-error.js'
 
 export class TeslaSyncService {
   constructor(
@@ -25,7 +26,20 @@ export class TeslaSyncService {
     }
 
     try {
-      const data = await this.client.getVehicleData(vehicle.teslaAccount, vehicle.vin)
+      let data
+      try {
+        data = await this.client.getVehicleData(vehicle.teslaAccount, vehicle.vin)
+      } catch (err) {
+        // First sync often happens while the car sleeps. For explicit/forced sync,
+        // wake the vehicle and retry telemetry once.
+        if (opts.force && err instanceof TeslaApiError && err.teslaCode === 'vehicle_unavailable') {
+          await this.client.wakeVehicle(vehicle.teslaAccount, vehicle.vin)
+          data = await this.client.getVehicleData(vehicle.teslaAccount, vehicle.vin)
+        } else {
+          throw err
+        }
+      }
+
       const chargeState = data.charge_state ?? ({} as Partial<typeof data.charge_state>)
       const climateState = data.climate_state ?? ({} as Partial<typeof data.climate_state>)
       const driveState = data.drive_state ?? ({} as Partial<typeof data.drive_state>)
