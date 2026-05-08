@@ -43,13 +43,15 @@ export async function chargesRoutes(app: FastifyInstance) {
     const query = paginationSchema.parse(req.query)
     const vehicle = await getVehicleForRead(session.userId)
     if (teslamate.isEnabled()) {
-      const { sessions, total } = await teslamate.getCharges(vehicle.vin, {
+      const teslamateCharges = await teslamate.getCharges(vehicle.vin, {
         page: query.page,
         pageSize: query.pageSize,
         from: query.from ? new Date(query.from) : undefined,
         to: query.to ? new Date(query.to) : undefined,
       })
-      return paginated(sessions, total, query.page, query.pageSize)
+      if (teslamateCharges) {
+        return paginated(teslamateCharges.sessions, teslamateCharges.total, query.page, query.pageSize)
+      }
     }
     const { sessions, total } = await chargesRepo.findMany(vehicle.id, {
       page: query.page,
@@ -67,8 +69,7 @@ export async function chargesRoutes(app: FastifyInstance) {
     const vehicle = await getVehicleForRead(session.userId)
     if (teslamate.isEnabled()) {
       const session_ = await teslamate.getChargeById(vehicle.vin, id)
-      if (!session_) throw new NotFoundError('Charge session')
-      return ok(session_)
+      if (session_) return ok(session_)
     }
     const session_ = await chargesRepo.findById(id, vehicle.id)
     if (!session_) throw new NotFoundError('Charge session')
@@ -86,7 +87,7 @@ export async function chargesRoutes(app: FastifyInstance) {
     const vehicle = await getVehicleForRead(sess.userId)
     if (teslamate.isEnabled()) {
       const summary = await teslamate.getMonthlyChargeSummary(vehicle.vin, year, month)
-      return ok(summary)
+      if (summary) return ok(summary)
     }
     const summary = await chargesRepo.getMonthlySummary(vehicle.id, year, month)
     return ok(summary)

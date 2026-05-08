@@ -143,18 +143,25 @@ export class TeslaMateReadService {
         max: 4,
       })
     : null
+    private failed = false
 
   isEnabled() {
-    return this.enabled
+      return this.enabled && !this.failed
   }
 
   private async query<T>(text: string, values: unknown[]) {
     if (!this.pool) return [] as T[]
-    const result = await this.pool.query<T>(text, values)
-    return result.rows
+      try {
+        const result = await this.pool.query<T>(text, values)
+        return result.rows
+      } catch (error) {
+        this.failed = true
+        return [] as T[]
+      }
   }
 
   async getCurrentVehicle(vehicle: VehicleIdentity, fallback?: FallbackSnapshot) {
+    if (this.failed) return null
     const row = await this.getVehicleRow(vehicle.vin)
     if (!row) return null
 
@@ -172,6 +179,7 @@ export class TeslaMateReadService {
   }
 
   async getVehicleState(vehicle: VehicleIdentity, fallback?: FallbackSnapshot) {
+    if (this.failed) return null
     const row = await this.getVehicleRow(vehicle.vin)
     if (!row) return null
 
@@ -210,6 +218,7 @@ export class TeslaMateReadService {
   }
 
   async getVehicleLocation(vin: string) {
+    if (this.failed) return null
     const row = await this.getVehicleRow(vin)
     const latitude = toNumber(row?.latitude)
     const longitude = toNumber(row?.longitude)
@@ -225,6 +234,7 @@ export class TeslaMateReadService {
   }
 
   async getTrips(vin: string, opts: PaginationOpts) {
+    if (this.failed) return null
     const where = buildTripWhereClause(opts.from, opts.to)
     const countRows = await this.query<{ total: string | number }>(
       `
@@ -281,6 +291,7 @@ export class TeslaMateReadService {
   }
 
   async getTripById(vin: string, id: string) {
+    if (this.failed) return null
     const rows = await this.query<Array<Record<string, unknown>>[number]>(
       `
         SELECT
@@ -322,6 +333,7 @@ export class TeslaMateReadService {
   }
 
   async getTripPath(vin: string, id: string) {
+    if (this.failed) return []
     const rows = await this.query<Array<Record<string, unknown>>[number]>(
       `
         SELECT
@@ -354,6 +366,7 @@ export class TeslaMateReadService {
   }
 
   async getCharges(vin: string, opts: PaginationOpts) {
+    if (this.failed) return null
     const where = buildChargeWhereClause(opts.from, opts.to)
     const countRows = await this.query<{ total: string | number }>(
       `
@@ -401,6 +414,7 @@ export class TeslaMateReadService {
   }
 
   async getChargeById(vin: string, id: string) {
+    if (this.failed) return null
     const rows = await this.query<Array<Record<string, unknown>>[number]>(
       `
         SELECT
@@ -430,6 +444,7 @@ export class TeslaMateReadService {
   }
 
   async getMonthlyChargeSummary(vin: string, year: number, month: number) {
+    if (this.failed) return null
     const from = new Date(year, month - 1, 1)
     const to = new Date(year, month, 1)
 
@@ -468,6 +483,7 @@ export class TeslaMateReadService {
   }
 
   async getSummary(vin: string, since: Date, days: number) {
+    if (this.failed) return null
     const rows = await this.query<{
       distance_km: number | string | null
       energy_added_kwh: number | string | null

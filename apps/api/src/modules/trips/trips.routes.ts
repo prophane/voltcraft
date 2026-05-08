@@ -39,13 +39,15 @@ export async function tripsRoutes(app: FastifyInstance) {
     const query = paginationSchema.parse(req.query)
     const vehicle = await getVehicleForRead(session.userId)
     if (teslamate.isEnabled()) {
-      const { trips, total } = await teslamate.getTrips(vehicle.vin, {
+      const teslamateTrips = await teslamate.getTrips(vehicle.vin, {
         page: query.page,
         pageSize: query.pageSize,
         from: query.from ? new Date(query.from) : undefined,
         to: query.to ? new Date(query.to) : undefined,
       })
-      return paginated(trips, total, query.page, query.pageSize)
+      if (teslamateTrips) {
+        return paginated(teslamateTrips.trips, teslamateTrips.total, query.page, query.pageSize)
+      }
     }
     const { trips, total } = await tripsRepo.findMany(vehicle.id, {
       page: query.page,
@@ -64,8 +66,7 @@ export async function tripsRoutes(app: FastifyInstance) {
     const vehicle = await getVehicleForRead(session.userId)
     if (teslamate.isEnabled()) {
       const trip = await teslamate.getTripById(vehicle.vin, id)
-      if (!trip) throw new NotFoundError('Trip')
-      return ok(trip)
+      if (trip) return ok(trip)
     }
     const trip = await tripsRepo.findById(id, vehicle.id)
     if (!trip) throw new NotFoundError('Trip')
@@ -80,9 +81,10 @@ export async function tripsRoutes(app: FastifyInstance) {
     const vehicle = await getVehicleForRead(session.userId)
     if (teslamate.isEnabled()) {
       const trip = await teslamate.getTripById(vehicle.vin, id)
-      if (!trip) throw new NotFoundError('Trip')
-      const points = await teslamate.getTripPath(vehicle.vin, id)
-      return ok(points)
+      if (trip) {
+        const points = await teslamate.getTripPath(vehicle.vin, id)
+        return ok(points)
+      }
     }
 
     const trip = await tripsRepo.findById(id, vehicle.id)

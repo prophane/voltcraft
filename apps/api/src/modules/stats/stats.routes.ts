@@ -45,7 +45,7 @@ export async function statsRoutes(app: FastifyInstance) {
 
     if (teslamate.isEnabled()) {
       const summary = await teslamate.getSummary(vehicle.vin, since, days)
-      return ok(summary)
+      if (summary) return ok(summary)
     }
 
     const [distanceKm, energyAddedKwh, energyUsedKwh, cost, tripsCount, chargesCount] = await Promise.all([
