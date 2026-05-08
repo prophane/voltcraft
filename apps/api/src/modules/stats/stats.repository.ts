@@ -19,6 +19,14 @@ export class StatsRepository {
     return result._sum.energyAddedKwh ?? 0
   }
 
+  async getTripEnergySum(vehicleId: string, since: Date): Promise<number> {
+    const result = await this.db.trip.aggregate({
+      where: { vehicleId, startedAt: { gte: since } },
+      _sum: { energyUsedKwh: true },
+    })
+    return result._sum.energyUsedKwh ?? 0
+  }
+
   async getCostSum(vehicleId: string, since: Date): Promise<number> {
     const result = await this.db.chargeSession.aggregate({
       where: { vehicleId, startedAt: { gte: since } },

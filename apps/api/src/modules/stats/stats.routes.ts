@@ -38,9 +38,10 @@ export async function statsRoutes(app: FastifyInstance) {
     const since = new Date(Date.now() - days * 86_400_000)
     const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
 
-    const [distanceKm, energyKwh, cost, tripsCount, chargesCount] = await Promise.all([
+    const [distanceKm, energyAddedKwh, energyUsedKwh, cost, tripsCount, chargesCount] = await Promise.all([
       statsRepo.getDistanceSum(vehicle.id, since),
       statsRepo.getEnergySum(vehicle.id, since),
+      statsRepo.getTripEnergySum(vehicle.id, since),
       statsRepo.getCostSum(vehicle.id, since),
       statsRepo.getTripsCount(vehicle.id, since),
       statsRepo.getChargesCount(vehicle.id, since),
@@ -49,9 +50,10 @@ export async function statsRoutes(app: FastifyInstance) {
     return ok({
       periodDays: days,
       distanceKm: Math.round(distanceKm * 10) / 10,
-      energyAddedKwh: Math.round(energyKwh * 10) / 10,
+      energyAddedKwh: Math.round(energyAddedKwh * 10) / 10,
+      energyUsedKwh: Math.round(energyUsedKwh * 10) / 10,
       estimatedCostEur: Math.round(cost * 100) / 100,
-      avgConsumptionKwhPer100km: calcAvgConsumption(energyKwh, distanceKm),
+      avgConsumptionKwhPer100km: calcAvgConsumption(energyUsedKwh, distanceKm),
       tripsCount,
       chargeSessionsCount: chargesCount,
     })

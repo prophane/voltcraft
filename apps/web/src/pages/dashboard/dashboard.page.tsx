@@ -356,8 +356,8 @@ export function DashboardPage() {
             <p className="text-3xl font-semibold text-text-primary mt-1">{Math.round((summary as Record<string, number> | undefined)?.distanceKm ?? 0)} km</p>
           </div>
           <div>
-            <p className="text-xs text-text-muted uppercase">Énergie</p>
-            <p className="text-3xl font-semibold text-text-primary mt-1">{(summary as Record<string, number> | undefined)?.energyAddedKwh?.toFixed(1) ?? '—'} kWh</p>
+            <p className="text-xs text-text-muted uppercase">Énergie consommée</p>
+            <p className="text-3xl font-semibold text-text-primary mt-1">{(summary as Record<string, number> | undefined)?.energyUsedKwh?.toFixed(1) ?? '—'} kWh</p>
           </div>
         </div>
       </Card>
