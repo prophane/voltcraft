@@ -33,4 +33,27 @@ export class TripsRepository {
   async update(id: string, data: Prisma.TripUpdateInput) {
     return this.db.trip.update({ where: { id }, data })
   }
+
+  async findPathPoints(vehicleId: string, from: Date, to?: Date) {
+    return this.db.vehicleStateSnapshot.findMany({
+      where: {
+        vehicleId,
+        capturedAt: {
+          gte: from,
+          ...(to ? { lte: to } : {}),
+        },
+        latitude: { not: null },
+        longitude: { not: null },
+      },
+      orderBy: { capturedAt: 'asc' },
+      select: {
+        capturedAt: true,
+        latitude: true,
+        longitude: true,
+        heading: true,
+        speed: true,
+        isDriving: true,
+      },
+    })
+  }
 }

@@ -85,4 +85,25 @@ export class VehicleRepository {
       orderBy: { capturedAt: 'asc' },
     })
   }
+
+  async getHistory(vehicleId: string, opts: { page: number; pageSize: number; from?: Date; to?: Date }) {
+    const where = {
+      vehicleId,
+      ...(opts.from || opts.to
+        ? { capturedAt: { ...(opts.from ? { gte: opts.from } : {}), ...(opts.to ? { lte: opts.to } : {}) } }
+        : {}),
+    }
+
+    const [snapshots, total] = await Promise.all([
+      this.db.vehicleStateSnapshot.findMany({
+        where,
+        orderBy: { capturedAt: 'desc' },
+        skip: (opts.page - 1) * opts.pageSize,
+        take: opts.pageSize,
+      }),
+      this.db.vehicleStateSnapshot.count({ where }),
+    ])
+
+    return { snapshots, total }
+  }
 }

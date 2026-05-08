@@ -52,4 +52,17 @@ export async function tripsRoutes(app: FastifyInstance) {
     if (!trip) throw new NotFoundError('Trip')
     return ok(trip)
   })
+
+  // GET /trips/:id/path
+  app.get('/:id/path', { schema: { tags: ['trips'] } }, async (req) => {
+    const token = await requireAuth(req)
+    const session = await authService.validateSession(token)
+    const { id } = req.params as { id: string }
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
+    const trip = await tripsRepo.findById(id, vehicle.id)
+    if (!trip) throw new NotFoundError('Trip')
+
+    const points = await tripsRepo.findPathPoints(vehicle.id, trip.startedAt, trip.endedAt ?? new Date())
+    return ok(points)
+  })
 }

@@ -24,6 +24,12 @@ export const vehicleApi = {
   getCurrent: () => api.get<VehicleSummary>('/vehicle/current'),
   getState: () => api.get<VehicleStateSnapshot & { isCached: boolean }>('/vehicle/state'),
   getLocation: () => api.get<{ latitude: number; longitude: number; heading: number; capturedAt: string } | null>('/vehicle/location'),
+  getHistory: (page = 1, pageSize = 200, from?: string, to?: string) => {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+    if (from) params.set('from', from)
+    if (to) params.set('to', to)
+    return api.get<unknown>(`/vehicle/history?${params}`)
+  },
   sync: () => api.post('/vehicle/sync'),
 }
 
@@ -32,10 +38,31 @@ export const commandsApi = {
   unlock: () => api.post('/commands/unlock'),
   honk: () => api.post('/commands/honk'),
   flash: () => api.post('/commands/flash'),
+  sentryOn: () => api.post('/commands/security/sentry/on'),
+  sentryOff: () => api.post('/commands/security/sentry/off'),
+  valetOn: (pin?: string) => api.post('/commands/security/valet/on', pin ? { pin } : {}),
+  valetOff: () => api.post('/commands/security/valet/off'),
+  speedLimitActivate: (pin: string) => api.post('/commands/security/speed-limit/activate', { pin }),
+  speedLimitDeactivate: (pin: string) => api.post('/commands/security/speed-limit/deactivate', { pin }),
+  speedLimitClearPin: (pin: string) => api.post('/commands/security/speed-limit/clear-pin', { pin }),
+  speedLimitSet: (limitMph: number) => api.post('/commands/security/speed-limit/set', { limitMph }),
+  homelink: () => api.post('/commands/access/homelink'),
+  trunkFront: () => api.post('/commands/access/trunk/front'),
+  trunkRear: () => api.post('/commands/access/trunk/rear'),
+  windowsVent: () => api.post('/commands/access/windows/vent'),
+  windowsClose: (lat?: number, lon?: number) => api.post('/commands/access/windows/close', { lat, lon }),
   climateStart: () => api.post('/commands/climate/start'),
   climateStop: () => api.post('/commands/climate/stop'),
+  setTemperature: (driverTemp: number, passengerTemp?: number) => api.post('/commands/climate/temperature', { driverTemp, passengerTemp }),
+  setSeatHeater: (seat: number, level: number) => api.post('/commands/climate/seat-heater', { seat, level }),
+  setSeatCooler: (seat: number, level: number) => api.post('/commands/climate/seat-cooler', { seat, level }),
+  steeringWheelHeaterOn: () => api.post('/commands/climate/steering-wheel-heater/on'),
+  steeringWheelHeaterOff: () => api.post('/commands/climate/steering-wheel-heater/off'),
   cabinOverheatProtectionOn: (fanOnly = false) => api.post('/commands/climate/cabin-overheat-protection/on', { fanOnly }),
   cabinOverheatProtectionOff: () => api.post('/commands/climate/cabin-overheat-protection/off'),
+  scheduleSoftwareUpdate: (offsetSec = 0) => api.post('/commands/software-update/schedule', { offsetSec }),
+  cancelSoftwareUpdate: () => api.post('/commands/software-update/cancel'),
+  navigationGps: (lat: number, lon: number, order?: number) => api.post('/commands/navigation/gps', { lat, lon, order }),
   chargeStart: () => api.post('/commands/charge/start'),
   chargeStop: () => api.post('/commands/charge/stop'),
   wake: () => api.post('/commands/wake'),
@@ -51,6 +78,7 @@ export const tripsApi = {
     return api.get<unknown>(`/trips?${params}`)
   },
   getById: (id: string) => api.get<unknown>(`/trips/${id}`),
+  path: (id: string) => api.get<unknown>(`/trips/${id}/path`),
 }
 
 export const chargesApi = {
@@ -65,7 +93,9 @@ export const statsApi = {
   summary: (days = 30) => api.get<unknown>(`/stats/summary?days=${days}`),
   battery: (days = 30) => api.get<unknown>(`/stats/battery?days=${days}`),
   batteryHealth: (days = 180) => api.get<unknown>(`/stats/battery-health?days=${days}`),
+  batteryHealthMeasurements: (days = 180) => api.get<unknown>(`/stats/battery-health/measurements?days=${days}`),
   efficiency: (days = 30) => api.get<unknown>(`/stats/efficiency?days=${days}`),
+  idles: (days = 7, minDurationMin = 5) => api.get<unknown>(`/stats/idles?days=${days}&minDurationMin=${minDurationMin}`),
 }
 
 export const automationsApi = {

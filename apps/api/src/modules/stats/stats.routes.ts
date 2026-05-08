@@ -14,6 +14,11 @@ const periodSchema = z.object({
   days: z.coerce.number().min(1).max(365).default(30),
 })
 
+const idleQuerySchema = z.object({
+  days: z.coerce.number().min(1).max(365).default(7),
+  minDurationMin: z.coerce.number().min(1).max(24 * 60).default(5),
+})
+
 export async function statsRoutes(app: FastifyInstance) {
   const statsRepo = new StatsRepository(app.prisma)
   const vehicleRepo = new VehicleRepository(app.prisma)
@@ -74,6 +79,17 @@ export async function statsRoutes(app: FastifyInstance) {
     return ok({ periodDays: days, ...health })
   })
 
+  // GET /stats/battery-health/measurements?days=180
+  app.get('/battery-health/measurements', { schema: { tags: ['stats'] } }, async (req) => {
+    const token = await requireAuth(req)
+    const session = await authService.validateSession(token)
+    const { days } = periodSchema.parse(req.query)
+    const since = new Date(Date.now() - days * 86_400_000)
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
+    const points = await statsRepo.getBatteryHealthMeasurements(vehicle.id, since)
+    return ok(points)
+  })
+
   // GET /stats/efficiency?days=30
   app.get('/efficiency', { schema: { tags: ['stats'] } }, async (req) => {
     const token = await requireAuth(req)
@@ -83,5 +99,16 @@ export async function statsRoutes(app: FastifyInstance) {
     const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
     const metrics = await statsRepo.getDailyTripMetrics(vehicle.id, since)
     return ok(metrics)
+  })
+
+  // GET /stats/idles?days=7&minDurationMin=5
+  app.get('/idles', { schema: { tags: ['stats'] } }, async (req) => {
+    const token = await requireAuth(req)
+    const session = await authService.validateSession(token)
+    const { days, minDurationMin } = idleQuerySchema.parse(req.query)
+    const since = new Date(Date.now() - days * 86_400_000)
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
+    const idles = await statsRepo.getIdleSessions(vehicle.id, since, minDurationMin)
+    return ok(idles)
   })
 }

@@ -132,4 +132,104 @@ export class StatsRepository {
       currentFullRangeKm: Math.round(row.current_full_range_km * 10) / 10,
     }
   }
+
+  async getBatteryHealthMeasurements(vehicleId: string, since: Date) {
+    return this.db.$queryRaw<
+      Array<{ day: string; est_full_range_km: number }>
+    >`
+      WITH samples AS (
+        SELECT
+          DATE_TRUNC('day', "captured_at") AS day,
+          ("battery_range" * 100.0 / NULLIF("battery_level", 0)) AS est_full_range_km
+        FROM vehicle_state_snapshots
+        WHERE "vehicle_id" = ${vehicleId}
+          AND "captured_at" >= ${since}
+          AND "battery_level" BETWEEN 20 AND 95
+          AND "battery_range" IS NOT NULL
+          AND "battery_level" IS NOT NULL
+      )
+      SELECT
+        day,
+        AVG(est_full_range_km)::numeric(8,2) AS est_full_range_km
+      FROM samples
+      GROUP BY day
+      ORDER BY day ASC
+    `
+  }
+
+  async getIdleSessions(vehicleId: string, since: Date, minDurationMin: number) {
+    const snapshots = await this.db.vehicleStateSnapshot.findMany({
+      where: {
+        vehicleId,
+        capturedAt: { gte: since },
+      },
+      orderBy: { capturedAt: 'asc' },
+      select: {
+        capturedAt: true,
+        isDriving: true,
+        isCharging: true,
+        batteryLevel: true,
+        latitude: true,
+        longitude: true,
+      },
+    })
+
+    const sessions: Array<{
+      startedAt: Date
+      endedAt: Date
+      durationMin: number
+      startBatteryLevel: number
+      endBatteryLevel: number
+      latitude: number | null
+      longitude: number | null
+    }> = []
+
+    let start: (typeof snapshots)[number] | null = null
+    let last: (typeof snapshots)[number] | null = null
+
+    const isIdle = (row: (typeof snapshots)[number]) => !row.isDriving && !row.isCharging
+
+    for (const row of snapshots) {
+      if (isIdle(row)) {
+        if (!start) start = row
+        last = row
+        continue
+      }
+
+      if (start && last) {
+        const durationMin = Math.max(1, Math.round((last.capturedAt.getTime() - start.capturedAt.getTime()) / 60_000))
+        if (durationMin >= minDurationMin) {
+          sessions.push({
+            startedAt: start.capturedAt,
+            endedAt: last.capturedAt,
+            durationMin,
+            startBatteryLevel: start.batteryLevel,
+            endBatteryLevel: last.batteryLevel,
+            latitude: start.latitude,
+            longitude: start.longitude,
+          })
+        }
+      }
+
+      start = null
+      last = null
+    }
+
+    if (start && last) {
+      const durationMin = Math.max(1, Math.round((last.capturedAt.getTime() - start.capturedAt.getTime()) / 60_000))
+      if (durationMin >= minDurationMin) {
+        sessions.push({
+          startedAt: start.capturedAt,
+          endedAt: last.capturedAt,
+          durationMin,
+          startBatteryLevel: start.batteryLevel,
+          endBatteryLevel: last.batteryLevel,
+          latitude: start.latitude,
+          longitude: start.longitude,
+        })
+      }
+    }
+
+    return sessions
+  }
 }
