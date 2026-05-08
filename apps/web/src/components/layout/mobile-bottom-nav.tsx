@@ -22,6 +22,8 @@ export function MobileBottomNav() {
   const location = useLocation()
   const logout = useAuthStore((s) => s.logout)
   const [moreOpen, setMoreOpen] = useState(false)
+  const navBottomOffset = 'calc(env(safe-area-inset-bottom, 0px) + 0.5rem)'
+  const sheetBottomOffset = 'calc(env(safe-area-inset-bottom, 0px) + 4.75rem)'
 
   const isMoreActive = MORE_ITEMS.some((item) => location.pathname === item.to)
 
@@ -35,7 +37,7 @@ export function MobileBottomNav() {
     <>
       {moreOpen && (
         <div className="lg:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px]" onClick={() => setMoreOpen(false)}>
-          <div className="absolute inset-x-0 bottom-16 mx-3 surface-premium p-3" onClick={(e) => e.stopPropagation()}>
+          <div className="absolute inset-x-0 mx-3 surface-premium p-3" style={{ bottom: sheetBottomOffset }} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-2 px-1">
               <p className="text-sm font-medium text-text-primary">More</p>
               <button type="button" className="text-text-muted hover:text-text-primary" onClick={() => setMoreOpen(false)}>
@@ -72,7 +74,7 @@ export function MobileBottomNav() {
         </div>
       )}
 
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-bg-surface border-t border-border-subtle flex items-center px-1 pb-safe">
+      <nav className="lg:hidden fixed inset-x-3 z-40 flex items-center rounded-2xl border border-border-subtle bg-bg-surface/95 px-1 shadow-elevated backdrop-blur-sm" style={{ bottom: navBottomOffset }}>
         {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
@@ -80,7 +82,7 @@ export function MobileBottomNav() {
             end={to === '/'}
             className={({ isActive }) =>
               cn(
-                'flex-1 min-w-0 flex flex-col items-center gap-1 py-2 px-1 text-[10px] font-medium transition-colors',
+                'flex-1 min-w-0 flex flex-col items-center gap-1 py-3 px-1 text-[10px] font-medium transition-colors',
                 isActive ? 'text-accent-400' : 'text-text-muted',
               )
             }
@@ -94,7 +96,7 @@ export function MobileBottomNav() {
           type="button"
           onClick={() => setMoreOpen(true)}
           className={cn(
-            'flex-1 min-w-0 flex flex-col items-center gap-1 py-2 px-1 text-[10px] font-medium transition-colors',
+            'flex-1 min-w-0 flex flex-col items-center gap-1 py-3 px-1 text-[10px] font-medium transition-colors',
             isMoreActive || moreOpen ? 'text-accent-400' : 'text-text-muted',
           )}
         >

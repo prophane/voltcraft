@@ -33,13 +33,29 @@ export function StatsPage() {
 
   const s = summary as Record<string, number> | undefined
   const h = batteryHealth as Record<string, unknown> | undefined
+  const batteryTrend = Array.isArray(battery) ? battery : []
+  const dailyActivity = Array.isArray(efficiency) ? efficiency : []
   const healthReady = Boolean(h?.['ready'])
   const healthPct = Number(h?.['estimatedHealthPct'] ?? 0)
   const samplesCount = Number(h?.['samplesCount'] ?? 0)
+  const hasSummaryActivity = Boolean((s?.['tripsCount'] ?? 0) > 0 || (s?.['chargeSessionsCount'] ?? 0) > 0)
+  const hasBatteryTrend = batteryTrend.length > 0
+  const hasDailyActivity = dailyActivity.length > 0
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold text-text-primary">Statistiques — 30 jours</h1>
+
+      {!isLoading && !hasSummaryActivity && !hasBatteryTrend && (
+        <Card>
+          <div className="px-6 py-5">
+            <p className="text-sm font-medium text-text-primary">Les statistiques ne sont pas retroactives.</p>
+            <p className="mt-1 text-sm text-text-muted">
+              Cette page commence a se remplir apres les premiers trajets, recharges et synchronisations enregistres depuis la connexion du vehicule.
+            </p>
+          </div>
+        </Card>
+      )}
 
       {/* KPI grid */}
       {isLoading ? (
@@ -74,6 +90,9 @@ export function StatsPage() {
               <p className="text-xs text-text-muted mt-1">
                 Il faut au moins 10 échantillons valides (niveau batterie entre 20% et 95%).
               </p>
+              <p className="text-xs text-text-muted mt-1">
+                En pratique, il faut quelques jours d'usage normal avec des synchronisations a differents niveaux de batterie.
+              </p>
               <p className="text-xs text-text-muted mt-1">Échantillons actuels: {samplesCount}</p>
             </>
           )}
@@ -84,23 +103,27 @@ export function StatsPage() {
       <Card>
         <CardHeader><CardTitle>Évolution batterie</CardTitle></CardHeader>
         <div className="h-52">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={battery as unknown[] ?? []}>
-              <defs>
-                <linearGradient id="battGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#E8112D" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#E8112D" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="day" hide />
-              <YAxis domain={[0, 100]} hide />
-              <Tooltip
-                contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 8, color: '#F5F5F5' }}
-                formatter={(v: number) => [`${v}%`, '']}
-              />
-              <Area type="monotone" dataKey="avg_level" stroke="#E8112D" fill="url(#battGrad)" strokeWidth={2} dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
+          {hasBatteryTrend ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={batteryTrend}>
+                <defs>
+                  <linearGradient id="battGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#E8112D" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="#E8112D" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="day" hide />
+                <YAxis domain={[0, 100]} hide />
+                <Tooltip
+                  contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 8, color: '#F5F5F5' }}
+                  formatter={(v: number) => [`${v}%`, '']}
+                />
+                <Area type="monotone" dataKey="avg_level" stroke="#E8112D" fill="url(#battGrad)" strokeWidth={2} dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyChartState message="Le graphe apparait des qu'au moins une synchronisation enregistre l'etat batterie sur la periode." />
+          )}
         </div>
       </Card>
 
@@ -108,18 +131,22 @@ export function StatsPage() {
       <Card>
         <CardHeader><CardTitle>Activité quotidienne</CardTitle></CardHeader>
         <div className="h-52">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={efficiency as unknown[] ?? []}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
-              <XAxis dataKey="day" hide />
-              <YAxis hide />
-              <Tooltip
-                contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 8, color: '#F5F5F5' }}
-              />
-              <Bar dataKey="distance_km" name="km" fill="#E8112D" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="charged_kwh" name="kWh" fill="#22c55e" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {hasDailyActivity ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dailyActivity}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
+                <XAxis dataKey="day" hide />
+                <YAxis hide />
+                <Tooltip
+                  contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 8, color: '#F5F5F5' }}
+                />
+                <Bar dataKey="distance_km" name="km" fill="#E8112D" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="charged_kwh" name="kWh" fill="#22c55e" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyChartState message="L'activite apparait apres le premier trajet ou la premiere recharge enregistres sur la periode." />
+          )}
         </div>
       </Card>
     </div>
@@ -132,5 +159,13 @@ function KpiCard({ label, value }: { label: string; value: string }) {
       <p className="stat-label">{label}</p>
       <p className="stat-value mt-2">{value}</p>
     </Card>
+  )
+}
+
+function EmptyChartState({ message }: { message: string }) {
+  return (
+    <div className="flex h-full items-center justify-center px-6 text-center">
+      <p className="max-w-sm text-sm text-text-muted">{message}</p>
+    </div>
   )
 }
