@@ -20,6 +20,15 @@ export interface TeslaConnectionStatus {
   error?: string
 }
 
+export interface VehicleHistorySnapshot extends VehicleStateSnapshot {
+  id: string
+  vehicleState: string
+  odometer: number | null
+  source?: 'POLL' | 'WEBHOOK' | 'COMMAND' | 'MANUAL'
+  createdAt?: string
+  updatedAt?: string
+}
+
 export const vehicleApi = {
   getCurrent: () => api.get<VehicleSummary>('/vehicle/current'),
   getState: () => api.get<VehicleStateSnapshot & { isCached: boolean }>('/vehicle/state'),
@@ -28,7 +37,7 @@ export const vehicleApi = {
     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
     if (from) params.set('from', from)
     if (to) params.set('to', to)
-    return api.get<unknown>(`/vehicle/history?${params}`)
+    return api.get<VehicleHistorySnapshot[]>(`/vehicle/history?${params}`)
   },
   sync: () => api.post('/vehicle/sync'),
 }
