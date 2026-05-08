@@ -8,6 +8,7 @@ export interface TeslaVehicleData {
   charge_state: TeslaChargeState
   climate_state: TeslaClimateState
   drive_state: TeslaDriveState
+  location_data?: TeslaLocationData
   vehicle_state: TeslaVehicleState
 }
 
@@ -39,7 +40,19 @@ export interface TeslaDriveState {
   latitude: number | null
   longitude: number | null
   heading: number | null
+  native_latitude?: number | null
+  native_longitude?: number | null
+  native_heading?: number | null
   timestamp: number
+}
+
+export interface TeslaLocationData {
+  latitude?: number | null
+  longitude?: number | null
+  heading?: number | null
+  native_latitude?: number | null
+  native_longitude?: number | null
+  native_heading?: number | null
 }
 
 export interface TeslaVehicleState {

@@ -208,7 +208,7 @@ export class TeslaClient {
   }
 
   async getVehicleData(account: TeslaAccount, vin: string): Promise<TeslaVehicleData> {
-    const url = `${this.baseUrl(account.region)}/api/1/vehicles/${vin}/vehicle_data?endpoints=charge_state%3Bclimate_state%3Bdrive_state%3Bvehicle_state`
+    const url = `${this.baseUrl(account.region)}/api/1/vehicles/${vin}/vehicle_data?endpoints=charge_state%3Bclimate_state%3Bdrive_state%3Blocation_data%3Bvehicle_state`
 
     await this.logUsage(account, url, 'GET')
 

@@ -43,6 +43,7 @@ export class TeslaSyncService {
       const chargeState = data.charge_state ?? ({} as Partial<typeof data.charge_state>)
       const climateState = data.climate_state ?? ({} as Partial<typeof data.climate_state>)
       const driveState = data.drive_state ?? ({} as Partial<typeof data.drive_state>)
+      const locationData = data.location_data ?? ({} as Partial<NonNullable<typeof data.location_data>>)
       const vehicleState = data.vehicle_state ?? ({} as Partial<typeof data.vehicle_state>)
       const chargeEnergyAddedKwh = chargeState.charge_energy_added ?? null
       const copModeRaw = (climateState.cabin_overheat_protection ?? '').toString().toLowerCase()
@@ -52,6 +53,9 @@ export class TeslaSyncService {
             : 'off'
       const shiftState = (driveState.shift_state ?? '').toString().toLowerCase()
       const isDrivingNow = (driveState.speed ?? 0) > 0 || shiftState === 'd' || shiftState === 'r'
+      const latitude = driveState.latitude ?? driveState.native_latitude ?? locationData.latitude ?? locationData.native_latitude ?? null
+      const longitude = driveState.longitude ?? driveState.native_longitude ?? locationData.longitude ?? locationData.native_longitude ?? null
+      const headingRaw = driveState.heading ?? driveState.native_heading ?? locationData.heading ?? locationData.native_heading ?? null
 
       const isAsleep = data.state === 'asleep' || data.state === 'offline'
       const snapshotForDb = {
@@ -81,9 +85,9 @@ export class TeslaSyncService {
         speed: driveState.speed ?? null,
         power: driveState.power ?? null,
 
-        latitude: driveState.latitude ?? null,
-        longitude: driveState.longitude ?? null,
-        heading: driveState.heading != null ? Math.round(driveState.heading) : null,
+        latitude,
+        longitude,
+        heading: headingRaw != null ? Math.round(headingRaw) : null,
         atHome: false, // computed by home geofence check elsewhere
       }
 
