@@ -148,6 +148,12 @@ export function DashboardPage() {
     ? (syncMutation.error instanceof Error ? syncMutation.error.message : 'Sync failed')
     : null
 
+  const lockStatus = state?.isLocked == null
+    ? 'Etat serrure inconnu'
+    : state.isLocked
+      ? 'Verrouille'
+      : 'Deverrouille'
+
   return (
     <div className="max-w-md lg:max-w-5xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
@@ -167,6 +173,10 @@ export function DashboardPage() {
             <p className="text-base text-text-secondary mt-1">
               {statusLabel} <span className={cn('inline-block w-2 h-2 rounded-full ml-1', hasTelemetry ? 'bg-success' : 'bg-warning')} />
             </p>
+            <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-border-subtle bg-bg-overlay/70 px-3 py-1.5 text-sm text-text-secondary">
+              {state?.isLocked ? <Lock size={14} className="text-success" /> : <Unlock size={14} className="text-warning" />}
+              <span>{lockStatus}</span>
+            </div>
           </div>
         </div>
 
@@ -197,6 +207,7 @@ export function DashboardPage() {
           <QuickActionTile
             icon={<Lock size={18} />}
             label="Lock"
+            subtitle={state?.isLocked ? 'Actif' : undefined}
             onClick={() => lockMutation.mutate()}
             loading={lockMutation.isPending}
             disabled={!vehicle}
@@ -204,6 +215,7 @@ export function DashboardPage() {
           <QuickActionTile
             icon={<Unlock size={18} />}
             label="Unlock"
+            subtitle={state?.isLocked === false ? 'Actif' : undefined}
             onClick={() => unlockMutation.mutate()}
             loading={unlockMutation.isPending}
             disabled={!vehicle}

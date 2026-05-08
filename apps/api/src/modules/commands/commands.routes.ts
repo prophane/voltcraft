@@ -7,7 +7,7 @@ import { AuthService } from '../auth/auth.service.js'
 import { TeslaCommandService } from '../../providers/tesla/tesla-command.service.js'
 import { TeslaClient } from '../../providers/tesla/tesla.client.js'
 import { requireAuth } from '../auth/auth.routes.js'
-import { chargeLimitSchema } from './commands.schemas.js'
+import { cabinOverheatProtectionSchema, chargeLimitSchema } from './commands.schemas.js'
 import { ok } from '../../common/http/response.js'
 import { withVehicleAutoBootstrap } from '../vehicle/vehicle-auto-bootstrap.js'
 
@@ -32,6 +32,14 @@ export async function commandsRoutes(app: FastifyInstance) {
   app.post('/flash', { schema: { tags: ['commands'] } }, async (req) => ok(await run(req, 'flash')))
   app.post('/climate/start', { schema: { tags: ['commands'] } }, async (req) => ok(await run(req, 'climate_start')))
   app.post('/climate/stop', { schema: { tags: ['commands'] } }, async (req) => ok(await run(req, 'climate_stop')))
+  app.post('/climate/cabin-overheat-protection/on', { schema: { tags: ['commands'] } }, async (req) => {
+    const { fanOnly } = cabinOverheatProtectionSchema.parse({ ...(req.body as Record<string, unknown> | undefined), on: true })
+    return ok(await run(req, 'cabin_overheat_protection_on', { fanOnly }))
+  })
+  app.post('/climate/cabin-overheat-protection/off', { schema: { tags: ['commands'] } }, async (req) => {
+    cabinOverheatProtectionSchema.parse({ ...(req.body as Record<string, unknown> | undefined), on: false })
+    return ok(await run(req, 'cabin_overheat_protection_off'))
+  })
   app.post('/charge/start', { schema: { tags: ['commands'] } }, async (req) => ok(await run(req, 'charge_start')))
   app.post('/charge/stop', { schema: { tags: ['commands'] } }, async (req) => ok(await run(req, 'charge_stop')))
   app.post('/wake', { schema: { tags: ['commands'] } }, async (req) => ok(await run(req, 'wake')))

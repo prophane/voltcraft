@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDate } from '@/lib/utils'
 import {
   Lock, Unlock, Volume2, Lightbulb, Thermometer,
-  Zap, ZapOff, Play, Square, BellRing,
+  Zap, ZapOff, Play, Square, BellRing, ShieldAlert, ShieldOff,
 } from 'lucide-react'
 import { ApiError } from '@/lib/api-client'
 
@@ -62,6 +62,8 @@ export function CommandsPage() {
     { label: 'Flash phares',   description: 'Active les phares brièvement',     icon: <Lightbulb size={18} />,   mutationFn: commandsApi.flash,        requiresConfirm: false },
     { label: 'Clim démarrer',  description: 'Active la climatisation',          icon: <Thermometer size={18} />, mutationFn: commandsApi.climateStart, requiresConfirm: false },
     { label: 'Clim arrêter',   description: 'Arrête la climatisation',          icon: <ZapOff size={18} />,      mutationFn: commandsApi.climateStop,  requiresConfirm: false },
+    { label: 'Anti-surchauffe ON', description: 'Active la protection habitacle', icon: <ShieldAlert size={18} />, mutationFn: () => commandsApi.cabinOverheatProtectionOn(false), requiresConfirm: false },
+    { label: 'Anti-surchauffe OFF',description: 'Désactive la protection habitacle', icon: <ShieldOff size={18} />, mutationFn: commandsApi.cabinOverheatProtectionOff, requiresConfirm: false },
     { label: 'Démarrer charge',description: 'Lance la recharge',                icon: <Play size={18} />,        mutationFn: commandsApi.chargeStart,  requiresConfirm: false },
     { label: 'Arrêter charge', description: 'Arrête la recharge',               icon: <Square size={18} />,      mutationFn: commandsApi.chargeStop,   requiresConfirm: true },
     { label: 'Réveiller',      description: 'Réveille le véhicule',             icon: <Zap size={18} />,         mutationFn: commandsApi.wake,         variant: 'primary', requiresConfirm: false },

@@ -5,6 +5,8 @@ export type CommandName =
   | 'flash'
   | 'climate_start'
   | 'climate_stop'
+  | 'cabin_overheat_protection_on'
+  | 'cabin_overheat_protection_off'
   | 'charge_start'
   | 'charge_stop'
   | 'set_charge_limit'

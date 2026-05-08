@@ -34,6 +34,8 @@ export const commandsApi = {
   flash: () => api.post('/commands/flash'),
   climateStart: () => api.post('/commands/climate/start'),
   climateStop: () => api.post('/commands/climate/stop'),
+  cabinOverheatProtectionOn: (fanOnly = false) => api.post('/commands/climate/cabin-overheat-protection/on', { fanOnly }),
+  cabinOverheatProtectionOff: () => api.post('/commands/climate/cabin-overheat-protection/off'),
   chargeStart: () => api.post('/commands/charge/start'),
   chargeStop: () => api.post('/commands/charge/stop'),
   wake: () => api.post('/commands/wake'),

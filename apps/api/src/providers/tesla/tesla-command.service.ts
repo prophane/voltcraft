@@ -12,6 +12,14 @@ const COMMAND_MAP: Record<CommandName, { endpoint: string; body?: (params?: Reco
   flash:             { endpoint: 'flash_lights' },
   climate_start:     { endpoint: 'auto_conditioning_start' },
   climate_stop:      { endpoint: 'auto_conditioning_stop' },
+  cabin_overheat_protection_on: {
+    endpoint: 'set_cabin_overheat_protection',
+    body: (p) => ({ on: true, fan_only: Boolean(p?.['fanOnly']) }),
+  },
+  cabin_overheat_protection_off: {
+    endpoint: 'set_cabin_overheat_protection',
+    body: () => ({ on: false }),
+  },
   charge_start:      { endpoint: 'charge_start' },
   charge_stop:       { endpoint: 'charge_stop' },
   set_charge_limit:  { endpoint: 'set_charge_limit', body: (p) => ({ percent: p?.['percent'] }) },

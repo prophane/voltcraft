@@ -5,3 +5,10 @@ export const chargeLimitSchema = z.object({
 })
 
 export type ChargeLimitInput = z.infer<typeof chargeLimitSchema>
+
+export const cabinOverheatProtectionSchema = z.object({
+  on: z.boolean(),
+  fanOnly: z.boolean().optional().default(false),
+})
+
+export type CabinOverheatProtectionInput = z.infer<typeof cabinOverheatProtectionSchema>
