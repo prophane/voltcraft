@@ -9,6 +9,11 @@ interface ReverseGeocodeResponse {
   display_name?: string
 }
 
+function toFiniteNumber(value: unknown): number | null {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 function ArcGauge({ level, rangeKm, hasData }: { level: number | null; rangeKm: number | null; hasData: boolean }) {
   const radius = 110
   const circumference = Math.PI * radius
@@ -138,6 +143,17 @@ export function DashboardPage() {
     version?: string | null
   }) | undefined
 
+  const summaryData = summary as Record<string, unknown> | undefined
+  const distanceKm = toFiniteNumber(summaryData?.['distanceKm'])
+  const energyUsedKwh = toFiniteNumber(summaryData?.['energyUsedKwh'])
+  const batteryRange = toFiniteNumber(state?.batteryRange)
+  const batteryLevel = toFiniteNumber(state?.batteryLevel)
+  const outsideTemp = toFiniteNumber(state?.outsideTemp)
+  const insideTemp = toFiniteNumber(state?.insideTemp)
+  const odometer = toFiniteNumber(extendedState?.odometer)
+  const latitude = toFiniteNumber(location?.latitude)
+  const longitude = toFiniteNumber(location?.longitude)
+
   const lockStatus = state?.isLocked == null
     ? 'Etat serrure inconnu'
     : state.isLocked
@@ -191,7 +207,7 @@ export function DashboardPage() {
 
 
 
-        <ArcGauge level={state?.batteryLevel ?? null} rangeKm={state?.batteryRange ?? null} hasData={hasTelemetry} />
+        <ArcGauge level={batteryLevel} rangeKm={batteryRange} hasData={hasTelemetry} />
 
         <p className="text-center text-sm text-text-muted -mt-2">
           <MapPin size={12} className="inline mr-1" />
@@ -201,12 +217,12 @@ export function DashboardPage() {
         <div className="mt-5 rounded-2xl border border-border-subtle bg-bg-overlay/70 p-4">
           <div className="grid gap-1 mb-4">
             <InfoRow label="Vehicle status" value={statusDetail} />
-            <InfoRow label="Range" value={state?.batteryRange != null ? `${Math.round(state.batteryRange)} km` : '—'} />
+            <InfoRow label="Range" value={batteryRange != null ? `${Math.round(batteryRange)} km` : '—'} />
             <InfoRow label="Charge limit" value={extendedState?.chargeLimitSoc != null ? `${extendedState.chargeLimitSoc}%` : '—'} />
-            <InfoRow label="State of charge" value={state?.batteryLevel != null ? `${Math.round(state.batteryLevel)}%` : '—'} />
-            <InfoRow label="Outside temperature" value={state?.outsideTemp != null ? `${state.outsideTemp.toFixed(1)} °C` : '—'} />
-            <InfoRow label="Inside temperature" value={state?.insideTemp != null ? `${state.insideTemp.toFixed(1)} °C` : '—'} />
-            <InfoRow label="Mileage" value={extendedState?.odometer != null ? `${Math.round(extendedState.odometer)} km` : '—'} />
+            <InfoRow label="State of charge" value={batteryLevel != null ? `${Math.round(batteryLevel)}%` : '—'} />
+            <InfoRow label="Outside temperature" value={outsideTemp != null ? `${outsideTemp.toFixed(1)} °C` : '—'} />
+            <InfoRow label="Inside temperature" value={insideTemp != null ? `${insideTemp.toFixed(1)} °C` : '—'} />
+            <InfoRow label="Mileage" value={odometer != null ? `${Math.round(odometer)} km` : '—'} />
             <InfoRow label="Version" value={extendedState?.version ?? '—'} />
             <InfoRow label="Lock status" value={lockStatus} />
           </div>
@@ -214,8 +230,8 @@ export function DashboardPage() {
           <div>
             <p className="text-sm text-text-primary">{location ? 'Dernière position connue' : 'Position indisponible'}</p>
             <p className="text-xs text-text-muted mt-0.5">
-              {location
-                ? `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)} · ${formatDate(location.capturedAt)}`
+              {latitude != null && longitude != null && location
+                ? `${latitude.toFixed(5)}, ${longitude.toFixed(5)} · ${formatDate(location.capturedAt)}`
                 : 'Aucune donnée GPS enregistrée'}
             </p>
             {location && (
@@ -225,7 +241,7 @@ export function DashboardPage() {
             )}
           </div>
 
-          {location && mapEmbedUrl ? (
+          {location && latitude != null && longitude != null && mapEmbedUrl ? (
             <div className="mt-3 space-y-2">
               <iframe
                 title="Carte position véhicule"
@@ -236,7 +252,7 @@ export function DashboardPage() {
               />
               <div className="flex justify-end">
                 <a
-                  href={`https://www.google.com/maps?q=${location.latitude},${location.longitude}`}
+                  href={`https://www.google.com/maps?q=${latitude},${longitude}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-accent-400 hover:text-accent-300 inline-flex items-center gap-1 text-xs"
@@ -258,11 +274,11 @@ export function DashboardPage() {
         <div className="grid grid-cols-2 gap-4 mt-4">
           <div>
             <p className="text-xs text-text-muted uppercase">Distance</p>
-            <p className="text-3xl font-semibold text-text-primary mt-1">{Math.round((summary as Record<string, number> | undefined)?.distanceKm ?? 0)} km</p>
+            <p className="text-3xl font-semibold text-text-primary mt-1">{Math.round(distanceKm ?? 0)} km</p>
           </div>
           <div>
             <p className="text-xs text-text-muted uppercase">Énergie consommée</p>
-            <p className="text-3xl font-semibold text-text-primary mt-1">{(summary as Record<string, number> | undefined)?.energyUsedKwh?.toFixed(1) ?? '—'} kWh</p>
+            <p className="text-3xl font-semibold text-text-primary mt-1">{energyUsedKwh != null ? `${energyUsedKwh.toFixed(1)} kWh` : '—'}</p>
           </div>
         </div>
       </Card>
