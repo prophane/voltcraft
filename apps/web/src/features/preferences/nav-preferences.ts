@@ -22,6 +22,9 @@ const DEFAULT_PREFS: StoredPrefs = {
   iconByKey: {},
 }
 
+let cachedPrefsRaw: string | null = null
+let cachedPrefs: StoredPrefs = DEFAULT_PREFS
+
 function isNavItemKey(value: string): value is NavItemKey {
   return NAV_ITEMS.some((item) => item.key === value)
 }
@@ -34,13 +37,22 @@ function readPrefs(): StoredPrefs {
   if (typeof window === 'undefined') return DEFAULT_PREFS
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (!raw) return DEFAULT_PREFS
+    if (!raw) {
+      cachedPrefsRaw = null
+      cachedPrefs = DEFAULT_PREFS
+      return DEFAULT_PREFS
+    }
+    if (raw === cachedPrefsRaw) {
+      return cachedPrefs
+    }
     const parsed = JSON.parse(raw) as StoredPrefs
     const hiddenKeys = (parsed.hiddenKeys ?? []).filter((k): k is NavItemKey => isNavItemKey(String(k)))
     const iconByKey = Object.fromEntries(
       Object.entries(parsed.iconByKey ?? {}).filter(([k, v]) => isNavItemKey(k) && isMenuIconName(String(v))),
     ) as Partial<Record<NavItemKey, MenuIconName>>
-    return { hiddenKeys, iconByKey }
+    cachedPrefsRaw = raw
+    cachedPrefs = { hiddenKeys, iconByKey }
+    return cachedPrefs
   } catch {
     return DEFAULT_PREFS
   }
@@ -48,7 +60,10 @@ function readPrefs(): StoredPrefs {
 
 function persistPrefs(next: StoredPrefs) {
   if (typeof window === 'undefined') return
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  const serialized = JSON.stringify(next)
+  cachedPrefsRaw = serialized
+  cachedPrefs = next
+  window.localStorage.setItem(STORAGE_KEY, serialized)
   window.dispatchEvent(new Event(NAV_PREFS_CHANGE_EVENT))
 }
 
