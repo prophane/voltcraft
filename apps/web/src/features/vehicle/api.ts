@@ -64,6 +64,7 @@ export const chargesApi = {
 export const statsApi = {
   summary: (days = 30) => api.get<unknown>(`/stats/summary?days=${days}`),
   battery: (days = 30) => api.get<unknown>(`/stats/battery?days=${days}`),
+  batteryHealth: (days = 180) => api.get<unknown>(`/stats/battery-health?days=${days}`),
   efficiency: (days = 30) => api.get<unknown>(`/stats/efficiency?days=${days}`),
 }
 

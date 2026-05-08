@@ -16,6 +16,7 @@ export interface TeslaChargeState {
   battery_range: number
   charge_limit_soc: number
   charging_state: string
+  charge_energy_added?: number | null
   charge_rate: number
   charge_amps: number
   charger_voltage: number
@@ -34,6 +35,7 @@ export interface TeslaClimateState {
 export interface TeslaDriveState {
   speed: number | null
   power: number | null
+  shift_state?: string | null
   latitude: number | null
   longitude: number | null
   heading: number | null

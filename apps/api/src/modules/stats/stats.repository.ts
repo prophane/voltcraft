@@ -57,18 +57,79 @@ export class StatsRepository {
     return this.db.$queryRaw<
       Array<{ day: string; distance_km: number; charged_kwh: number }>
     >`
+      WITH trip_daily AS (
+        SELECT
+          DATE_TRUNC('day', t."started_at") AS day,
+          COALESCE(SUM(t."distance_km"), 0) AS distance_km
+        FROM trips t
+        WHERE t."vehicle_id" = ${vehicleId}
+          AND t."started_at" >= ${since}
+        GROUP BY 1
+      ),
+      charge_daily AS (
+        SELECT
+          DATE_TRUNC('day', c."started_at") AS day,
+          COALESCE(SUM(c."energy_added_kwh"), 0) AS charged_kwh
+        FROM charge_sessions c
+        WHERE c."vehicle_id" = ${vehicleId}
+          AND c."started_at" >= ${since}
+        GROUP BY 1
+      )
       SELECT
-        DATE_TRUNC('day', t."started_at") AS day,
-        COALESCE(SUM(t."distance_km"), 0) AS distance_km,
-        COALESCE(SUM(c."energy_added_kwh"), 0) AS charged_kwh
-      FROM trips t
-      FULL OUTER JOIN charge_sessions c
-        ON DATE_TRUNC('day', c."started_at") = DATE_TRUNC('day', t."started_at")
-        AND c."vehicle_id" = ${vehicleId}
-      WHERE t."vehicle_id" = ${vehicleId}
-        AND t."started_at" >= ${since}
-      GROUP BY 1
+        COALESCE(td.day, cd.day) AS day,
+        COALESCE(td.distance_km, 0) AS distance_km,
+        COALESCE(cd.charged_kwh, 0) AS charged_kwh
+      FROM trip_daily td
+      FULL OUTER JOIN charge_daily cd ON cd.day = td.day
       ORDER BY 1 ASC
     `
+  }
+
+  async getBatteryHealthEstimate(vehicleId: string, since: Date) {
+    const rows = await this.db.$queryRaw<
+      Array<{
+        samples_count: number
+        best_full_range_km: number | null
+        current_full_range_km: number | null
+      }>
+    >`
+      WITH samples AS (
+        SELECT
+          "captured_at",
+          ("battery_range" * 100.0 / NULLIF("battery_level", 0)) AS est_full_range_km
+        FROM vehicle_state_snapshots
+        WHERE "vehicle_id" = ${vehicleId}
+          AND "captured_at" >= ${since}
+          AND "battery_level" BETWEEN 20 AND 95
+          AND "battery_range" IS NOT NULL
+          AND "battery_level" IS NOT NULL
+      )
+      SELECT
+        COUNT(*)::int AS samples_count,
+        PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY est_full_range_km) AS best_full_range_km,
+        AVG(CASE WHEN "captured_at" >= NOW() - INTERVAL '14 day' THEN est_full_range_km END) AS current_full_range_km
+      FROM samples
+    `
+
+    const row = rows[0]
+    if (!row || row.samples_count < 10 || !row.best_full_range_km || !row.current_full_range_km) {
+      return {
+        ready: false,
+        samplesCount: row?.samples_count ?? 0,
+        estimatedHealthPct: null,
+        bestFullRangeKm: null,
+        currentFullRangeKm: null,
+      }
+    }
+
+    const estimatedHealthPct = Math.max(0, Math.min(100, (row.current_full_range_km / row.best_full_range_km) * 100))
+
+    return {
+      ready: true,
+      samplesCount: row.samples_count,
+      estimatedHealthPct: Math.round(estimatedHealthPct * 10) / 10,
+      bestFullRangeKm: Math.round(row.best_full_range_km * 10) / 10,
+      currentFullRangeKm: Math.round(row.current_full_range_km * 10) / 10,
+    }
   }
 }

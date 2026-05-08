@@ -49,6 +49,8 @@ export class TeslaSyncService {
         copModeRaw.includes('fan') ? 'fan_only'
           : copModeRaw.includes('on') || copModeRaw.includes('a/c') || copModeRaw.includes('ac') ? 'on'
             : 'off'
+      const shiftState = (driveState.shift_state ?? '').toString().toLowerCase()
+      const isDrivingNow = (driveState.speed ?? 0) > 0 || shiftState === 'd' || shiftState === 'r'
 
       const isAsleep = data.state === 'asleep' || data.state === 'offline'
       const snapshotForDb = {
@@ -60,6 +62,7 @@ export class TeslaSyncService {
         chargeLimitSoc: chargeState.charge_limit_soc ?? null,
         chargeState: chargeState.charging_state ?? null,
         isCharging: chargeState.charging_state === 'Charging',
+        chargeEnergyAddedKwh: chargeState.charge_energy_added ?? null,
         isPluggedIn: chargeState.charge_port_door_open ?? false,
         chargeRate: chargeState.charge_rate != null ? chargeState.charge_rate * 1.609344 : null,
         chargeAmps: chargeState.charge_amps ?? null,
@@ -74,7 +77,7 @@ export class TeslaSyncService {
         isTrunkOpen: (vehicleState.rt ?? 0) > 0,
         isFrunkOpen: (vehicleState.ft ?? 0) > 0,
 
-        isDriving: (driveState.speed ?? 0) > 0,
+        isDriving: isDrivingNow,
         speed: driveState.speed ?? null,
         power: driveState.power ?? null,
 
@@ -183,6 +186,7 @@ export class TeslaSyncService {
   private async updateChargeTracking(vehicleId: string, snapshot: {
     isCharging: boolean
     chargeState: string | null
+    chargeEnergyAddedKwh: number | null
     batteryLevel: number
     chargeLimitSoc: number | null
     latitude: number | null
@@ -199,11 +203,19 @@ export class TeslaSyncService {
           data: {
             vehicleId,
             startedAt: new Date(),
+            energyAddedKwh: snapshot.chargeEnergyAddedKwh,
             startBatteryLevel: snapshot.batteryLevel,
             chargeLimitSoc: snapshot.chargeLimitSoc,
             latitude: snapshot.latitude,
             longitude: snapshot.longitude,
             chargeType: 'UNKNOWN',
+          },
+        })
+      } else if (snapshot.chargeEnergyAddedKwh != null) {
+        await this.db.chargeSession.update({
+          where: { id: openSession.id },
+          data: {
+            energyAddedKwh: snapshot.chargeEnergyAddedKwh,
           },
         })
       }

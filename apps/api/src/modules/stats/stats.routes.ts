@@ -63,6 +63,17 @@ export async function statsRoutes(app: FastifyInstance) {
     return ok(trend)
   })
 
+  // GET /stats/battery-health?days=180
+  app.get('/battery-health', { schema: { tags: ['stats'] } }, async (req) => {
+    const token = await requireAuth(req)
+    const session = await authService.validateSession(token)
+    const { days } = periodSchema.parse(req.query)
+    const since = new Date(Date.now() - days * 86_400_000)
+    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
+    const health = await statsRepo.getBatteryHealthEstimate(vehicle.id, since)
+    return ok({ periodDays: days, ...health })
+  })
+
   // GET /stats/efficiency?days=30
   app.get('/efficiency', { schema: { tags: ['stats'] } }, async (req) => {
     const token = await requireAuth(req)

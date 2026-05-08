@@ -25,7 +25,17 @@ export function StatsPage() {
     staleTime: 300_000,
   })
 
+  const { data: batteryHealth } = useQuery({
+    queryKey: ['stats', 'battery-health', 180],
+    queryFn: () => statsApi.batteryHealth(180),
+    staleTime: 300_000,
+  })
+
   const s = summary as Record<string, number> | undefined
+  const h = batteryHealth as Record<string, unknown> | undefined
+  const healthReady = Boolean(h?.['ready'])
+  const healthPct = Number(h?.['estimatedHealthPct'] ?? 0)
+  const samplesCount = Number(h?.['samplesCount'] ?? 0)
 
   return (
     <div className="space-y-6">
@@ -44,6 +54,31 @@ export function StatsPage() {
           <KpiCard label="Consommation moy." value={s?.['avgConsumptionKwhPer100km'] ? `${s['avgConsumptionKwhPer100km']} kWh/100` : '—'} />
         </div>
       )}
+
+      <Card>
+        <CardHeader><CardTitle>Santé batterie (estimation)</CardTitle></CardHeader>
+        <div className="px-6 pb-6">
+          {healthReady ? (
+            <>
+              <p className="text-3xl font-semibold text-text-primary">{healthPct.toFixed(1)}%</p>
+              <p className="text-xs text-text-muted mt-1">
+                Basé sur l'évolution de l'autonomie estimée à 100% sur 180 jours.
+              </p>
+              <p className="text-xs text-text-muted mt-1">
+                Plage de référence: {Number(h?.['currentFullRangeKm'] ?? 0).toFixed(1)} km / meilleur {Number(h?.['bestFullRangeKm'] ?? 0).toFixed(1)} km.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-lg font-medium text-text-primary">Données insuffisantes</p>
+              <p className="text-xs text-text-muted mt-1">
+                Il faut au moins 10 échantillons valides (niveau batterie entre 20% et 95%).
+              </p>
+              <p className="text-xs text-text-muted mt-1">Échantillons actuels: {samplesCount}</p>
+            </>
+          )}
+        </div>
+      </Card>
 
       {/* Battery trend chart */}
       <Card>
