@@ -84,10 +84,24 @@ function toDate(value: unknown): Date | null {
   return value instanceof Date ? value : new Date(String(value))
 }
 
+function isStaleTelemetry(value: unknown, maxAgeMinutes = 20): boolean {
+  const date = toDate(value)
+  if (!date) return false
+  return Date.now() - date.getTime() > maxAgeMinutes * 60_000
+}
+
 function toVehicleState(row: TeslaMateVehicleRow, fallback?: FallbackSnapshot) {
+  const stale = isStaleTelemetry(row.captured_at ?? fallback?.capturedAt)
+
   if (row.open_charge_id) return 'charging'
   if (row.open_drive_id) return 'driving'
+
+  // TeslaMate may still report "online" while last telemetry is old.
+  // In that case prefer "offline" to match what users see in TeslaMate UI.
+  if (row.open_state === 'online' && stale) return 'offline'
   if (row.open_state) return row.open_state
+
+  if (stale) return 'offline'
   return fallback?.vehicleState ?? 'unknown'
 }
 
