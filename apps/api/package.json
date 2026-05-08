@@ -30,6 +30,7 @@
     "fastify-plugin": "^4.5.1",
     "ioredis": "^5.3.2",
     "mqtt": "^5.5.0",
+    "pg": "^8.13.1",
     "pino": "^9.1.0",
     "pino-pretty": "^11.0.0",
     "prisma": "5.22.0",

@@ -9,6 +9,7 @@ import { NotFoundError } from '../../common/errors/app-error.js'
 import { calcAvgConsumption } from './calculators/summary.calculator.js'
 import { ok } from '../../common/http/response.js'
 import { withVehicleAutoBootstrap } from '../vehicle/vehicle-auto-bootstrap.js'
+import { TeslaMateReadService } from '../../providers/teslamate/teslamate-read.service.js'
 
 const periodSchema = z.object({
   days: z.coerce.number().min(1).max(365).default(30),
@@ -23,6 +24,7 @@ export async function statsRoutes(app: FastifyInstance) {
   const statsRepo = new StatsRepository(app.prisma)
   const vehicleRepo = new VehicleRepository(app.prisma)
   const authService = new AuthService(new AuthRepository(app.prisma))
+  const teslamate = new TeslaMateReadService()
 
   const getVehicle = async (userId: string) => {
     const v = await vehicleRepo.findActive(userId)
@@ -30,13 +32,21 @@ export async function statsRoutes(app: FastifyInstance) {
     return v
   }
 
+  const getVehicleForRead = (userId: string) =>
+    teslamate.isEnabled() ? getVehicle(userId) : withVehicleAutoBootstrap(app, () => getVehicle(userId))
+
   // GET /stats/summary?days=30
   app.get('/summary', { schema: { tags: ['stats'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
     const { days } = periodSchema.parse(req.query)
     const since = new Date(Date.now() - days * 86_400_000)
-    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
+    const vehicle = await getVehicleForRead(session.userId)
+
+    if (teslamate.isEnabled()) {
+      const summary = await teslamate.getSummary(vehicle.vin, since, days)
+      return ok(summary)
+    }
 
     const [distanceKm, energyAddedKwh, energyUsedKwh, cost, tripsCount, chargesCount] = await Promise.all([
       statsRepo.getDistanceSum(vehicle.id, since),

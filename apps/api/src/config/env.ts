@@ -33,6 +33,8 @@ const envSchema = z.object({
   TESLA_COMMAND_PROXY_URL: z.string().url().default('https://vehicle-command:4443'),
 
   TESLAMATE_DB_NAME: z.string().default('teslamate'),
+  TESLAMATE_DB_HOST: z.string().default('teslamate-db'),
+  TESLAMATE_DB_PORT: z.coerce.number().default(5432),
   TESLAMATE_DB_USER: z.string().default('teslamate'),
   TESLAMATE_DB_PASSWORD: z.string().default(''),
   TESLAMATE_ENCRYPTION_KEY: z.string().default(''),

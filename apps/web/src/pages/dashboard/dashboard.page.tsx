@@ -1,9 +1,8 @@
-import { type ReactNode, useMemo } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { vehicleApi, commandsApi, statsApi } from '@/features/vehicle/api'
-import { Button } from '@/components/ui/button'
+import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { vehicleApi, statsApi } from '@/features/vehicle/api'
 import { Card } from '@/components/ui/card'
-import { RefreshCw, Lock, Unlock, Thermometer, Zap, MapPin } from 'lucide-react'
+import { Lock, Unlock, MapPin } from 'lucide-react'
 import { cn, formatDate } from '@/lib/utils'
 
 interface ReverseGeocodeResponse {
@@ -48,59 +47,16 @@ function ArcGauge({ level, rangeKm, hasData }: { level: number | null; rangeKm: 
   )
 }
 
-function QuickActionTile({
-  icon,
-  label,
-  subtitle,
-  onClick,
-  loading,
-  disabled,
-}: {
-  icon: ReactNode
-  label: string
-  subtitle?: string
-  onClick: () => void
-  loading?: boolean
-  disabled?: boolean
-}) {
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={loading || disabled}
-      className="rounded-xl border border-border-subtle bg-bg-overlay/70 hover:bg-bg-overlay px-3 py-3 text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      <div className="text-text-secondary mb-2">{icon}</div>
-      {subtitle ? <p className="text-lg font-medium text-text-primary leading-tight">{subtitle}</p> : null}
-      <p className="text-xs text-text-muted mt-0.5">{label}</p>
-    </button>
+    <div className="flex items-center justify-between gap-4 py-2 border-b border-border-subtle last:border-b-0">
+      <p className="text-sm text-text-muted">{label}</p>
+      <p className="text-base font-medium text-text-primary text-right">{value}</p>
+    </div>
   )
 }
 
 export function DashboardPage() {
-  const qc = useQueryClient()
-
-  const refreshVehicleQueries = async () => {
-    await Promise.all([
-      qc.invalidateQueries({ queryKey: ['vehicle', 'current'] }),
-      qc.invalidateQueries({ queryKey: ['vehicle', 'state'] }),
-      qc.invalidateQueries({ queryKey: ['vehicle', 'location'] }),
-    ])
-
-    await Promise.all([
-      qc.refetchQueries({ queryKey: ['vehicle', 'current'] }),
-      qc.refetchQueries({ queryKey: ['vehicle', 'state'] }),
-      qc.refetchQueries({ queryKey: ['vehicle', 'location'] }),
-    ])
-  }
-
-  const runCommandAndRefresh = async (command: () => Promise<unknown>) => {
-    await command()
-    // Force a telemetry refresh so UI lock state reflects the command result quickly.
-    await vehicleApi.sync().catch(() => undefined)
-    await refreshVehicleQueries()
-  }
-
   const { data: vehicle } = useQuery({
     queryKey: ['vehicle', 'current'],
     queryFn: vehicleApi.getCurrent,
@@ -156,24 +112,6 @@ export function DashboardPage() {
     },
   })
 
-  const syncMutation = useMutation({
-    mutationFn: vehicleApi.sync,
-    onSuccess: () => refreshVehicleQueries(),
-  })
-
-  const lockMutation = useMutation({
-    mutationFn: () => runCommandAndRefresh(commandsApi.lock),
-  })
-  const unlockMutation = useMutation({
-    mutationFn: () => runCommandAndRefresh(commandsApi.unlock),
-  })
-  const climateStartMutation = useMutation({
-    mutationFn: () => runCommandAndRefresh(commandsApi.climateStart),
-  })
-  const wakeMutation = useMutation({
-    mutationFn: () => runCommandAndRefresh(commandsApi.wake),
-  })
-
   const hasTelemetry = Boolean(
     state && (
       typeof state.batteryLevel === 'number'
@@ -194,9 +132,11 @@ export function DashboardPage() {
     return vehicle.state === 'online' ? 'Online' : vehicle.state
   }, [hasTelemetry, vehicle?.state])
 
-  const syncErrorMessage = syncMutation.isError
-    ? (syncMutation.error instanceof Error ? syncMutation.error.message : 'Sync failed')
-    : null
+  const extendedState = state as (typeof state & {
+    chargeLimitSoc?: number | null
+    odometer?: number | null
+    version?: string | null
+  }) | undefined
 
   const lockStatus = state?.isLocked == null
     ? 'Etat serrure inconnu'
@@ -209,6 +149,14 @@ export function DashboardPage() {
     : state?.cabinOverheatProtectionMode === 'fan_only'
       ? 'COP FAN'
       : 'COP OFF'
+
+  const statusDetail = useMemo(() => {
+    if (!hasTelemetry) return 'No data yet'
+    if (vehicle?.state === 'asleep') return 'Asleep'
+    if (vehicle?.state === 'charging') return 'Charging'
+    if (vehicle?.state === 'driving') return 'Driving'
+    return lockStatus
+  }, [hasTelemetry, lockStatus, vehicle?.state])
 
   const mapEmbedUrl = useMemo(() => {
     if (!location) return null
@@ -229,9 +177,6 @@ export function DashboardPage() {
           <h1 className="text-4xl font-semibold tracking-tight text-text-primary">Dashboard</h1>
           <p className="text-sm text-text-muted mt-1">{state ? (state.isCached ? 'Donnees cache' : 'Donnees fraiches') : 'Synchronisation requise'}</p>
         </div>
-        <Button variant="ghost" size="sm" loading={syncMutation.isPending} onClick={() => syncMutation.mutate()}>
-          <RefreshCw size={14} /> Sync
-        </Button>
       </div>
 
       <Card className="surface-premium p-4 md:p-6">
@@ -252,60 +197,25 @@ export function DashboardPage() {
 
         <ArcGauge level={state?.batteryLevel ?? null} rangeKm={state?.batteryRange ?? null} hasData={hasTelemetry} />
 
-        {!hasTelemetry && (
-          <div className="flex justify-center -mt-2 mb-2">
-            <Button size="sm" variant="secondary" loading={syncMutation.isPending} onClick={() => syncMutation.mutate()}>
-              Lancer premiere synchro
-            </Button>
-          </div>
-        )}
-
-        {syncErrorMessage && (
-          <p className="text-center text-xs text-error -mt-1 mb-2">
-            Echec synchronisation: {syncErrorMessage}
-          </p>
-        )}
-
         <p className="text-center text-sm text-text-muted -mt-2">
           <MapPin size={12} className="inline mr-1" />
           {vehicle?.lastSeenAt ? `Parked · ${formatDate(vehicle.lastSeenAt)}` : 'Waiting for first telemetry'}
         </p>
 
-        <div className="grid grid-cols-4 gap-2 mt-5">
-          <QuickActionTile
-            icon={<Lock size={18} />}
-            label="Lock"
-            subtitle={state?.isLocked ? 'Actif' : undefined}
-            onClick={() => lockMutation.mutate()}
-            loading={lockMutation.isPending}
-            disabled={!vehicle}
-          />
-          <QuickActionTile
-            icon={<Unlock size={18} />}
-            label="Unlock"
-            subtitle={state?.isLocked === false ? 'Actif' : undefined}
-            onClick={() => unlockMutation.mutate()}
-            loading={unlockMutation.isPending}
-            disabled={!vehicle}
-          />
-          <QuickActionTile
-            icon={<Thermometer size={18} />}
-            label="Climate"
-            subtitle={state?.insideTemp != null ? `${Math.round(state.insideTemp)}° · ${copLabel}` : copLabel}
-            onClick={() => climateStartMutation.mutate()}
-            loading={climateStartMutation.isPending}
-            disabled={!vehicle}
-          />
-          <QuickActionTile
-            icon={<Zap size={18} />}
-            label={vehicle?.state === 'asleep' ? 'Wake' : 'Charge'}
-            onClick={() => wakeMutation.mutate()}
-            loading={wakeMutation.isPending}
-            disabled={!vehicle}
-          />
-        </div>
-
         <div className="mt-5 rounded-2xl border border-border-subtle bg-bg-overlay/70 p-4">
+          <div className="grid gap-1 mb-4">
+            <InfoRow label="Status" value={statusDetail} />
+            <InfoRow label="Range" value={state?.batteryRange != null ? `${Math.round(state.batteryRange)} km` : '—'} />
+            <InfoRow label="Charge limit" value={extendedState?.chargeLimitSoc != null ? `${extendedState.chargeLimitSoc}%` : '—'} />
+            <InfoRow label="State of charge" value={state?.batteryLevel != null ? `${Math.round(state.batteryLevel)}%` : '—'} />
+            <InfoRow label="Outside temperature" value={state?.outsideTemp != null ? `${state.outsideTemp.toFixed(1)} °C` : '—'} />
+            <InfoRow label="Inside temperature" value={state?.insideTemp != null ? `${state.insideTemp.toFixed(1)} °C` : '—'} />
+            <InfoRow label="Mileage" value={extendedState?.odometer != null ? `${Math.round(extendedState.odometer)} km` : '—'} />
+            <InfoRow label="Version" value={extendedState?.version ?? '—'} />
+            <InfoRow label="Security" value={lockStatus} />
+            <InfoRow label="Cabin protection" value={copLabel} />
+          </div>
+
           <div>
             <p className="text-sm text-text-primary">{location ? 'Dernière position connue' : 'Position indisponible'}</p>
             <p className="text-xs text-text-muted mt-0.5">

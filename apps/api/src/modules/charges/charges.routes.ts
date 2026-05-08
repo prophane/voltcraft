@@ -8,6 +8,7 @@ import { requireAuth } from '../auth/auth.routes.js'
 import { NotFoundError } from '../../common/errors/app-error.js'
 import { ok, paginated } from '../../common/http/response.js'
 import { withVehicleAutoBootstrap } from '../vehicle/vehicle-auto-bootstrap.js'
+import { TeslaMateReadService } from '../../providers/teslamate/teslamate-read.service.js'
 
 const paginationSchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -25,6 +26,7 @@ export async function chargesRoutes(app: FastifyInstance) {
   const chargesRepo = new ChargesRepository(app.prisma)
   const vehicleRepo = new VehicleRepository(app.prisma)
   const authService = new AuthService(new AuthRepository(app.prisma))
+  const teslamate = new TeslaMateReadService()
 
   const getVehicle = async (userId: string) => {
     const v = await vehicleRepo.findActive(userId)
@@ -32,11 +34,23 @@ export async function chargesRoutes(app: FastifyInstance) {
     return v
   }
 
+  const getVehicleForRead = (userId: string) =>
+    teslamate.isEnabled() ? getVehicle(userId) : withVehicleAutoBootstrap(app, () => getVehicle(userId))
+
   app.get('/', { schema: { tags: ['charges'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
     const query = paginationSchema.parse(req.query)
-    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
+    const vehicle = await getVehicleForRead(session.userId)
+    if (teslamate.isEnabled()) {
+      const { sessions, total } = await teslamate.getCharges(vehicle.vin, {
+        page: query.page,
+        pageSize: query.pageSize,
+        from: query.from ? new Date(query.from) : undefined,
+        to: query.to ? new Date(query.to) : undefined,
+      })
+      return paginated(sessions, total, query.page, query.pageSize)
+    }
     const { sessions, total } = await chargesRepo.findMany(vehicle.id, {
       page: query.page,
       pageSize: query.pageSize,
@@ -50,7 +64,12 @@ export async function chargesRoutes(app: FastifyInstance) {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
     const { id } = req.params as { id: string }
-    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(session.userId))
+    const vehicle = await getVehicleForRead(session.userId)
+    if (teslamate.isEnabled()) {
+      const session_ = await teslamate.getChargeById(vehicle.vin, id)
+      if (!session_) throw new NotFoundError('Charge session')
+      return ok(session_)
+    }
     const session_ = await chargesRepo.findById(id, vehicle.id)
     if (!session_) throw new NotFoundError('Charge session')
     return ok(session_)
@@ -64,7 +83,11 @@ export async function chargesRoutes(app: FastifyInstance) {
       year: (req.query as Record<string, string>)['year'] ?? now.getFullYear(),
       month: (req.query as Record<string, string>)['month'] ?? now.getMonth() + 1,
     })
-    const vehicle = await withVehicleAutoBootstrap(app, () => getVehicle(sess.userId))
+    const vehicle = await getVehicleForRead(sess.userId)
+    if (teslamate.isEnabled()) {
+      const summary = await teslamate.getMonthlyChargeSummary(vehicle.vin, year, month)
+      return ok(summary)
+    }
     const summary = await chargesRepo.getMonthlySummary(vehicle.id, year, month)
     return ok(summary)
   })

@@ -10,6 +10,7 @@ import { AuthRepository } from '../auth/auth.repository.js'
 import { requireAuth } from '../auth/auth.routes.js'
 import { ok, paginated } from '../../common/http/response.js'
 import { withVehicleAutoBootstrap } from './vehicle-auto-bootstrap.js'
+import { TeslaMateReadService } from '../../providers/teslamate/teslamate-read.service.js'
 
 const historyQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -26,11 +27,32 @@ export async function vehicleRoutes(app: FastifyInstance) {
   const teslaClient = new TeslaClient(app.prisma, app.redis)
   const syncService = new TeslaSyncService(teslaClient, repo, ecoPolicy, app.prisma)
   const service = new VehicleService(repo, ecoPolicy, syncService)
+  const teslamate = new TeslaMateReadService()
+
+  const getVehicleForRead = async (userId: string) => {
+    if (teslamate.isEnabled()) {
+      const vehicle = await repo.findActive(userId)
+      if (!vehicle) throw new Error('Vehicle not found')
+      return vehicle
+    }
+
+    return withVehicleAutoBootstrap(app, async () => {
+      const vehicle = await repo.findActive(userId)
+      if (!vehicle) throw new Error('Vehicle not found')
+      return vehicle
+    })
+  }
 
   // ── GET /vehicle/current ──────────────────────────────────────
   app.get('/current', { schema: { tags: ['vehicle'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
+    if (teslamate.isEnabled()) {
+      const vehicle = await getVehicleForRead(session.userId)
+      const fallback = await repo.getLatestSnapshot(vehicle.id)
+      const current = await teslamate.getCurrentVehicle(vehicle, fallback ?? undefined)
+      if (current) return ok(current)
+    }
     const vehicle = await withVehicleAutoBootstrap(app, () => service.getCurrentVehicle(session.userId))
     return ok(vehicle)
   })
@@ -39,6 +61,12 @@ export async function vehicleRoutes(app: FastifyInstance) {
   app.get('/state', { schema: { tags: ['vehicle'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
+    if (teslamate.isEnabled()) {
+      const vehicle = await getVehicleForRead(session.userId)
+      const fallback = await repo.getLatestSnapshot(vehicle.id)
+      const state = await teslamate.getVehicleState(vehicle, fallback ?? undefined)
+      if (state) return ok(state)
+    }
     const state = await withVehicleAutoBootstrap(app, () => service.getVehicleState(session.userId))
     return ok(state)
   })
@@ -47,6 +75,11 @@ export async function vehicleRoutes(app: FastifyInstance) {
   app.get('/location', { schema: { tags: ['vehicle'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
+    if (teslamate.isEnabled()) {
+      const vehicle = await getVehicleForRead(session.userId)
+      const location = await teslamate.getVehicleLocation(vehicle.vin)
+      if (location) return ok(location)
+    }
     const location = await withVehicleAutoBootstrap(app, () => service.getVehicleLocation(session.userId))
     return ok(location)
   })
