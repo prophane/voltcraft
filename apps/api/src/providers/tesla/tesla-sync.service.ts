@@ -193,6 +193,7 @@ export class TeslaSyncService {
 
   private async updateTripTracking(vehicleId: string, snapshot: {
     isDriving: boolean
+    isCharging: boolean
     speed: number | null
     latitude: number | null
     longitude: number | null
@@ -253,6 +254,82 @@ export class TeslaSyncService {
     }
 
     if (!openTrip) {
+      // Recovery path: if we missed live "driving" state but the vehicle clearly moved
+      // between the last two snapshots, persist a closed trip segment.
+      const recent = await this.db.vehicleStateSnapshot.findMany({
+        where: { vehicleId },
+        orderBy: { capturedAt: 'desc' },
+        take: 2,
+        select: {
+          capturedAt: true,
+          latitude: true,
+          longitude: true,
+          batteryLevel: true,
+          odometer: true,
+          isCharging: true,
+        },
+      })
+
+      if (recent.length < 2) return
+
+      const current = recent[0]
+      const previous = recent[1]
+      if (!current || !previous) return
+      if (current.isCharging || previous.isCharging || snapshot.isCharging) return
+
+      const spanMinutes = (current.capturedAt.getTime() - previous.capturedAt.getTime()) / 60_000
+      if (spanMinutes <= 0 || spanMinutes > 180) return
+
+      let distanceKm: number | null = null
+      if (current.odometer != null && previous.odometer != null) {
+        const odoDelta = current.odometer - previous.odometer
+        if (odoDelta > 0) distanceKm = Math.round(odoDelta * 100) / 100
+      }
+
+      if (distanceKm == null) {
+        const movedKm = this.computeDistanceKm(
+          previous.latitude ?? null,
+          previous.longitude ?? null,
+          current.latitude ?? null,
+          current.longitude ?? null,
+        )
+        if (movedKm >= 0.5) {
+          distanceKm = Math.round(movedKm * 100) / 100
+        }
+      }
+
+      if (distanceKm == null || distanceKm < 0.5) return
+
+      const alreadySaved = await this.db.trip.findFirst({
+        where: {
+          vehicleId,
+          startedAt: previous.capturedAt,
+          endedAt: current.capturedAt,
+        },
+        select: { id: true },
+      })
+      if (alreadySaved) return
+
+      const live = await this.computeTripLiveMetrics(vehicleId, previous.capturedAt, current.odometer)
+
+      await this.db.trip.create({
+        data: {
+          vehicleId,
+          startedAt: previous.capturedAt,
+          endedAt: current.capturedAt,
+          durationMin: Math.max(1, Math.round(spanMinutes)),
+          distanceKm: live.distanceKm ?? distanceKm,
+          energyUsedKwh: live.energyUsedKwh,
+          avgConsumptionKwh100: live.avgConsumptionKwh100,
+          startLatitude: previous.latitude,
+          startLongitude: previous.longitude,
+          endLatitude: current.latitude,
+          endLongitude: current.longitude,
+          startBatteryLevel: previous.batteryLevel,
+          endBatteryLevel: current.batteryLevel,
+          maxSpeedKmh: snapshot.speed ?? null,
+        },
+      })
       return
     }
 
