@@ -7,6 +7,7 @@ import { ChargesPage } from '@/pages/charges/charges.page'
 import { StatsPage } from '@/pages/stats/stats.page'
 import { AutomationsPage } from '@/pages/automations/automations.page'
 import { SettingsPage } from '@/pages/settings/settings.page'
+import { DiagnosticsPage } from '@/pages/diagnostics/diagnostics.page'
 import { LoginPage } from '@/pages/login/login.page'
 import { SetupWizardPage } from '@/pages/setup/setup-wizard.page'
 import { useAuthStore } from '@/features/auth/store'
@@ -26,6 +27,7 @@ function ProtectedRoutes({ authDisabled }: { authDisabled: boolean }) {
         <Route path="trips" element={<TripsPage />} />
         <Route path="charges" element={<ChargesPage />} />
         <Route path="stats" element={<StatsPage />} />
+        <Route path="diagnostics" element={<DiagnosticsPage />} />
         <Route path="automations" element={<AutomationsPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Routes>

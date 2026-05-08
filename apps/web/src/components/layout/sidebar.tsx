@@ -1,24 +1,14 @@
 import { NavLink } from 'react-router-dom'
-import {
-  LayoutDashboard, Zap, Route, Battery, BarChart3,
-  Bot, Settings, LogOut,
-} from 'lucide-react'
+import { LogOut, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/features/auth/store'
 import { api } from '@/lib/api-client'
-
-const NAV_ITEMS = [
-  { to: '/',            label: 'Dashboard',      icon: LayoutDashboard },
-  { to: '/commands',    label: 'Commandes',       icon: Zap },
-  { to: '/trips',       label: 'Trajets',         icon: Route },
-  { to: '/charges',     label: 'Recharges',       icon: Battery },
-  { to: '/stats',       label: 'Statistiques',    icon: BarChart3 },
-  { to: '/automations', label: 'Automatisations', icon: Bot },
-  { to: '/settings',    label: 'Paramètres',      icon: Settings },
-]
+import { MENU_ICON_REGISTRY } from './nav-config'
+import { useNavPreferences } from '@/features/preferences/nav-preferences'
 
 export function Sidebar() {
   const logout = useAuthStore((s) => s.logout)
+  const { visibleItems } = useNavPreferences()
 
   const handleLogout = async () => {
     await api.post('/auth/logout')
@@ -37,9 +27,11 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 flex flex-col gap-0.5">
-        {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+        {visibleItems.map(({ key, to, label, iconName }) => {
+          const Icon = MENU_ICON_REGISTRY[iconName].icon
+          return (
           <NavLink
-            key={to}
+            key={key}
             to={to}
             end={to === '/'}
             className={({ isActive }) =>
@@ -54,7 +46,8 @@ export function Sidebar() {
             <Icon size={16} className="flex-shrink-0" />
             {label}
           </NavLink>
-        ))}
+          )
+        })}
       </nav>
 
       {/* Logout */}

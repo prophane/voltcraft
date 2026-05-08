@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { useEffect, useState } from 'react'
 import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
 import { TeslaSettingsSection } from './tesla-section'
+import { MENU_ICON_REGISTRY } from '@/components/layout/nav-config'
+import { useNavPreferences } from '@/features/preferences/nav-preferences'
 
 export function SettingsPage() {
   const qc = useQueryClient()
@@ -33,6 +35,7 @@ export function SettingsPage() {
   const au = apiUsage as Record<string, number> | undefined
 
   const [priceKwh, setPriceKwh] = useState<string>('')
+  const { resolvedItems, setHidden, setIcon, reset } = useNavPreferences()
   const [teslamateForm, setTeslamateForm] = useState<TeslamateSettingsInput>({
     backendOnly: true,
     dbName: 'teslamate',
@@ -155,6 +158,51 @@ export function SettingsPage() {
 
       {/* Tesla Configuration */}
       <TeslaSettingsSection />
+
+      {/* Menu customisation */}
+      <Card>
+        <CardHeader><CardTitle>Menu et navigation</CardTitle></CardHeader>
+        <div className="space-y-3">
+          <p className="text-sm text-text-muted">Choisis l'icône de chaque entrée et masque celles dont tu n'as pas besoin.</p>
+
+          {resolvedItems.map((item) => {
+            const selectedIcon = MENU_ICON_REGISTRY[item.iconName]
+            const SelectedIcon = selectedIcon.icon
+            return (
+              <div key={item.key} className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3 items-center rounded-lg border border-border-subtle bg-bg-overlay/40 px-3 py-3">
+                <div className="flex items-center gap-2 text-sm text-text-secondary">
+                  <SelectedIcon size={15} className="text-text-primary" />
+                  <span>{item.label}</span>
+                </div>
+
+                <select
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={item.iconName}
+                  onChange={(e) => setIcon(item.key, e.target.value as keyof typeof MENU_ICON_REGISTRY)}
+                >
+                  {Object.entries(MENU_ICON_REGISTRY).map(([value, cfg]) => (
+                    <option key={value} value={value}>{cfg.label}</option>
+                  ))}
+                </select>
+
+                <label className="inline-flex items-center gap-2 text-sm text-text-secondary justify-self-start md:justify-self-end">
+                  <input
+                    type="checkbox"
+                    checked={!item.hidden}
+                    onChange={(e) => setHidden(item.key, !e.target.checked)}
+                    className="w-4 h-4 rounded accent-accent-500"
+                  />
+                  Visible
+                </label>
+              </div>
+            )
+          })}
+
+          <div className="flex justify-end">
+            <Button size="sm" variant="ghost" onClick={reset}>Réinitialiser le menu</Button>
+          </div>
+        </div>
+      </Card>
 
       <Card>
         <CardHeader><CardTitle>TeslaMate (Backend)</CardTitle></CardHeader>

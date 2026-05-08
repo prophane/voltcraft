@@ -1,31 +1,24 @@
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Route, Battery, Bot, Ellipsis, Zap, BarChart3, Settings, LogOut, X } from 'lucide-react'
+import { Ellipsis, LogOut, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/features/auth/store'
 import { api } from '@/lib/api-client'
-
-const NAV_ITEMS = [
-  { to: '/',            label: 'Dashboard',   icon: LayoutDashboard },
-  { to: '/trips',       label: 'Trips',       icon: Route },
-  { to: '/charges',     label: 'Charging',    icon: Battery },
-  { to: '/automations', label: 'Automations', icon: Bot },
-]
-
-const MORE_ITEMS = [
-  { to: '/commands', label: 'Commandes', icon: Zap },
-  { to: '/stats', label: 'Statistiques', icon: BarChart3 },
-  { to: '/settings', label: 'Parametres', icon: Settings },
-]
+import { MENU_ICON_REGISTRY } from './nav-config'
+import { useNavPreferences } from '@/features/preferences/nav-preferences'
 
 export function MobileBottomNav() {
   const location = useLocation()
   const logout = useAuthStore((s) => s.logout)
+  const { visibleItems } = useNavPreferences()
   const [moreOpen, setMoreOpen] = useState(false)
   const navBottomOffset = 'calc(env(safe-area-inset-bottom, 0px) + 0.5rem)'
   const sheetBottomOffset = 'calc(env(safe-area-inset-bottom, 0px) + 4.75rem)'
 
-  const isMoreActive = MORE_ITEMS.some((item) => location.pathname === item.to)
+  const primaryItems = visibleItems.filter((item) => item.mobilePrimary).slice(0, 4)
+  const moreItems = visibleItems.filter((item) => !primaryItems.some((primary) => primary.key === item.key))
+
+  const isMoreActive = moreItems.some((item) => location.pathname === item.to)
 
   const handleLogout = async () => {
     await api.post('/auth/logout')
@@ -46,9 +39,11 @@ export function MobileBottomNav() {
             </div>
 
             <div className="space-y-1">
-              {MORE_ITEMS.map(({ to, label, icon: Icon }) => (
+              {moreItems.map(({ key, to, label, iconName }) => {
+                const Icon = MENU_ICON_REGISTRY[iconName].icon
+                return (
                 <NavLink
-                  key={to}
+                  key={key}
                   to={to}
                   onClick={() => setMoreOpen(false)}
                   className={({ isActive }) => cn(
@@ -59,7 +54,8 @@ export function MobileBottomNav() {
                   <Icon size={15} />
                   {label}
                 </NavLink>
-              ))}
+                )
+              })}
 
               <button
                 type="button"
@@ -75,9 +71,11 @@ export function MobileBottomNav() {
       )}
 
       <nav className="lg:hidden fixed inset-x-3 z-40 flex items-center rounded-2xl border border-border-subtle bg-bg-surface/95 px-1 shadow-elevated backdrop-blur-sm" style={{ bottom: navBottomOffset }}>
-        {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+        {primaryItems.map(({ key, to, label, iconName }) => {
+          const Icon = MENU_ICON_REGISTRY[iconName].icon
+          return (
           <NavLink
-            key={to}
+            key={key}
             to={to}
             end={to === '/'}
             className={({ isActive }) =>
@@ -90,19 +88,22 @@ export function MobileBottomNav() {
             <Icon size={18} />
             <span className="max-w-full truncate">{label}</span>
           </NavLink>
-        ))}
+          )
+        })}
 
-        <button
-          type="button"
-          onClick={() => setMoreOpen(true)}
-          className={cn(
-            'flex-1 min-w-0 flex flex-col items-center gap-1 py-3 px-1 text-[10px] font-medium transition-colors',
-            isMoreActive || moreOpen ? 'text-accent-400' : 'text-text-muted',
-          )}
-        >
-          <Ellipsis size={18} />
-          <span className="max-w-full truncate">...</span>
-        </button>
+        {moreItems.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setMoreOpen(true)}
+            className={cn(
+              'flex-1 min-w-0 flex flex-col items-center gap-1 py-3 px-1 text-[10px] font-medium transition-colors',
+              isMoreActive || moreOpen ? 'text-accent-400' : 'text-text-muted',
+            )}
+          >
+            <Ellipsis size={18} />
+            <span className="max-w-full truncate">...</span>
+          </button>
+        )}
       </nav>
     </>
   )
