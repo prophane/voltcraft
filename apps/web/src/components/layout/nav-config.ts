@@ -64,7 +64,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
   { key: 'trips', to: '/trips', label: 'Trajets', defaultIcon: 'route', mobilePrimary: true },
   { key: 'charges', to: '/charges', label: 'Recharges', defaultIcon: 'battery', mobilePrimary: true },
   { key: 'stats', to: '/stats', label: 'Statistiques', defaultIcon: 'bar-chart', mobilePrimary: false },
-  { key: 'diagnostics', to: '/diagnostics', label: 'Diagnostic', defaultIcon: 'activity', mobilePrimary: false },
+  { key: 'diagnostics', to: '/diagnostics', label: 'Infos avancees', defaultIcon: 'activity', mobilePrimary: false },
   { key: 'automations', to: '/automations', label: 'Automatisations', defaultIcon: 'bot', mobilePrimary: true },
   { key: 'settings', to: '/settings', label: 'Parametres', defaultIcon: 'settings', mobilePrimary: false },
 ]

@@ -82,32 +82,40 @@ export function SettingsPage() {
   })), [menuDraft])
 
   const updateMenuIcon = (key: keyof NavPreferences['iconByKey'], iconName: keyof typeof MENU_ICON_REGISTRY) => {
-    setMenuDraft((current) => ({
-      ...current,
-      iconByKey: { ...current.iconByKey, [key]: iconName },
-    }))
-    setMenuSavedAt(null)
+    setMenuDraft((current) => {
+      const next = {
+        ...current,
+        iconByKey: { ...current.iconByKey, [key]: iconName },
+      }
+      setNavPreferences(next)
+      setMenuSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+      return next
+    })
   }
 
   const updateMenuVisibility = (key: keyof NavPreferences['iconByKey'], visible: boolean) => {
-    setMenuDraft((current) => ({
-      ...current,
-      hiddenKeys: visible
-        ? current.hiddenKeys.filter((hiddenKey) => hiddenKey !== key)
-        : Array.from(new Set([...current.hiddenKeys, key])),
-    }))
-    setMenuSavedAt(null)
-  }
-
-  const saveMenuPreferences = () => {
-    setNavPreferences(menuDraft)
-    setMenuSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+    setMenuDraft((current) => {
+      const next = {
+        ...current,
+        hiddenKeys: visible
+          ? current.hiddenKeys.filter((hiddenKey) => hiddenKey !== key)
+          : Array.from(new Set([...current.hiddenKeys, key])),
+      }
+      setNavPreferences(next)
+      setMenuSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+      return next
+    })
   }
 
   const resetMenuPreferences = () => {
     const next = { hiddenKeys: [], iconByKey: {} }
     setMenuDraft(next)
     resetNavPreferences()
+    setMenuSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+  }
+
+  const saveMenuPreferences = () => {
+    setNavPreferences(menuDraft)
     setMenuSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
   }
 
@@ -205,7 +213,7 @@ export function SettingsPage() {
       <Card>
         <CardHeader><CardTitle>Menu et navigation</CardTitle></CardHeader>
         <div className="space-y-3">
-          <p className="text-sm text-text-muted">Choisis l'icône de chaque entrée et masque celles dont tu n'as pas besoin. Clique ensuite sur Sauvegarder le menu pour appliquer partout.</p>
+          <p className="text-sm text-text-muted">Choisis l'icône de chaque entrée et masque celles dont tu n'as pas besoin. Les changements sont appliqués immédiatement, et tu peux aussi forcer la sauvegarde avec le bouton dédié.</p>
 
           {menuItems.map((item) => {
             const selectedIcon = MENU_ICON_REGISTRY[item.iconName as keyof typeof MENU_ICON_REGISTRY]
@@ -241,7 +249,7 @@ export function SettingsPage() {
           })}
 
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {menuSavedAt && <p className="text-xs text-success mr-auto">Menu sauvegardé à {menuSavedAt}</p>}
+            {menuSavedAt && <p className="text-xs text-success mr-auto">Menu appliqué à {menuSavedAt}</p>}
             <Button size="sm" variant="ghost" onClick={resetMenuPreferences}>Réinitialiser le menu</Button>
             <Button size="sm" onClick={saveMenuPreferences}>Sauvegarder le menu</Button>
           </div>

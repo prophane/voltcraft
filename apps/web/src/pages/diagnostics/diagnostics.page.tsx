@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Activity,
   AlertTriangle,
+  BarChart3,
   BatteryCharging,
   BellRing,
   CarFront,
@@ -17,7 +18,7 @@ import {
   Unlock,
   Zap,
 } from 'lucide-react'
-import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { diagnosticsApi, settingsApi, statsApi, vehicleApi, type VehicleHistorySnapshot } from '@/features/vehicle/api'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn, formatDate, formatKm, formatPercent } from '@/lib/utils'
@@ -124,6 +125,24 @@ export function DiagnosticsPage() {
     staleTime: 5 * 60_000,
   })
 
+  const { data: summary } = useQuery({
+    queryKey: ['stats', 'summary', 30],
+    queryFn: () => statsApi.summary(30),
+    staleTime: 5 * 60_000,
+  })
+
+  const { data: efficiency } = useQuery({
+    queryKey: ['stats', 'efficiency', 30],
+    queryFn: () => statsApi.efficiency(30),
+    staleTime: 5 * 60_000,
+  })
+
+  const { data: idles } = useQuery({
+    queryKey: ['stats', 'idles', 7, 5],
+    queryFn: () => statsApi.idles(7, 5),
+    staleTime: 5 * 60_000,
+  })
+
   const { data: batteryHealthMeasurements } = useQuery({
     queryKey: ['stats', 'battery-health', 'measurements', 180],
     queryFn: () => statsApi.batteryHealthMeasurements(180),
@@ -148,6 +167,14 @@ export function DiagnosticsPage() {
     estimatedHealthPct?: number | null
     bestFullRangeKm?: number | null
     currentFullRangeKm?: number | null
+  } | undefined
+
+  const summaryData = summary as {
+    distanceKm?: number
+    energyUsedKwh?: number
+    avgConsumptionKwhPer100km?: number
+    tripsCount?: number
+    chargeSessionsCount?: number
   } | undefined
 
   const historyRows = Array.isArray(history) ? (history as VehicleHistorySnapshot[]) : []
@@ -185,6 +212,49 @@ export function DiagnosticsPage() {
       batteryLevel: row.batteryLevel,
       range: row.batteryRange,
     }))
+  }, [historyRows])
+
+  const driveTrend = useMemo(() => {
+    return historyRows.slice(0, 72).reverse().map((row) => ({
+      time: new Date(row.capturedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+      speed: row.speed ?? 0,
+      power: row.power ?? 0,
+    }))
+  }, [historyRows])
+
+  const thermalTrend = useMemo(() => {
+    return historyRows
+      .slice(0, 72)
+      .reverse()
+      .filter((row) => row.insideTemp != null || row.outsideTemp != null)
+      .map((row) => ({
+        time: new Date(row.capturedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+        inside: row.insideTemp,
+        outside: row.outsideTemp,
+      }))
+  }, [historyRows])
+
+  const efficiencyData = Array.isArray(efficiency)
+    ? efficiency.slice(-14).map((row) => ({
+      day: String((row as { day?: string }).day ?? '').slice(5, 10),
+      distance_km: Number((row as { distance_km?: number }).distance_km ?? 0),
+      charged_kwh: Number((row as { charged_kwh?: number }).charged_kwh ?? 0),
+    }))
+    : []
+
+  const idleData = Array.isArray(idles) ? idles : []
+  const idleHours7d = idleData.reduce((sum, row) => sum + Number((row as { durationMin?: number }).durationMin ?? 0), 0) / 60
+
+  const stateMix = useMemo(() => {
+    const sample = historyRows.slice(0, 120)
+    const moving = sample.filter((row) => row.isDriving).length
+    const charging = sample.filter((row) => row.isCharging).length
+    const parked = Math.max(0, sample.length - moving - charging)
+    return [
+      { label: 'Stationne', value: parked },
+      { label: 'En conduite', value: moving },
+      { label: 'En charge', value: charging },
+    ]
   }, [historyRows])
 
   const snapshotGapMinutes = latestHistory && state ? Math.round(Math.abs(new Date(state.capturedAt).getTime() - new Date(latestHistory.capturedAt).getTime()) / 60_000) : null
@@ -272,6 +342,138 @@ export function DiagnosticsPage() {
           detail={state?.atHome ? 'A domicile' : state?.isDriving ? 'En mouvement' : 'Stationné'}
         />
       </section>
+
+      <div className="grid xl:grid-cols-3 gap-4 items-stretch">
+        <Card className="xl:col-span-2 p-0 overflow-hidden">
+          <div className="p-5 lg:p-6 border-b border-border-subtle">
+            <CardTitle>Deep Dive conduite</CardTitle>
+            <h2 className="mt-2 text-xl font-semibold text-text-primary">Vitesse et puissance instantanées</h2>
+          </div>
+          <div className="h-72 px-3 pb-4 pt-2">
+            {driveTrend.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={driveTrend} margin={{ left: 8, right: 12, top: 8, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
+                  <XAxis dataKey="time" stroke="#8D8D8D" tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="left" stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} />
+                  <YAxis yAxisId="right" orientation="right" stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} />
+                  <Tooltip contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 10, color: '#F5F5F5' }} />
+                  <Line yAxisId="left" type="monotone" dataKey="speed" name="Vitesse km/h" stroke="#22c55e" strokeWidth={2} dot={false} />
+                  <Line yAxisId="right" type="monotone" dataKey="power" name="Puissance kW" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState message="Aucune donnée de conduite récente n est disponible pour tracer cette vue." />
+            )}
+          </div>
+        </Card>
+
+        <Card className="p-5 lg:p-6">
+          <CardHeader>
+            <div>
+              <CardTitle>Résumé 30 jours</CardTitle>
+              <h2 className="mt-2 text-xl font-semibold text-text-primary">Usage réel du véhicule</h2>
+            </div>
+          </CardHeader>
+
+          <div className="space-y-3 text-sm text-text-secondary">
+            <div className="rounded-2xl border border-border-subtle bg-bg-overlay/60 p-4">
+              <p className="text-xs uppercase tracking-wide text-text-muted">Distance</p>
+              <p className="mt-2 text-2xl font-semibold text-text-primary">{Math.round(summaryData?.distanceKm ?? 0)} km</p>
+            </div>
+            <div className="rounded-2xl border border-border-subtle bg-bg-overlay/60 p-4">
+              <p className="text-xs uppercase tracking-wide text-text-muted">Conso moyenne</p>
+              <p className="mt-2 text-2xl font-semibold text-text-primary">{summaryData?.avgConsumptionKwhPer100km != null ? `${summaryData.avgConsumptionKwhPer100km} kWh/100` : '—'}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-border-subtle bg-bg-overlay/60 p-4">
+                <p className="text-xs uppercase tracking-wide text-text-muted">Trajets</p>
+                <p className="mt-2 text-2xl font-semibold text-text-primary">{summaryData?.tripsCount ?? 0}</p>
+              </div>
+              <div className="rounded-2xl border border-border-subtle bg-bg-overlay/60 p-4">
+                <p className="text-xs uppercase tracking-wide text-text-muted">Charges</p>
+                <p className="mt-2 text-2xl font-semibold text-text-primary">{summaryData?.chargeSessionsCount ?? 0}</p>
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid xl:grid-cols-3 gap-4 items-stretch">
+        <Card className="xl:col-span-2 p-0 overflow-hidden">
+          <div className="p-5 lg:p-6 border-b border-border-subtle">
+            <CardTitle>Suivi thermique</CardTitle>
+            <h2 className="mt-2 text-xl font-semibold text-text-primary">Température intérieure vs extérieure</h2>
+          </div>
+          <div className="h-72 px-3 pb-4 pt-2">
+            {thermalTrend.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={thermalTrend} margin={{ left: 8, right: 12, top: 8, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
+                  <XAxis dataKey="time" stroke="#8D8D8D" tickLine={false} axisLine={false} />
+                  <YAxis stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} />
+                  <Tooltip contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 10, color: '#F5F5F5' }} />
+                  <Line type="monotone" dataKey="inside" name="Interieur °C" stroke="#38bdf8" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="outside" name="Exterieur °C" stroke="#a78bfa" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState message="Le suivi thermique s affichera quand des températures seront remontées." />
+            )}
+          </div>
+        </Card>
+
+        <Card className="p-5 lg:p-6">
+          <CardHeader>
+            <div>
+              <CardTitle>Comportement</CardTitle>
+              <h2 className="mt-2 text-xl font-semibold text-text-primary">Répartition des états</h2>
+            </div>
+          </CardHeader>
+          <div className="h-52">
+            {stateMix.some((item) => item.value > 0) ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stateMix} margin={{ left: 4, right: 4, top: 8, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
+                  <XAxis dataKey="label" stroke="#8D8D8D" tickLine={false} axisLine={false} />
+                  <YAxis stroke="#8D8D8D" tickLine={false} axisLine={false} width={30} />
+                  <Tooltip contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 10, color: '#F5F5F5' }} />
+                  <Bar dataKey="value" fill="#E8112D" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState message="Pas assez d échantillons pour établir la répartition." />
+            )}
+          </div>
+          <div className="mt-3 space-y-2 text-sm text-text-secondary">
+            <p>Idle 7 jours: <span className="text-text-primary font-medium">{idleHours7d.toFixed(1)} h</span></p>
+            <p>Conso 30 jours: <span className="text-text-primary font-medium">{summaryData?.energyUsedKwh != null ? `${summaryData.energyUsedKwh.toFixed(1)} kWh` : '—'}</span></p>
+          </div>
+        </Card>
+      </div>
+
+      <Card className="p-0 overflow-hidden">
+        <div className="p-5 lg:p-6 border-b border-border-subtle">
+          <CardTitle>Activité quotidienne</CardTitle>
+          <h2 className="mt-2 text-xl font-semibold text-text-primary">Distance et énergie chargée sur 14 jours</h2>
+        </div>
+        <div className="h-72 px-3 pb-4 pt-2">
+          {efficiencyData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={efficiencyData} margin={{ left: 8, right: 12, top: 8, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
+                <XAxis dataKey="day" stroke="#8D8D8D" tickLine={false} axisLine={false} />
+                <YAxis stroke="#8D8D8D" tickLine={false} axisLine={false} width={36} />
+                <Tooltip contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 10, color: '#F5F5F5' }} />
+                <Bar dataKey="distance_km" name="km" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="charged_kwh" name="kWh" fill="#38bdf8" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyState message="L activité quotidienne s affichera après accumulation des trajets et recharges." />
+          )}
+        </div>
+      </Card>
 
       <div className="grid xl:grid-cols-3 gap-4 items-start">
         <Card className="xl:col-span-2 p-0 overflow-hidden">
