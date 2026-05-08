@@ -84,7 +84,9 @@ export async function authRoutes(app: FastifyInstance) {
       'email',
       'offline_access',
       'vehicle_device_data',
+      'vehicle_location',
       'vehicle_cmds',
+      'vehicle_charging_cmds',
     ].join(' ')
 
     const authorizeUrl = new URL('https://auth.tesla.com/oauth2/v3/authorize')
