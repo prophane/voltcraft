@@ -12,6 +12,9 @@ cp .env.example .env
 # 2. Start services
 docker compose up -d
 
+# Optional: start TeslaMate stack too
+docker compose --profile teslamate up -d
+
 # 3. Access application
 # Web UI: http://localhost:3000
 # API Docs: http://localhost:3001/docs

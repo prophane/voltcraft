@@ -146,6 +146,86 @@ services:
     networks:
       - voltcraft-net
 
+  # ---------------------------------------------------------------
+  # TeslaMate PostgreSQL — dedicated DB for TeslaMate (optional)
+  # ---------------------------------------------------------------
+  teslamate-db:
+    image: postgres:16-alpine
+    container_name: teslamate-db
+    restart: unless-stopped
+    profiles:
+      - teslamate
+    environment:
+      POSTGRES_DB: ${TESLAMATE_DB_NAME:-teslamate}
+      POSTGRES_USER: ${TESLAMATE_DB_USER:-teslamate}
+      POSTGRES_PASSWORD: ${TESLAMATE_DB_PASSWORD:-CHANGE_ME_TESLAMATE_DB_PASSWORD}
+    volumes:
+      - teslamate-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TESLAMATE_DB_USER:-teslamate} -d ${TESLAMATE_DB_NAME:-teslamate}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - voltcraft-net
+
+  # ---------------------------------------------------------------
+  # TeslaMate — telemetry ingestion + analytics backend (optional)
+  # ---------------------------------------------------------------
+  teslamate:
+    image: teslamate/teslamate:latest
+    container_name: teslamate
+    restart: unless-stopped
+    profiles:
+      - teslamate
+    depends_on:
+      teslamate-db:
+        condition: service_healthy
+      mqtt:
+        condition: service_started
+    environment:
+      ENCRYPTION_KEY: ${TESLAMATE_ENCRYPTION_KEY:-CHANGE_ME_TESLAMATE_ENCRYPTION_KEY}
+      DATABASE_USER: ${TESLAMATE_DB_USER:-teslamate}
+      DATABASE_PASS: ${TESLAMATE_DB_PASSWORD:-CHANGE_ME_TESLAMATE_DB_PASSWORD}
+      DATABASE_NAME: ${TESLAMATE_DB_NAME:-teslamate}
+      DATABASE_HOST: teslamate-db
+      MQTT_HOST: mqtt
+      MQTT_PORT: 1883
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      TZ: ${TIMEZONE:-Europe/Paris}
+    ports:
+      - "127.0.0.1:${TESLAMATE_PORT:-4000}:4000"
+    networks:
+      - voltcraft-net
+
+  # ---------------------------------------------------------------
+  # TeslaMate Grafana — dashboards (optional)
+  # ---------------------------------------------------------------
+  teslamate-grafana:
+    image: teslamate/grafana:latest
+    container_name: teslamate-grafana
+    restart: unless-stopped
+    profiles:
+      - teslamate
+    depends_on:
+      teslamate-db:
+        condition: service_healthy
+    environment:
+      DATABASE_USER: ${TESLAMATE_DB_USER:-teslamate}
+      DATABASE_PASS: ${TESLAMATE_DB_PASSWORD:-CHANGE_ME_TESLAMATE_DB_PASSWORD}
+      DATABASE_NAME: ${TESLAMATE_DB_NAME:-teslamate}
+      DATABASE_HOST: teslamate-db
+      GRAFANA_ADMIN_USER: ${TESLAMATE_GRAFANA_USER:-admin}
+      GRAFANA_ADMIN_PASSWORD: ${TESLAMATE_GRAFANA_PASSWORD:-admin}
+      TZ: ${TIMEZONE:-Europe/Paris}
+    ports:
+      - "127.0.0.1:${TESLAMATE_GRAFANA_PORT:-3002}:3000"
+    volumes:
+      - teslamate-grafana-data:/var/lib/grafana
+    networks:
+      - voltcraft-net
+
 # =================================================================
 # Volumes
 # =================================================================
@@ -160,6 +240,10 @@ volumes:
     name: voltcraft-mqtt-logs
   app-config:
     name: voltcraft-app-config
+  teslamate-db-data:
+    name: teslamate-db-data
+  teslamate-grafana-data:
+    name: teslamate-grafana-data
 
 # =================================================================
 # Networks — single internal bridge, no external routing

@@ -86,9 +86,20 @@ cp .env.example .env
 docker compose up -d
 ```
 
+Pour activer TeslaMate en plus de Voltcraft:
+
+```bash
+docker compose --profile teslamate up -d
+```
+
 Si une variable requise manque, Docker Compose refusera maintenant de démarrer avec un message explicite. C'est volontaire: aucun secret par défaut n'est embarqué dans le dépôt.
 
 Les services démarrent dans cet ordre : PostgreSQL → Redis → Mosquitto → API → Web.
+
+Avec le profile `teslamate`, s'ajoutent:
+- `teslamate-db` (PostgreSQL dédié TeslaMate)
+- `teslamate` (collecte télémétrie + historique)
+- `teslamate-grafana` (dashboards)
 
 ### 4. Premier accès
 
@@ -112,6 +123,8 @@ Les services démarrent dans cet ordre : PostgreSQL → Redis → Mosquitto → 
 | PostgreSQL   | 5432            |
 | Redis       | 6379            |
 | MQTT        | 1883            |
+| TeslaMate UI | 4000           |
+| TeslaMate Grafana | 3002      |
 
 > Tous les ports sont liés sur `127.0.0.1` uniquement. La publication externe est gérée séparément par votre propre solution (ex: Pangolin, Cloudflare Tunnel, etc.).
 
@@ -174,6 +187,50 @@ pnpm dev:api
 
 # Terminal 2
 pnpm dev:web
+```
+
+---
+
+## Déployer TeslaMate (optionnel)
+
+Voltcraft peut cohabiter avec TeslaMate dans le même `docker-compose.yml`.
+
+### 1. Variables à renseigner
+
+Dans `.env`, compléter au minimum:
+- `TESLAMATE_DB_PASSWORD`
+- `TESLAMATE_ENCRYPTION_KEY` (64 hex)
+- `TESLAMATE_GRAFANA_PASSWORD`
+
+Optionnel:
+- `TESLAMATE_PORT` (par défaut `4000`)
+- `TESLAMATE_GRAFANA_PORT` (par défaut `3002`)
+
+### 2. Démarrage
+
+```bash
+docker compose --profile teslamate up -d teslamate-db teslamate teslamate-grafana
+```
+
+### 3. Configuration TeslaMate
+
+1. Ouvrir TeslaMate sur `http://localhost:4000`
+2. Saisir les identifiants Tesla dans l'UI TeslaMate
+3. Vérifier l'arrivée des données de trajet/charge
+4. Ouvrir Grafana sur `http://localhost:3002`
+
+### 4. Vérifications rapides
+
+```bash
+docker compose ps
+docker compose logs teslamate --tail=100
+docker compose logs teslamate-grafana --tail=100
+```
+
+### 5. Arrêt TeslaMate uniquement
+
+```bash
+docker compose --profile teslamate stop teslamate teslamate-grafana teslamate-db
 ```
 
 ---
