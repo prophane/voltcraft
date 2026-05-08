@@ -64,7 +64,6 @@ export class TeslaSyncService {
         climateOn: climateState.is_climate_on ?? false,
         insideTemp: climateState.inside_temp ?? null,
         outsideTemp: climateState.outside_temp ?? null,
-        isSeatHeaterOn: (climateState.seat_heater_left ?? 0) > 0,
 
         isLocked: vehicleState.locked ?? true,
         isTrunkOpen: (vehicleState.rt ?? 0) > 0,
