@@ -6,10 +6,10 @@ import { Card } from '@/components/ui/card'
 import { RefreshCw, Lock, Unlock, Thermometer, Zap, Car, MapPin } from 'lucide-react'
 import { cn, formatDate } from '@/lib/utils'
 
-function ArcGauge({ level, rangeKm }: { level: number; rangeKm: number }) {
+function ArcGauge({ level, rangeKm, hasData }: { level: number | null; rangeKm: number | null; hasData: boolean }) {
   const radius = 110
   const circumference = Math.PI * radius
-  const progress = Math.max(0, Math.min(100, level))
+  const progress = hasData ? Math.max(0, Math.min(100, level ?? 0)) : 0
   const dash = (progress / 100) * circumference
 
   return (
@@ -32,9 +32,12 @@ function ArcGauge({ level, rangeKm }: { level: number; rangeKm: number }) {
         />
       </svg>
 
-      <div className="absolute top-[66px] text-center">
-        <p className="text-5xl font-semibold leading-none text-text-primary">{Math.round(level)}<span className="text-2xl align-top">%</span></p>
-        <p className="text-2xl text-text-secondary mt-1">{Math.round(rangeKm)} km</p>
+      <div className="absolute top-[58px] text-center min-w-[140px]">
+        <p className="text-5xl font-semibold leading-none text-text-primary">
+          {hasData ? Math.round(level ?? 0) : '—'}
+          <span className="text-2xl align-top">{hasData ? '%' : ''}</span>
+        </p>
+        <p className="text-2xl text-text-secondary mt-1">{hasData ? `${Math.round(rangeKm ?? 0)} km` : 'No data'}</p>
         <p className="text-sm text-text-muted mt-1">Battery</p>
       </div>
     </div>
@@ -47,19 +50,21 @@ function QuickActionTile({
   subtitle,
   onClick,
   loading,
+  disabled,
 }: {
   icon: ReactNode
   label: string
   subtitle?: string
   onClick: () => void
   loading?: boolean
+  disabled?: boolean
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={loading}
-      className="rounded-xl border border-border-subtle bg-bg-overlay/70 hover:bg-bg-overlay px-3 py-3 text-left transition-colors disabled:opacity-50"
+      disabled={loading || disabled}
+      className="rounded-xl border border-border-subtle bg-bg-overlay/70 hover:bg-bg-overlay px-3 py-3 text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
     >
       <div className="text-text-secondary mb-2">{icon}</div>
       {subtitle ? <p className="text-lg font-medium text-text-primary leading-tight">{subtitle}</p> : null}
@@ -112,17 +117,32 @@ export function DashboardPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle'] }),
   })
 
+  const hasTelemetry = Boolean(
+    state && (
+      typeof state.batteryLevel === 'number'
+      || typeof state.batteryRange === 'number'
+      || state.capturedAt
+    ),
+  )
+
+  const friendlyName = useMemo(() => {
+    const name = vehicle?.displayName?.trim()
+    if (!name) return 'Tesla Vehicle'
+    const looksLikeVin = name.length >= 17 && !name.includes(' ')
+    return looksLikeVin ? `Tesla ${name.slice(-6)}` : name
+  }, [vehicle?.displayName])
+
   const statusLabel = useMemo(() => {
-    if (!vehicle?.state) return 'Unknown'
+    if (!vehicle?.state) return hasTelemetry ? 'Online' : 'No data yet'
     return vehicle.state === 'online' ? 'Online' : vehicle.state
-  }, [vehicle?.state])
+  }, [hasTelemetry, vehicle?.state])
 
   return (
     <div className="max-w-md lg:max-w-5xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-semibold tracking-tight text-text-primary">Dashboard</h1>
-          <p className="text-sm text-text-muted mt-1">{state?.isCached ? 'Données cache' : 'Données fraîches'}</p>
+          <p className="text-sm text-text-muted mt-1">{state ? (state.isCached ? 'Donnees cache' : 'Donnees fraiches') : 'Synchronisation requise'}</p>
         </div>
         <Button variant="ghost" size="sm" loading={syncMutation.isPending} onClick={() => syncMutation.mutate()}>
           <RefreshCw size={14} /> Sync
@@ -132,9 +152,9 @@ export function DashboardPage() {
       <Card className="surface-premium p-4 md:p-6">
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-3xl font-medium text-text-primary">{vehicle?.displayName ?? 'Model 3'}</h2>
+            <h2 className="text-3xl font-medium text-text-primary">{friendlyName}</h2>
             <p className="text-base text-text-secondary mt-1">
-              {statusLabel} <span className={cn('inline-block w-2 h-2 rounded-full ml-1', vehicle?.state === 'online' ? 'bg-success' : 'bg-warning')} />
+              {statusLabel} <span className={cn('inline-block w-2 h-2 rounded-full ml-1', hasTelemetry ? 'bg-success' : 'bg-warning')} />
             </p>
           </div>
         </div>
@@ -143,11 +163,19 @@ export function DashboardPage() {
           <Car size={72} className="text-text-secondary" />
         </div>
 
-        <ArcGauge level={state?.batteryLevel ?? 0} rangeKm={state?.batteryRange ?? 0} />
+        <ArcGauge level={state?.batteryLevel ?? null} rangeKm={state?.batteryRange ?? null} hasData={hasTelemetry} />
+
+        {!hasTelemetry && (
+          <div className="flex justify-center -mt-2 mb-2">
+            <Button size="sm" variant="secondary" loading={syncMutation.isPending} onClick={() => syncMutation.mutate()}>
+              Lancer premiere synchro
+            </Button>
+          </div>
+        )}
 
         <p className="text-center text-sm text-text-muted -mt-2">
           <MapPin size={12} className="inline mr-1" />
-          Parked · {vehicle?.lastSeenAt ? formatDate(vehicle.lastSeenAt) : '—'}
+          {vehicle?.lastSeenAt ? `Parked · ${formatDate(vehicle.lastSeenAt)}` : 'Waiting for first telemetry'}
         </p>
 
         <div className="grid grid-cols-4 gap-2 mt-5">
@@ -156,32 +184,36 @@ export function DashboardPage() {
             label="Lock"
             onClick={() => lockMutation.mutate()}
             loading={lockMutation.isPending}
+            disabled={!vehicle}
           />
           <QuickActionTile
             icon={<Unlock size={18} />}
             label="Unlock"
             onClick={() => unlockMutation.mutate()}
             loading={unlockMutation.isPending}
+            disabled={!vehicle}
           />
           <QuickActionTile
             icon={<Thermometer size={18} />}
             label="Climate"
-            subtitle={state?.insideTemp != null ? `${Math.round(state.insideTemp)}.0°` : undefined}
+            subtitle={state?.insideTemp != null ? `${Math.round(state.insideTemp)}°` : undefined}
             onClick={() => climateStartMutation.mutate()}
             loading={climateStartMutation.isPending}
+            disabled={!vehicle}
           />
           <QuickActionTile
             icon={<Zap size={18} />}
             label={vehicle?.state === 'asleep' ? 'Wake' : 'Charge'}
             onClick={() => wakeMutation.mutate()}
             loading={wakeMutation.isPending}
+            disabled={!vehicle}
           />
         </div>
 
         <div className="mt-5 rounded-2xl border border-border-subtle bg-bg-overlay/70 p-4 h-36 flex items-end justify-between">
           <div>
             <p className="text-sm text-text-primary">{state?.latitude && state?.longitude ? 'Position active' : 'Position indisponible'}</p>
-            <p className="text-xs text-success mt-1">Connected</p>
+            <p className={cn('text-xs mt-1', hasTelemetry ? 'text-success' : 'text-text-muted')}>{hasTelemetry ? 'Connected' : 'Waiting sync'}</p>
           </div>
           <MapPin size={18} className="text-accent-400" />
         </div>
