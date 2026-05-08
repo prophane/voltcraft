@@ -1,62 +1,68 @@
-# Voltcraft — Self-hosted Tesla Fleet Companion
+# Quick Start Voltcraft
 
-**Latest update**: OAuth Tesla + Partner Fleet flow + visual refresh ✨
+Ce guide est la version courte. Pour la procedure complete de production, voir [DEPLOYMENT.md](DEPLOYMENT.md).
 
-## Quick Start
+## 1) Preparation
 
 ```bash
-# 1. Configure environment
+git clone https://github.com/prophane/voltcraft.git
+cd voltcraft
 cp .env.example .env
-# Edit .env with your settings (or use setup wizard on first access)
-
-# 2. Start services
-docker compose up -d
-
-# Optional: start TeslaMate stack too
-docker compose --profile teslamate up -d
-
-# 3. Access application
-# Web UI: http://localhost:3000
-# API Docs: http://localhost:3001/docs
 ```
 
-On first access, you'll see an interactive **Setup Wizard** that guides you through:
-- Admin account creation
-- Tesla OAuth configuration
-- Optional MQTT/Home Assistant setup
+Editer .env et definir au minimum:
+- POSTGRES_PASSWORD
+- REDIS_PASSWORD
+- SESSION_SECRET
+- ENCRYPTION_KEY
+- TESLA_CLIENT_ID
+- TESLA_CLIENT_SECRET
+- TESLA_REDIRECT_URI
+- TESLA_REGION
 
-Then in Settings:
-- Connect with Tesla OAuth
-- Register Tesla Fleet partner (if required)
-- Run first sync
+Si profil TeslaMate:
+- TESLAMATE_DB_PASSWORD
+- TESLAMATE_ENCRYPTION_KEY
+- TESLAMATE_GRAFANA_PASSWORD
 
-## Features
+## 2) Demarrage
 
-- ⚡ **Premium dark UI** with refreshed mobile visuals
-- 🔋 Real-time battery & charge tracking
-- 🗺️ Trip history & energy analytics
-- 🤖 Local automation rules (no SaaS)
-- 🏠 Home Assistant MQTT integration
-- 💰 Tesla Fleet API cost awareness
+Sans TeslaMate:
 
-## Notes
+```bash
+docker compose up -d
+```
 
-- Partner public key must be publicly reachable at:
-	`https://<your-domain>/.well-known/appspecific/com.tesla.3p.public-key.pem`
-- If lock/unlock fails, reconnect OAuth and verify command scope (`vehicle_cmds`).
+Avec TeslaMate:
 
-## Architecture
+```bash
+docker compose --profile teslamate up -d
+```
 
-- **Frontend**: React 18 + Vite + Tailwind CSS
-- **Backend**: Fastify + Prisma + PostgreSQL
-- **Cache**: Redis + BullMQ
-- **MQTT**: Mosquitto for Home Assistant
-- **Docker**: 100% containerized, local-only
+## 3) Verification
 
-## Documentation
+```bash
+docker compose --profile teslamate ps
+docker compose --profile teslamate logs -f api
+```
 
-See [README.md](./README.md) for full documentation.
+Endpoints a tester:
+- /health
+- /api/vehicle/current
+- /api/stats/summary?days=30
+- /api/vehicle/state
 
----
+## 4) Mise a jour
 
-**Tesla® is a trademark of Tesla, Inc.** — Voltcraft is independent and not affiliated with Tesla.
+```bash
+git pull
+docker compose --profile teslamate up -d --build
+```
+
+## 5) Si interface vide
+
+1. Faire un hard refresh navigateur
+2. Verifier les logs api
+3. Verifier la coherence mot de passe TeslaMate DB entre .env et volume teslamate-db
+4. Suivre la section depannage de [DEPLOYMENT.md](DEPLOYMENT.md)
+5. Ouvrir la page /diagnostics pour verifier les statuts services et Fleet API
