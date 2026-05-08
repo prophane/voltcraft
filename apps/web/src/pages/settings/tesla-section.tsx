@@ -80,7 +80,6 @@ export function TeslaSettingsSection() {
 
   const displayedHealth = testResult ?? teslaHealth
   const oauthConnectUrl = `/api/auth/tesla/connect?returnTo=${encodeURIComponent('/settings')}`
-  const teslaDeveloperPortalUrl = 'https://developer.tesla.com/'
 
   const handleConnectOAuth = () => {
     window.location.assign(oauthConnectUrl)
