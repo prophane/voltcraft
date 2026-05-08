@@ -137,6 +137,31 @@ export function TeslaSettingsSection() {
           )}
         </div>
 
+        {/* Virtual key installation — required for commands on recent vehicles */}
+        {displayedHealth?.virtualKeyInstallUrl && displayedHealth.connected && (
+          <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 space-y-2">
+            <p className="text-sm font-medium text-text-primary">⚠️ Clé virtuelle — étape requise pour les commandes</p>
+            <p className="text-xs text-text-secondary">
+              Tesla exige qu'une <strong>clé virtuelle</strong> de l'application soit installée sur le véhicule
+              pour autoriser les commandes (verrou, climatisation, charge…). Cette installation se fait
+              une seule fois depuis le téléphone lié au véhicule.
+            </p>
+            <ol className="text-xs text-text-secondary space-y-1 list-decimal list-inside">
+              <li>Ouvre ce lien sur ton téléphone (avec l'appli Tesla installée)</li>
+              <li>Accepte l'ajout de la clé de l'application Voltcraft</li>
+              <li>Confirme sur l'écran tactile du véhicule si demandé</li>
+            </ol>
+            <a
+              href={displayedHealth.virtualKeyInstallUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block mt-1 rounded-lg bg-warning/20 border border-warning/40 px-3 py-2 text-xs font-medium text-text-primary hover:bg-warning/30 transition-colors break-all"
+            >
+              🔑 {displayedHealth.virtualKeyInstallUrl}
+            </a>
+          </div>
+        )}
+
         <div className="pt-1">
           {/* OAuth config collapsible form */}
           <button

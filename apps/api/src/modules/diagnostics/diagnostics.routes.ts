@@ -18,6 +18,7 @@ interface TeslaConnectionResult {
   partnerPublicKeyConfigured: boolean
   partnerPublicKeyUrl?: string
   partnerRegistrationRequired?: boolean
+  virtualKeyInstallUrl?: string
   httpStatus?: number
   error?: string
 }
@@ -168,6 +169,14 @@ export async function diagnosticsRoutes(app: FastifyInstance) {
 
     result.partnerPublicKeyConfigured = Boolean(publicKey)
     result.partnerPublicKeyUrl = partnerPublicKeyUrl
+
+    // Virtual key install URL — needed for commands on post-2021 vehicles
+    const appDomain = env.TESLA_REDIRECT_URI
+      ? (() => { try { return new URL(env.TESLA_REDIRECT_URI).hostname } catch { return null } })()
+      : null
+    if (appDomain) {
+      result.virtualKeyInstallUrl = `https://tesla.com/_ak/${appDomain}`
+    }
 
     if (!result.connected && oauthConfigured && !result.tokenConfigured) {
       result.error = 'OAuth Fleet is configured but no Tesla account is connected yet. Click Connect With Tesla OAuth first.'

@@ -15,6 +15,7 @@ export interface TeslaConnectionStatus {
   partnerPublicKeyConfigured: boolean
   partnerPublicKeyUrl?: string
   partnerRegistrationRequired?: boolean
+  virtualKeyInstallUrl?: string
   httpStatus?: number
   error?: string
 }
