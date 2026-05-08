@@ -11,6 +11,7 @@ import { requireAuth } from '../auth/auth.routes.js'
 import { ok, paginated } from '../../common/http/response.js'
 import { withVehicleAutoBootstrap } from './vehicle-auto-bootstrap.js'
 import { TeslaMateReadService } from '../../providers/teslamate/teslamate-read.service.js'
+import { TeslaApiError } from '../../common/errors/app-error.js'
 
 const historyQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -28,6 +29,39 @@ export async function vehicleRoutes(app: FastifyInstance) {
   const syncService = new TeslaSyncService(teslaClient, repo, ecoPolicy, app.prisma)
   const service = new VehicleService(repo, ecoPolicy, syncService)
   const teslamate = new TeslaMateReadService()
+
+  const snapshotToState = (vehicleId: string, snapshot: Awaited<ReturnType<typeof repo.getLatestSnapshot>>) => {
+    if (!snapshot) return null
+
+    return {
+      vehicleId,
+      capturedAt: snapshot.capturedAt,
+      batteryLevel: snapshot.batteryLevel,
+      batteryRange: snapshot.batteryRange,
+      chargeLimitSoc: snapshot.chargeLimitSoc,
+      chargeState: snapshot.chargeState,
+      isCharging: snapshot.isCharging,
+      isPluggedIn: snapshot.isPluggedIn,
+      chargeRate: snapshot.chargeRate,
+      timeToFullCharge: snapshot.timeToFullCharge,
+      climateOn: snapshot.climateOn,
+      insideTemp: snapshot.insideTemp,
+      outsideTemp: snapshot.outsideTemp,
+      isSeatHeaterOn: false,
+      cabinOverheatProtectionMode: 'off' as const,
+      isLocked: snapshot.isLocked,
+      isTrunkOpen: snapshot.isTrunkOpen,
+      isFrunkOpen: snapshot.isFrunkOpen,
+      isDriving: snapshot.isDriving,
+      speed: snapshot.speed,
+      power: snapshot.power,
+      latitude: snapshot.latitude,
+      longitude: snapshot.longitude,
+      heading: snapshot.heading,
+      atHome: snapshot.atHome,
+      isCached: true,
+    }
+  }
 
   const getVehicleForRead = async (userId: string) => {
     if (teslamate.isEnabled()) {
@@ -66,9 +100,24 @@ export async function vehicleRoutes(app: FastifyInstance) {
       const fallback = await repo.getLatestSnapshot(vehicle.id)
       const state = await teslamate.getVehicleState(vehicle, fallback ?? undefined)
       if (state) return ok(state)
+      const cachedState = snapshotToState(vehicle.id, fallback)
+      if (cachedState) return ok(cachedState)
     }
-    const state = await withVehicleAutoBootstrap(app, () => service.getVehicleState(session.userId))
-    return ok(state)
+
+    try {
+      const state = await withVehicleAutoBootstrap(app, () => service.getVehicleState(session.userId))
+      return ok(state)
+    } catch (error) {
+      if (error instanceof TeslaApiError && error.teslaCode === 'vehicle_unavailable') {
+        const vehicle = await repo.findActive(session.userId)
+        if (vehicle) {
+          const fallback = await repo.getLatestSnapshot(vehicle.id)
+          const cachedState = snapshotToState(vehicle.id, fallback)
+          if (cachedState) return ok(cachedState)
+        }
+      }
+      throw error
+    }
   })
 
   // ── GET /vehicle/location ─────────────────────────────────────
