@@ -3,11 +3,12 @@ import { settingsApi, diagnosticsApi } from '@/features/vehicle/api'
 import type { TeslamateSettingsStatus, TeslamateSettingsInput } from '@/features/vehicle/api'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
 import { TeslaSettingsSection } from './tesla-section'
 import { MENU_ICON_REGISTRY } from '@/components/layout/nav-config'
-import { useNavPreferences } from '@/features/preferences/nav-preferences'
+import { getNavPreferences, resetNavPreferences, setNavPreferences, type NavPreferences } from '@/features/preferences/nav-preferences'
+import { NAV_ITEMS } from '@/components/layout/nav-config'
 
 export function SettingsPage() {
   const qc = useQueryClient()
@@ -35,7 +36,8 @@ export function SettingsPage() {
   const au = apiUsage as Record<string, number> | undefined
 
   const [priceKwh, setPriceKwh] = useState<string>('')
-  const { resolvedItems, setHidden, setIcon, reset } = useNavPreferences()
+  const [menuDraft, setMenuDraft] = useState<NavPreferences>(() => getNavPreferences())
+  const [menuSavedAt, setMenuSavedAt] = useState<string | null>(null)
   const [teslamateForm, setTeslamateForm] = useState<TeslamateSettingsInput>({
     backendOnly: true,
     dbName: 'teslamate',
@@ -68,6 +70,46 @@ export function SettingsPage() {
       grafanaPort: ts.grafanaPort,
     }))
   }, [teslamateStatus])
+
+  useEffect(() => {
+    setMenuDraft(getNavPreferences())
+  }, [])
+
+  const menuItems = useMemo(() => NAV_ITEMS.map((item) => ({
+    ...item,
+    iconName: menuDraft.iconByKey[item.key] ?? item.defaultIcon,
+    hidden: menuDraft.hiddenKeys.includes(item.key),
+  })), [menuDraft])
+
+  const updateMenuIcon = (key: keyof NavPreferences['iconByKey'], iconName: keyof typeof MENU_ICON_REGISTRY) => {
+    setMenuDraft((current) => ({
+      ...current,
+      iconByKey: { ...current.iconByKey, [key]: iconName },
+    }))
+    setMenuSavedAt(null)
+  }
+
+  const updateMenuVisibility = (key: keyof NavPreferences['iconByKey'], visible: boolean) => {
+    setMenuDraft((current) => ({
+      ...current,
+      hiddenKeys: visible
+        ? current.hiddenKeys.filter((hiddenKey) => hiddenKey !== key)
+        : Array.from(new Set([...current.hiddenKeys, key])),
+    }))
+    setMenuSavedAt(null)
+  }
+
+  const saveMenuPreferences = () => {
+    setNavPreferences(menuDraft)
+    setMenuSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+  }
+
+  const resetMenuPreferences = () => {
+    const next = { hiddenKeys: [], iconByKey: {} }
+    setMenuDraft(next)
+    resetNavPreferences()
+    setMenuSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+  }
 
   const ServiceStatus = ({ label, status }: { label: string; status?: unknown }) => {
     const isOk = status === 'ok' || status === 'connected'
@@ -163,10 +205,10 @@ export function SettingsPage() {
       <Card>
         <CardHeader><CardTitle>Menu et navigation</CardTitle></CardHeader>
         <div className="space-y-3">
-          <p className="text-sm text-text-muted">Choisis l'icône de chaque entrée et masque celles dont tu n'as pas besoin.</p>
+          <p className="text-sm text-text-muted">Choisis l'icône de chaque entrée et masque celles dont tu n'as pas besoin. Clique ensuite sur Sauvegarder le menu pour appliquer partout.</p>
 
-          {resolvedItems.map((item) => {
-            const selectedIcon = MENU_ICON_REGISTRY[item.iconName]
+          {menuItems.map((item) => {
+            const selectedIcon = MENU_ICON_REGISTRY[item.iconName as keyof typeof MENU_ICON_REGISTRY]
             const SelectedIcon = selectedIcon.icon
             return (
               <div key={item.key} className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3 items-center rounded-lg border border-border-subtle bg-bg-overlay/40 px-3 py-3">
@@ -178,7 +220,7 @@ export function SettingsPage() {
                 <select
                   className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
                   value={item.iconName}
-                  onChange={(e) => setIcon(item.key, e.target.value as keyof typeof MENU_ICON_REGISTRY)}
+                  onChange={(e) => updateMenuIcon(item.key as keyof NavPreferences['iconByKey'], e.target.value as keyof typeof MENU_ICON_REGISTRY)}
                 >
                   {Object.entries(MENU_ICON_REGISTRY).map(([value, cfg]) => (
                     <option key={value} value={value}>{cfg.label}</option>
@@ -189,7 +231,7 @@ export function SettingsPage() {
                   <input
                     type="checkbox"
                     checked={!item.hidden}
-                    onChange={(e) => setHidden(item.key, !e.target.checked)}
+                    onChange={(e) => updateMenuVisibility(item.key as keyof NavPreferences['iconByKey'], e.target.checked)}
                     className="w-4 h-4 rounded accent-accent-500"
                   />
                   Visible
@@ -198,8 +240,10 @@ export function SettingsPage() {
             )
           })}
 
-          <div className="flex justify-end">
-            <Button size="sm" variant="ghost" onClick={reset}>Réinitialiser le menu</Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {menuSavedAt && <p className="text-xs text-success mr-auto">Menu sauvegardé à {menuSavedAt}</p>}
+            <Button size="sm" variant="ghost" onClick={resetMenuPreferences}>Réinitialiser le menu</Button>
+            <Button size="sm" onClick={saveMenuPreferences}>Sauvegarder le menu</Button>
           </div>
         </div>
       </Card>

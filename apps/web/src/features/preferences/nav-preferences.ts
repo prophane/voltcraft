@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import {
   MENU_ICON_REGISTRY,
   NAV_ITEMS,
@@ -8,11 +8,14 @@ import {
 } from '@/components/layout/nav-config'
 
 const STORAGE_KEY = 'voltcraft.nav.preferences.v1'
+const NAV_PREFS_CHANGE_EVENT = 'voltcraft:nav-preferences-changed'
 
 type StoredPrefs = {
   hiddenKeys: NavItemKey[]
   iconByKey: Partial<Record<NavItemKey, MenuIconName>>
 }
+
+export type NavPreferences = StoredPrefs
 
 const DEFAULT_PREFS: StoredPrefs = {
   hiddenKeys: [],
@@ -46,6 +49,32 @@ function readPrefs(): StoredPrefs {
 function persistPrefs(next: StoredPrefs) {
   if (typeof window === 'undefined') return
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  window.dispatchEvent(new Event(NAV_PREFS_CHANGE_EVENT))
+}
+
+function subscribePrefs(onStoreChange: () => void) {
+  if (typeof window === 'undefined') return () => {}
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === STORAGE_KEY) onStoreChange()
+  }
+  window.addEventListener('storage', handleStorage)
+  window.addEventListener(NAV_PREFS_CHANGE_EVENT, onStoreChange)
+  return () => {
+    window.removeEventListener('storage', handleStorage)
+    window.removeEventListener(NAV_PREFS_CHANGE_EVENT, onStoreChange)
+  }
+}
+
+export function getNavPreferences() {
+  return readPrefs()
+}
+
+export function setNavPreferences(next: StoredPrefs) {
+  persistPrefs(next)
+}
+
+export function resetNavPreferences() {
+  setNavPreferences(DEFAULT_PREFS)
 }
 
 export type ResolvedNavItem = NavItemDefinition & {
@@ -54,11 +83,7 @@ export type ResolvedNavItem = NavItemDefinition & {
 }
 
 export function useNavPreferences() {
-  const [prefs, setPrefs] = useState<StoredPrefs>(DEFAULT_PREFS)
-
-  useEffect(() => {
-    setPrefs(readPrefs())
-  }, [])
+  const prefs = useSyncExternalStore(subscribePrefs, readPrefs, () => DEFAULT_PREFS)
 
   const resolvedItems = useMemo<ResolvedNavItem[]>(() => {
     return NAV_ITEMS.map((item) => ({
@@ -71,28 +96,21 @@ export function useNavPreferences() {
   const visibleItems = useMemo(() => resolvedItems.filter((item) => !item.hidden), [resolvedItems])
 
   const setHidden = (key: NavItemKey, hidden: boolean) => {
-    setPrefs((current) => {
-      const hiddenKeys = hidden
-        ? Array.from(new Set([...current.hiddenKeys, key]))
-        : current.hiddenKeys.filter((k) => k !== key)
-      const next = { ...current, hiddenKeys }
-      persistPrefs(next)
-      return next
-    })
+    const hiddenKeys = hidden
+      ? Array.from(new Set([...prefs.hiddenKeys, key]))
+      : prefs.hiddenKeys.filter((k) => k !== key)
+    setNavPreferences({ ...prefs, hiddenKeys })
   }
 
   const setIcon = (key: NavItemKey, iconName: MenuIconName) => {
-    setPrefs((current) => {
-      const iconByKey = { ...current.iconByKey, [key]: iconName }
-      const next = { ...current, iconByKey }
-      persistPrefs(next)
-      return next
+    setNavPreferences({
+      ...prefs,
+      iconByKey: { ...prefs.iconByKey, [key]: iconName },
     })
   }
 
   const reset = () => {
-    setPrefs(DEFAULT_PREFS)
-    persistPrefs(DEFAULT_PREFS)
+    resetNavPreferences()
   }
 
   return {
