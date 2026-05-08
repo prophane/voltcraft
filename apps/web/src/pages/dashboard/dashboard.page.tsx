@@ -144,19 +144,15 @@ export function DashboardPage() {
       ? 'Verrouille'
       : 'Deverrouille'
 
-  const copLabel = state?.cabinOverheatProtectionMode === 'on'
-    ? 'COP ON'
-    : state?.cabinOverheatProtectionMode === 'fan_only'
-      ? 'COP FAN'
-      : 'COP OFF'
-
   const statusDetail = useMemo(() => {
     if (!hasTelemetry) return 'No data yet'
+    if (vehicle?.state === 'online') return 'Online'
     if (vehicle?.state === 'asleep') return 'Asleep'
+    if (vehicle?.state === 'offline') return 'Offline'
     if (vehicle?.state === 'charging') return 'Charging'
     if (vehicle?.state === 'driving') return 'Driving'
-    return lockStatus
-  }, [hasTelemetry, lockStatus, vehicle?.state])
+    return vehicle?.state ?? 'Unknown'
+  }, [hasTelemetry, vehicle?.state])
 
   const mapEmbedUrl = useMemo(() => {
     if (!location) return null
@@ -204,7 +200,7 @@ export function DashboardPage() {
 
         <div className="mt-5 rounded-2xl border border-border-subtle bg-bg-overlay/70 p-4">
           <div className="grid gap-1 mb-4">
-            <InfoRow label="Status" value={statusDetail} />
+            <InfoRow label="Vehicle status" value={statusDetail} />
             <InfoRow label="Range" value={state?.batteryRange != null ? `${Math.round(state.batteryRange)} km` : '—'} />
             <InfoRow label="Charge limit" value={extendedState?.chargeLimitSoc != null ? `${extendedState.chargeLimitSoc}%` : '—'} />
             <InfoRow label="State of charge" value={state?.batteryLevel != null ? `${Math.round(state.batteryLevel)}%` : '—'} />
@@ -212,8 +208,7 @@ export function DashboardPage() {
             <InfoRow label="Inside temperature" value={state?.insideTemp != null ? `${state.insideTemp.toFixed(1)} °C` : '—'} />
             <InfoRow label="Mileage" value={extendedState?.odometer != null ? `${Math.round(extendedState.odometer)} km` : '—'} />
             <InfoRow label="Version" value={extendedState?.version ?? '—'} />
-            <InfoRow label="Security" value={lockStatus} />
-            <InfoRow label="Cabin protection" value={copLabel} />
+            <InfoRow label="Lock status" value={lockStatus} />
           </div>
 
           <div>
