@@ -230,6 +230,8 @@ export function DiagnosticsPage() {
             <div className="flex flex-wrap items-center gap-2 text-sm text-text-secondary">
               <span className="font-medium text-text-primary">{vehicle?.displayName ?? 'Véhicule Tesla'}</span>
               <span>•</span>
+              <span>VIN {vehicle?.vin ?? '—'}</span>
+              <span>•</span>
               <span>{vehicleStatus}</span>
               <span>•</span>
               <span>{vehicle?.lastSeenAt ? `Vu le ${formatDate(vehicle.lastSeenAt)}` : 'Jamais vu'}</span>
