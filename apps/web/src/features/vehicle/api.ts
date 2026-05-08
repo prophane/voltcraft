@@ -113,12 +113,40 @@ export interface TeslaOAuthConfig {
   region?: 'na' | 'eu' | 'cn'
 }
 
+export interface TeslamateSettingsStatus {
+  configured: boolean
+  requiredMissing: string[]
+  backendOnly: boolean
+  dbName: string
+  dbUser: string
+  port: number
+  grafanaUser: string
+  grafanaPort: number
+  hasDbPassword: boolean
+  hasEncryptionKey: boolean
+  hasGrafanaPassword: boolean
+}
+
+export interface TeslamateSettingsInput {
+  dbName?: string
+  dbUser?: string
+  dbPassword?: string
+  encryptionKey?: string
+  grafanaUser?: string
+  grafanaPassword?: string
+  port?: number
+  grafanaPort?: number
+  backendOnly?: boolean
+}
+
 export const settingsApi = {
   get: () => api.get<unknown>('/settings'),
   update: (data: unknown) => api.patch('/settings', data),
   getTeslaOAuth: () => api.get<{ oauthConfigured: boolean; connected: boolean; region: TeslaRegion; accountEmail: string | null }>('/settings/tesla'),
   updateTeslaOAuth: (data: TeslaOAuthConfig) => api.post('/settings/tesla', data),
   registerTeslaPartner: (domain: string) => api.post('/settings/tesla/register-partner', { domain }),
+  getTeslamate: () => api.get<TeslamateSettingsStatus>('/settings/teslamate'),
+  updateTeslamate: (data: TeslamateSettingsInput) => api.patch('/settings/teslamate', data),
 }
 
 export const diagnosticsApi = {

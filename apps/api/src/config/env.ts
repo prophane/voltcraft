@@ -32,6 +32,19 @@ const envSchema = z.object({
   TESLA_REDIRECT_URI: z.string().url().default('http://localhost:3001/api/auth/tesla/callback'),
   TESLA_COMMAND_PROXY_URL: z.string().url().default('https://vehicle-command:4443'),
 
+  TESLAMATE_DB_NAME: z.string().default('teslamate'),
+  TESLAMATE_DB_USER: z.string().default('teslamate'),
+  TESLAMATE_DB_PASSWORD: z.string().default(''),
+  TESLAMATE_ENCRYPTION_KEY: z.string().default(''),
+  TESLAMATE_GRAFANA_USER: z.string().default('admin'),
+  TESLAMATE_GRAFANA_PASSWORD: z.string().default(''),
+  TESLAMATE_PORT: z.coerce.number().default(4000),
+  TESLAMATE_GRAFANA_PORT: z.coerce.number().default(3002),
+  TESLAMATE_BACKEND_ONLY: z
+    .string()
+    .transform((v) => v !== 'false')
+    .default('true'),
+
   MQTT_ENABLED: z
     .string()
     .transform((v) => v !== 'false')

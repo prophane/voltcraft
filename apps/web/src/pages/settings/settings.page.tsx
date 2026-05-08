@@ -1,8 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { settingsApi, diagnosticsApi } from '@/features/vehicle/api'
+import type { TeslamateSettingsStatus, TeslamateSettingsInput } from '@/features/vehicle/api'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
 import { TeslaSettingsSection } from './tesla-section'
 
@@ -19,17 +20,51 @@ export function SettingsPage() {
     queryFn: diagnosticsApi.apiUsage,
     refetchInterval: 60_000,
   })
+  const {
+    data: teslamateStatus,
+    isLoading: isLoadingTeslamate,
+  } = useQuery({
+    queryKey: ['settings', 'teslamate'],
+    queryFn: settingsApi.getTeslamate,
+  })
 
   const s = settings as Record<string, unknown> | undefined
   const d = diag as Record<string, unknown> | undefined
   const au = apiUsage as Record<string, number> | undefined
 
   const [priceKwh, setPriceKwh] = useState<string>('')
+  const [teslamateForm, setTeslamateForm] = useState<TeslamateSettingsInput>({
+    backendOnly: true,
+    dbName: 'teslamate',
+    dbUser: 'teslamate',
+    grafanaUser: 'admin',
+    port: 4000,
+    grafanaPort: 3002,
+  })
 
   const updateMutation = useMutation({
     mutationFn: (data: unknown) => settingsApi.update(data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
   })
+
+  const updateTeslamateMutation = useMutation({
+    mutationFn: (data: TeslamateSettingsInput) => settingsApi.updateTeslamate(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'teslamate'] }),
+  })
+
+  useEffect(() => {
+    const ts = teslamateStatus as TeslamateSettingsStatus | undefined
+    if (!ts) return
+    setTeslamateForm((prev) => ({
+      ...prev,
+      backendOnly: ts.backendOnly,
+      dbName: ts.dbName,
+      dbUser: ts.dbUser,
+      grafanaUser: ts.grafanaUser,
+      port: ts.port,
+      grafanaPort: ts.grafanaPort,
+    }))
+  }, [teslamateStatus])
 
   const ServiceStatus = ({ label, status }: { label: string; status?: unknown }) => {
     const isOk = status === 'ok' || status === 'connected'
@@ -120,6 +155,133 @@ export function SettingsPage() {
 
       {/* Tesla Configuration */}
       <TeslaSettingsSection />
+
+      <Card>
+        <CardHeader><CardTitle>TeslaMate (Backend)</CardTitle></CardHeader>
+        {isLoadingTeslamate ? (
+          <p className="text-sm text-text-muted">Chargement...</p>
+        ) : (
+          <div className="space-y-4">
+            {(() => {
+              const ts = teslamateStatus as TeslamateSettingsStatus | undefined
+              if (!ts) return null
+              return ts.configured ? (
+                <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-xs text-success">
+                  Configuration TeslaMate obligatoire complete.
+                </div>
+              ) : (
+                <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-text-secondary">
+                  Variables manquantes: {ts.requiredMissing.join(', ')}
+                </div>
+              )
+            })()}
+
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-4 h-4 rounded accent-accent-500"
+                checked={Boolean(teslamateForm.backendOnly)}
+                onChange={(e) => setTeslamateForm((f) => ({ ...f, backendOnly: e.target.checked }))}
+              />
+              <span className="text-sm text-text-secondary">Mode backend uniquement (recommandé)</span>
+            </label>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="stat-label block mb-1">TESLAMATE_DB_NAME</label>
+                <input
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={teslamateForm.dbName ?? ''}
+                  onChange={(e) => setTeslamateForm((f) => ({ ...f, dbName: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="stat-label block mb-1">TESLAMATE_DB_USER</label>
+                <input
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={teslamateForm.dbUser ?? ''}
+                  onChange={(e) => setTeslamateForm((f) => ({ ...f, dbUser: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="stat-label block mb-1">TESLAMATE_PORT</label>
+                <input
+                  type="number"
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={teslamateForm.port ?? 4000}
+                  onChange={(e) => setTeslamateForm((f) => ({ ...f, port: Number(e.target.value) }))}
+                />
+              </div>
+              <div>
+                <label className="stat-label block mb-1">TESLAMATE_GRAFANA_PORT</label>
+                <input
+                  type="number"
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={teslamateForm.grafanaPort ?? 3002}
+                  onChange={(e) => setTeslamateForm((f) => ({ ...f, grafanaPort: Number(e.target.value) }))}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="stat-label block mb-1">TESLAMATE_DB_PASSWORD</label>
+                <input
+                  type="password"
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  placeholder="minimum 8 caracteres"
+                  onChange={(e) => setTeslamateForm((f) => ({ ...f, dbPassword: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="stat-label block mb-1">TESLAMATE_ENCRYPTION_KEY</label>
+                <input
+                  type="password"
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  placeholder="64 caracteres hex"
+                  onChange={(e) => setTeslamateForm((f) => ({ ...f, encryptionKey: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="stat-label block mb-1">TESLAMATE_GRAFANA_USER</label>
+                <input
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={teslamateForm.grafanaUser ?? ''}
+                  onChange={(e) => setTeslamateForm((f) => ({ ...f, grafanaUser: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="stat-label block mb-1">TESLAMATE_GRAFANA_PASSWORD</label>
+                <input
+                  type="password"
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  placeholder="minimum 8 caracteres"
+                  onChange={(e) => setTeslamateForm((f) => ({ ...f, grafanaPassword: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                loading={updateTeslamateMutation.isPending}
+                onClick={() => updateTeslamateMutation.mutate(teslamateForm)}
+              >
+                Sauvegarder la config TeslaMate
+              </Button>
+              {updateTeslamateMutation.isSuccess && (
+                <p className="text-xs text-success">Configuration enregistree.</p>
+              )}
+            </div>
+          </div>
+        )}
+      </Card>
 
       {/* Diagnostics */}
       <Card>
