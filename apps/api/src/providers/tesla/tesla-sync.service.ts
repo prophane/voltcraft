@@ -44,6 +44,7 @@ export class TeslaSyncService {
       const climateState = data.climate_state ?? ({} as Partial<typeof data.climate_state>)
       const driveState = data.drive_state ?? ({} as Partial<typeof data.drive_state>)
       const vehicleState = data.vehicle_state ?? ({} as Partial<typeof data.vehicle_state>)
+      const chargeEnergyAddedKwh = chargeState.charge_energy_added ?? null
       const copModeRaw = (climateState.cabin_overheat_protection ?? '').toString().toLowerCase()
       const cabinOverheatProtectionMode =
         copModeRaw.includes('fan') ? 'fan_only'
@@ -62,7 +63,6 @@ export class TeslaSyncService {
         chargeLimitSoc: chargeState.charge_limit_soc ?? null,
         chargeState: chargeState.charging_state ?? null,
         isCharging: chargeState.charging_state === 'Charging',
-        chargeEnergyAddedKwh: chargeState.charge_energy_added ?? null,
         isPluggedIn: chargeState.charge_port_door_open ?? false,
         chargeRate: chargeState.charge_rate != null ? chargeState.charge_rate * 1.609344 : null,
         chargeAmps: chargeState.charge_amps ?? null,
@@ -97,7 +97,10 @@ export class TeslaSyncService {
 
       // Keep higher-level entities (trips/charge sessions) in sync with telemetry.
       await this.updateTripTracking(vehicle.id, snapshotForDb)
-      await this.updateChargeTracking(vehicle.id, snapshotForDb)
+      await this.updateChargeTracking(vehicle.id, {
+        ...snapshotForDb,
+        chargeEnergyAddedKwh,
+      })
 
       await this.vehicleRepo.updateLastSync(vehicle.teslaAccountId)
 
