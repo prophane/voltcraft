@@ -6,6 +6,10 @@ import { Card } from '@/components/ui/card'
 import { RefreshCw, Lock, Unlock, Thermometer, Zap, MapPin } from 'lucide-react'
 import { cn, formatDate } from '@/lib/utils'
 
+interface ReverseGeocodeResponse {
+  display_name?: string
+}
+
 function ArcGauge({ level, rangeKm, hasData }: { level: number | null; rangeKm: number | null; hasData: boolean }) {
   const radius = 110
   const circumference = Math.PI * radius
@@ -123,6 +127,35 @@ export function DashboardPage() {
     enabled: !!vehicle,
   })
 
+  const { data: locationAddress } = useQuery({
+    queryKey: ['vehicle', 'location', 'address', location?.latitude, location?.longitude],
+    enabled: !!location,
+    staleTime: 10 * 60_000,
+    queryFn: async () => {
+      if (!location) return null
+      const url = new URL('https://nominatim.openstreetmap.org/reverse')
+      url.searchParams.set('format', 'jsonv2')
+      url.searchParams.set('lat', String(location.latitude))
+      url.searchParams.set('lon', String(location.longitude))
+      url.searchParams.set('zoom', '18')
+      url.searchParams.set('addressdetails', '1')
+      url.searchParams.set('accept-language', 'fr')
+
+      const res = await fetch(url.toString(), {
+        headers: {
+          Accept: 'application/json',
+        },
+      })
+
+      if (!res.ok) {
+        return null
+      }
+
+      const body = (await res.json()) as ReverseGeocodeResponse
+      return body.display_name ?? null
+    },
+  })
+
   const syncMutation = useMutation({
     mutationFn: vehicleApi.sync,
     onSuccess: () => refreshVehicleQueries(),
@@ -176,6 +209,18 @@ export function DashboardPage() {
     : state?.cabinOverheatProtectionMode === 'fan_only'
       ? 'COP FAN'
       : 'COP OFF'
+
+  const mapEmbedUrl = useMemo(() => {
+    if (!location) return null
+    const lon = location.longitude
+    const lat = location.latitude
+    const delta = 0.01
+    const left = lon - delta
+    const right = lon + delta
+    const top = lat + delta
+    const bottom = lat - delta
+    return `https://www.openstreetmap.org/export/embed.html?bbox=${left},${bottom},${right},${top}&layer=mapnik&marker=${lat},${lon}`
+  }, [location])
 
   return (
     <div className="max-w-md lg:max-w-5xl mx-auto space-y-5">
@@ -260,7 +305,7 @@ export function DashboardPage() {
           />
         </div>
 
-        <div className="mt-5 rounded-2xl border border-border-subtle bg-bg-overlay/70 p-4 h-20 flex items-center justify-between">
+        <div className="mt-5 rounded-2xl border border-border-subtle bg-bg-overlay/70 p-4">
           <div>
             <p className="text-sm text-text-primary">{location ? 'Dernière position connue' : 'Position indisponible'}</p>
             <p className="text-xs text-text-muted mt-0.5">
@@ -268,18 +313,37 @@ export function DashboardPage() {
                 ? `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)} · ${formatDate(location.capturedAt)}`
                 : 'Aucune donnée GPS enregistrée'}
             </p>
+            {location && (
+              <p className="text-xs text-text-secondary mt-1">
+                {locationAddress ?? 'Adresse en cours de resolution...'}
+              </p>
+            )}
           </div>
-          {location ? (
-            <a
-              href={`https://www.google.com/maps?q=${location.latitude},${location.longitude}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-accent-400 hover:text-accent-300 ml-3 flex-shrink-0"
-            >
-              <MapPin size={20} />
-            </a>
+
+          {location && mapEmbedUrl ? (
+            <div className="mt-3 space-y-2">
+              <iframe
+                title="Carte position véhicule"
+                src={mapEmbedUrl}
+                className="w-full h-44 rounded-lg border border-border-subtle"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+              <div className="flex justify-end">
+                <a
+                  href={`https://www.google.com/maps?q=${location.latitude},${location.longitude}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent-400 hover:text-accent-300 inline-flex items-center gap-1 text-xs"
+                >
+                  <MapPin size={14} /> Ouvrir dans Google Maps
+                </a>
+              </div>
+            </div>
           ) : (
-            <MapPin size={18} className="text-text-muted flex-shrink-0" />
+            <div className="mt-2 flex justify-end">
+              <MapPin size={18} className="text-text-muted flex-shrink-0" />
+            </div>
           )}
         </div>
       </Card>
