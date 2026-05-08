@@ -4,10 +4,12 @@ import { PrismaClient } from '@prisma/client'
 import { AutomationsRepository } from '../../modules/automations/automations.repository.js'
 import { env } from '../../config/env.js'
 import { logger } from '../../config/logger.js'
+import { TeslaEcoPolicyService } from '../../providers/tesla/tesla-eco-policy.service.js'
 
 const db = new PrismaClient()
 const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null })
 const automationsRepo = new AutomationsRepository(db)
+const ecoPolicy = new TeslaEcoPolicyService(redis)
 const vehicleSyncQueue = new Queue('vehicle-sync', { connection: redis })
 const automationQueue = new Queue('automation', { connection: redis })
 
@@ -49,11 +51,7 @@ export async function scheduleVehicleSync(): Promise<void> {
     })
 
     const state = snapshot?.vehicleState ?? 'unknown'
-    let intervalMs: number
-
-    if (state === 'asleep' || state === 'offline') intervalMs = 600_000
-    else if (state === 'charging') intervalMs = 30_000
-    else intervalMs = 60_000
+    const intervalMs = ecoPolicy.getPollInterval(state, env.ECO_MODE_ENABLED)
 
     await vehicleSyncQueue.upsertJobScheduler(
       `sync-${vehicle.id}`,
@@ -61,6 +59,6 @@ export async function scheduleVehicleSync(): Promise<void> {
       { name: 'vehicle-sync', data: { vehicleId: vehicle.id } },
     )
 
-    logger.info({ vehicleId: vehicle.id, state, intervalMs }, 'Vehicle sync scheduled')
+    logger.info({ vehicleId: vehicle.id, state, intervalMs, ecoMode: env.ECO_MODE_ENABLED }, 'Vehicle sync scheduled')
   }
 }

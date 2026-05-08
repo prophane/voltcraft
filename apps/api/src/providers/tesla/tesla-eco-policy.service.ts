@@ -58,15 +58,15 @@ export class TeslaEcoPolicyService {
    */
   getPollInterval(state: string, ecoModeEnabled: boolean): number {
     if (state === 'asleep' || state === 'offline') {
-      return ecoModeEnabled ? 600_000 : 120_000 // 10min eco, 2min normal
+      return ecoModeEnabled ? 21_600_000 : 120_000 // 6h eco, 2min normal
     }
     if (state === 'charging') {
-      return ecoModeEnabled ? 30_000 : 15_000
+      return ecoModeEnabled ? 900_000 : 15_000 // 15min eco
     }
     if (state === 'driving') {
-      return ecoModeEnabled ? 60_000 : 30_000
+      return ecoModeEnabled ? 300_000 : 30_000 // 5min eco
     }
     // online/idle
-    return ecoModeEnabled ? 60_000 : 30_000
+    return ecoModeEnabled ? 1_800_000 : 30_000 // 30min eco
   }
 }
