@@ -23,7 +23,6 @@
     "@fastify/swagger": "^8.14.0",
     "@fastify/swagger-ui": "^4.0.0",
     "@prisma/client": "5.22.0",
-    "prisma": "5.22.0",
     "@voltcraft/shared": "workspace:*",
     "bullmq": "^5.4.0",
     "dotenv": "^16.4.0",
@@ -33,6 +32,8 @@
     "mqtt": "^5.5.0",
     "pino": "^9.1.0",
     "pino-pretty": "^11.0.0",
+    "prisma": "5.22.0",
+    "selfsigned": "^5.5.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {

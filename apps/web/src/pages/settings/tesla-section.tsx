@@ -140,11 +140,16 @@ export function TeslaSettingsSection() {
         {/* Virtual key installation — required for commands on recent vehicles */}
         {displayedHealth?.virtualKeyInstallUrl && displayedHealth.connected && (
           <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 space-y-2">
-            <p className="text-sm font-medium text-text-primary">⚠️ Clé virtuelle — étape requise pour les commandes</p>
+            <p className="text-sm font-medium text-text-primary">Clé virtuelle Tesla</p>
             <p className="text-xs text-text-secondary">
               Tesla exige qu'une <strong>clé virtuelle</strong> de l'application soit installée sur le véhicule
               pour autoriser les commandes (verrou, climatisation, charge…). Cette installation se fait
               une seule fois depuis le téléphone lié au véhicule.
+            </p>
+            <p className="text-xs text-text-secondary">
+              Ce bloc est <strong>informatif</strong>: Voltcraft ne peut pas vérifier automatiquement si la clé
+              est déjà installée. Si tu as déjà accepté la clé dans l'app Tesla, il reste à déployer le
+              proxy de signature côté serveur pour que les commandes fonctionnent.
             </p>
             <ol className="text-xs text-text-secondary space-y-1 list-decimal list-inside">
               <li>Ouvre ce lien sur ton téléphone (avec l'appli Tesla installée)</li>

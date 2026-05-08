@@ -72,6 +72,30 @@ services:
       - voltcraft-net
 
   # ---------------------------------------------------------------
+  # Tesla vehicle-command proxy — signs remote vehicle commands
+  # ---------------------------------------------------------------
+  vehicle-command:
+    image: tesla/vehicle-command:latest
+    container_name: voltcraft-vehicle-command
+    restart: unless-stopped
+    environment:
+      TESLA_HTTP_PROXY_TLS_CERT: /config/tesla/proxy-tls-cert.pem
+      TESLA_HTTP_PROXY_TLS_KEY: /config/tesla/proxy-tls-key.pem
+      TESLA_HTTP_PROXY_HOST: 0.0.0.0
+      TESLA_HTTP_PROXY_PORT: 4443
+      TESLA_HTTP_PROXY_TIMEOUT: 30s
+      TESLA_KEY_FILE: /config/tesla/partner-private-key.pem
+      TESLA_VERBOSE: ${TESLA_PROXY_VERBOSE:-false}
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - app-config:/config
+    expose:
+      - "4443"
+    networks:
+      - voltcraft-net
+
+  # ---------------------------------------------------------------
   # API — Fastify backend
   # ---------------------------------------------------------------
   api:
@@ -85,6 +109,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      vehicle-command:
+        condition: service_started
     environment:
       NODE_ENV: production
       APP_CONFIG_PATH: /app/data/runtime.env
@@ -98,6 +124,7 @@ services:
       TESLA_CLIENT_ID: ${TESLA_CLIENT_ID:-}
       TESLA_CLIENT_SECRET: ${TESLA_CLIENT_SECRET:-}
       TESLA_REDIRECT_URI: ${TESLA_REDIRECT_URI:-https://voltcraft.ph4.fr/api/auth/tesla/callback}
+      TESLA_COMMAND_PROXY_URL: ${TESLA_COMMAND_PROXY_URL:-https://vehicle-command:4443}
       MQTT_ENABLED: ${MQTT_ENABLED:-false}
       MQTT_BROKER: mqtt
       MQTT_PORT: 1883

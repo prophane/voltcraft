@@ -1,11 +1,16 @@
 import { buildApp } from './app.js'
 import { env } from './config/env.js'
 import { logger } from './config/logger.js'
+import { ensureTeslaCommandProxyAssets } from './config/tesla-config.js'
 import { startBackgroundJobs, stopBackgroundJobs } from './jobs/runtime.js'
 
 let appInstance: Awaited<ReturnType<typeof buildApp>> | null = null
 
 async function start() {
+  await ensureTeslaCommandProxyAssets().catch((error) => {
+    logger.warn({ error }, 'Failed to prepare Tesla command proxy assets')
+  })
+
   const app = await buildApp()
   appInstance = app
 

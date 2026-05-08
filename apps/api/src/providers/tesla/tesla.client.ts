@@ -1,7 +1,10 @@
+import { readFile } from 'node:fs/promises'
+import { request as httpsRequest } from 'node:https'
 import type { PrismaClient, TeslaAccount } from '@prisma/client'
 import type { Redis } from 'ioredis'
 import { TeslaApiError } from '../../common/errors/app-error.js'
 import { env } from '../../config/env.js'
+import { getTeslaCommandProxyTlsPaths } from '../../config/tesla-config.js'
 import type { TeslaVehicleData, TeslaCommandResponse } from './tesla.types.js'
 
 const REGION_BASE: Record<string, string> = {
@@ -126,6 +129,63 @@ export class TeslaClient {
     return res
   }
 
+  private async postToCommandProxy(
+    account: TeslaAccount,
+    url: string,
+    body?: Record<string, unknown>,
+  ): Promise<Response> {
+    const { proxyTlsCertPath } = getTeslaCommandProxyTlsPaths()
+    const ca = await readFile(proxyTlsCertPath, 'utf8').catch(() => null)
+
+    const execute = async (token: string) => {
+      const payload = body ? JSON.stringify(body) : undefined
+
+      return new Promise<Response>((resolve, reject) => {
+        const req = httpsRequest(
+          url,
+          {
+            method: 'POST',
+            ca: ca ?? undefined,
+            timeout: 30_000,
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              ...(payload ? { 'Content-Length': Buffer.byteLength(payload).toString() } : {}),
+            },
+          },
+          (res) => {
+            const chunks: Buffer[] = []
+            res.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
+            res.on('end', () => {
+              resolve(new Response(Buffer.concat(chunks), {
+                status: res.statusCode ?? 502,
+                headers: res.headers as HeadersInit,
+              }))
+            })
+          },
+        )
+
+        req.on('timeout', () => req.destroy(new Error('Tesla command proxy timeout')))
+        req.on('error', reject)
+
+        if (payload) {
+          req.write(payload)
+        }
+
+        req.end()
+      })
+    }
+
+    const token = await this.getAccessToken(account)
+    const res = await execute(token)
+    if (res.status === 401 && account.refreshToken) {
+      const refreshedToken = await this.refreshToken(account)
+      return execute(refreshedToken)
+    }
+
+    return res
+  }
+
   async listVehicles(account: TeslaAccount): Promise<Array<{ vin: string }>> {
     const url = `${this.baseUrl(account.region)}/api/1/vehicles`
     await this.logUsage(account, url, 'GET')
@@ -170,18 +230,21 @@ export class TeslaClient {
     endpoint: string,
     body?: Record<string, unknown>,
   ): Promise<TeslaCommandResponse> {
-    const url = `${this.baseUrl(account.region)}/api/1/vehicles/${vin}/command/${endpoint}`
+    const proxyBaseUrl = env.TESLA_COMMAND_PROXY_URL.replace(/\/$/, '')
+    const url = `${proxyBaseUrl}/api/1/vehicles/${vin}/command/${endpoint}`
 
     await this.logUsage(account, url, 'POST')
 
-    const res = await this.fetchWithAuth(account, url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(30_000),
-    })
+    let res: Response
+    try {
+      res = await this.postToCommandProxy(account, url, body)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown proxy error'
+      throw new TeslaApiError(
+        `Tesla command proxy unavailable. The server could not sign the command request.${message ? ` Details: ${message}` : ''}`,
+        'tesla_command_proxy_unavailable',
+      )
+    }
 
     if (!res.ok) {
       const details = await res.text().catch(() => '')
@@ -189,7 +252,7 @@ export class TeslaClient {
 
       if (res.status === 403 || lower.includes('scope') || lower.includes('forbidden')) {
         throw new TeslaApiError(
-          `Tesla command rejected (${res.status}): missing permission/scope for command endpoint. Reconnect Tesla OAuth and ensure command scopes are granted.${details ? ` Details: ${details.slice(0, 280)}` : ''}`,
+          `Tesla command rejected (${res.status}): missing permission/scope, virtual key enrollment, or signed-command authorization.${details ? ` Details: ${details.slice(0, 280)}` : ''}`,
           'tesla_command_scope_denied',
         )
       }

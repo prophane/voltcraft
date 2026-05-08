@@ -2,6 +2,7 @@ import { generateKeyPairSync } from 'node:crypto'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import path from 'node:path'
+import selfsigned from 'selfsigned'
 import { appConfigPath, env } from './env.js'
 
 export type TeslaRegion = 'na' | 'eu' | 'cn'
@@ -16,12 +17,14 @@ const ENV_KEYS = {
 
 export const TESLA_PARTNER_PUBLIC_KEY_ROUTE = '/.well-known/appspecific/com.tesla.3p.public-key.pem'
 
-function getTeslaPartnerKeyPaths() {
+export function getTeslaCommandProxyTlsPaths() {
   const baseDir = path.resolve(path.dirname(appConfigPath), 'tesla')
   return {
     baseDir,
     publicKeyPath: path.join(baseDir, 'partner-public-key.pem'),
     privateKeyPath: path.join(baseDir, 'partner-private-key.pem'),
+    proxyTlsCertPath: path.join(baseDir, 'proxy-tls-cert.pem'),
+    proxyTlsKeyPath: path.join(baseDir, 'proxy-tls-key.pem'),
   }
 }
 
@@ -106,7 +109,7 @@ export async function persistTeslaOAuthConfig(input: {
 
   const envPath = await resolveEnvFilePath()
 
-  await ensureTeslaPartnerKeyPair().catch(() => {
+  await ensureTeslaCommandProxyAssets().catch(() => {
     // Best effort: OAuth config should still be saved even if key generation fails.
   })
 
@@ -123,7 +126,7 @@ export async function persistTeslaOAuthConfig(input: {
 }
 
 export async function ensureTeslaPartnerKeyPair(): Promise<{ publicKeyPath: string; privateKeyPath: string }> {
-  const { baseDir, publicKeyPath, privateKeyPath } = getTeslaPartnerKeyPaths()
+  const { baseDir, publicKeyPath, privateKeyPath } = getTeslaCommandProxyTlsPaths()
   const hasPublic = await canRead(publicKeyPath)
   const hasPrivate = await canRead(privateKeyPath)
 
@@ -145,8 +148,49 @@ export async function ensureTeslaPartnerKeyPair(): Promise<{ publicKeyPath: stri
   return { publicKeyPath, privateKeyPath }
 }
 
+export async function ensureTeslaCommandProxyTlsCert(): Promise<{ certPath: string; keyPath: string }> {
+  const { baseDir, proxyTlsCertPath, proxyTlsKeyPath } = getTeslaCommandProxyTlsPaths()
+  const hasCert = await canRead(proxyTlsCertPath)
+  const hasKey = await canRead(proxyTlsKeyPath)
+
+  if (hasCert && hasKey) {
+    return { certPath: proxyTlsCertPath, keyPath: proxyTlsKeyPath }
+  }
+
+  await mkdir(baseDir, { recursive: true })
+
+  const attrs = [{ name: 'commonName', value: 'vehicle-command' }]
+  const generated = await selfsigned.generate(attrs, {
+    algorithm: 'sha256',
+    keySize: 2048,
+    notAfterDate: new Date(Date.now() + 3650 * 24 * 60 * 60 * 1000),
+    extensions: [
+      { name: 'basicConstraints', cA: true },
+      { name: 'keyUsage', digitalSignature: true, keyEncipherment: true },
+      { name: 'extKeyUsage', serverAuth: true },
+      {
+        name: 'subjectAltName',
+        altNames: [
+          { type: 2, value: 'vehicle-command' },
+          { type: 2, value: 'localhost' },
+        ],
+      },
+    ],
+  })
+
+  await writeFile(proxyTlsCertPath, generated.cert, 'utf8')
+  await writeFile(proxyTlsKeyPath, generated.private, 'utf8')
+
+  return { certPath: proxyTlsCertPath, keyPath: proxyTlsKeyPath }
+}
+
+export async function ensureTeslaCommandProxyAssets(): Promise<void> {
+  await ensureTeslaPartnerKeyPair()
+  await ensureTeslaCommandProxyTlsCert()
+}
+
 export async function readTeslaPartnerPublicKey(): Promise<string | null> {
-  const { publicKeyPath } = getTeslaPartnerKeyPaths()
+  const { publicKeyPath } = getTeslaCommandProxyTlsPaths()
   if (!(await canRead(publicKeyPath))) {
     return null
   }
