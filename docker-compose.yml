@@ -170,6 +170,26 @@ services:
       - voltcraft-net
 
   # ---------------------------------------------------------------
+  # TeslaMate MQTT — internal broker required by TeslaMate runtime
+  # ---------------------------------------------------------------
+  teslamate-mqtt:
+    image: eclipse-mosquitto:2
+    container_name: teslamate-mqtt
+    restart: unless-stopped
+    profiles:
+      - teslamate
+    command: ["mosquitto", "-c", "/mosquitto/config/mosquitto-no-auth.conf"]
+    volumes:
+      - ./infra/docker/teslamate/mosquitto-no-auth.conf:/mosquitto/config/mosquitto-no-auth.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -t '$$SYS/broker/uptime' -n 2>/dev/null && echo ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - voltcraft-net
+
+  # ---------------------------------------------------------------
   # TeslaMate — telemetry ingestion + analytics backend (optional)
   # ---------------------------------------------------------------
   teslamate:
@@ -181,12 +201,16 @@ services:
     depends_on:
       teslamate-db:
         condition: service_healthy
+      teslamate-mqtt:
+        condition: service_healthy
     environment:
       ENCRYPTION_KEY: ${TESLAMATE_ENCRYPTION_KEY:-CHANGE_ME_TESLAMATE_ENCRYPTION_KEY}
       DATABASE_USER: ${TESLAMATE_DB_USER:-teslamate}
       DATABASE_PASS: ${TESLAMATE_DB_PASSWORD:-CHANGE_ME_TESLAMATE_DB_PASSWORD}
       DATABASE_NAME: ${TESLAMATE_DB_NAME:-teslamate}
       DATABASE_HOST: teslamate-db
+      MQTT_HOST: teslamate-mqtt
+      MQTT_PORT: 1883
       TZ: ${TIMEZONE:-Europe/Paris}
     ports:
       - "127.0.0.1:${TESLAMATE_PORT:-4000}:4000"
