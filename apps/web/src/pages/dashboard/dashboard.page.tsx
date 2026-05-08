@@ -95,6 +95,13 @@ export function DashboardPage() {
     staleTime: 300_000,
   })
 
+  const { data: location } = useQuery({
+    queryKey: ['vehicle', 'location'],
+    queryFn: vehicleApi.getLocation,
+    refetchInterval: 120_000,
+    enabled: !!vehicle,
+  })
+
   const syncMutation = useMutation({
     mutationFn: vehicleApi.sync,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle'] }),
@@ -163,41 +170,7 @@ export function DashboardPage() {
           </div>
         </div>
 
-        <div className="mt-4 rounded-2xl border border-border-subtle bg-bg-overlay/50 h-36 flex items-center justify-center overflow-hidden px-4">
-          <svg viewBox="0 0 560 180" className="w-full max-w-xs drop-shadow-lg" fill="none" xmlns="http://www.w3.org/2000/svg">
-            {/* Body */}
-            <path d="M60 120 C60 120 80 80 140 68 C170 62 210 58 280 58 C350 58 390 62 420 68 C480 80 500 120 500 120 L500 140 C500 148 493 154 485 154 L75 154 C67 154 60 148 60 140 Z" fill="rgba(220,220,230,0.12)" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5"/>
-            {/* Roof */}
-            <path d="M170 68 C185 40 210 28 280 26 C350 28 375 40 390 68 Z" fill="rgba(220,220,230,0.08)" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5"/>
-            {/* Windshield */}
-            <path d="M178 67 C192 44 215 31 280 29 C345 31 368 44 382 67 Z" fill="rgba(120,180,255,0.07)" stroke="rgba(120,180,255,0.25)" strokeWidth="1"/>
-            {/* Side windows */}
-            <path d="M180 67 L210 67 L205 95 L172 95 Z" fill="rgba(120,180,255,0.07)" stroke="rgba(120,180,255,0.2)" strokeWidth="1"/>
-            <path d="M218 67 L280 67 L280 96 L213 96 Z" fill="rgba(120,180,255,0.07)" stroke="rgba(120,180,255,0.2)" strokeWidth="1"/>
-            <path d="M288 67 L350 67 L347 96 L288 96 Z" fill="rgba(120,180,255,0.07)" stroke="rgba(120,180,255,0.2)" strokeWidth="1"/>
-            <path d="M357 67 L380 67 L388 95 L354 95 Z" fill="rgba(120,180,255,0.07)" stroke="rgba(120,180,255,0.2)" strokeWidth="1"/>
-            {/* Front wheel arch */}
-            <path d="M100 120 C100 120 105 108 130 108 C155 108 160 120 160 120 Z" fill="rgba(0,0,0,0.3)" stroke="rgba(255,255,255,0.1)" strokeWidth="1"/>
-            {/* Rear wheel arch */}
-            <path d="M370 120 C370 120 375 108 400 108 C425 108 430 120 430 120 Z" fill="rgba(0,0,0,0.3)" stroke="rgba(255,255,255,0.1)" strokeWidth="1"/>
-            {/* Front wheel */}
-            <circle cx="130" cy="138" r="22" fill="rgba(30,30,35,0.95)" stroke="rgba(255,255,255,0.25)" strokeWidth="2"/>
-            <circle cx="130" cy="138" r="13" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5"/>
-            <circle cx="130" cy="138" r="4" fill="rgba(255,255,255,0.2)"/>
-            {/* Rear wheel */}
-            <circle cx="400" cy="138" r="22" fill="rgba(30,30,35,0.95)" stroke="rgba(255,255,255,0.25)" strokeWidth="2"/>
-            <circle cx="400" cy="138" r="13" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5"/>
-            <circle cx="400" cy="138" r="4" fill="rgba(255,255,255,0.2)"/>
-            {/* T badge */}
-            <path d="M273 42 L287 42 L287 44 L281.5 44 L281.5 54 L279.5 54 L279.5 44 L273 44 Z" fill="rgba(232,17,45,0.8)"/>
-            {/* Ground shadow */}
-            <ellipse cx="280" cy="160" rx="200" ry="6" fill="rgba(0,0,0,0.35)"/>
-            {/* Front light strip */}
-            <path d="M500 118 C500 118 495 112 480 112" stroke="rgba(255,240,180,0.6)" strokeWidth="2" strokeLinecap="round"/>
-            {/* Rear light strip */}
-            <path d="M60 118 C60 118 65 112 80 112" stroke="rgba(232,17,45,0.6)" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        </div>
+
 
         <ArcGauge level={state?.batteryLevel ?? null} rangeKm={state?.batteryRange ?? null} hasData={hasTelemetry} />
 
@@ -252,12 +225,27 @@ export function DashboardPage() {
           />
         </div>
 
-        <div className="mt-5 rounded-2xl border border-border-subtle bg-bg-overlay/70 p-4 h-36 flex items-end justify-between">
+        <div className="mt-5 rounded-2xl border border-border-subtle bg-bg-overlay/70 p-4 h-20 flex items-center justify-between">
           <div>
-            <p className="text-sm text-text-primary">{state?.latitude && state?.longitude ? 'Position active' : 'Position indisponible'}</p>
-            <p className={cn('text-xs mt-1', hasTelemetry ? 'text-success' : 'text-text-muted')}>{hasTelemetry ? 'Connected' : 'Waiting sync'}</p>
+            <p className="text-sm text-text-primary">{location ? 'Dernière position connue' : 'Position indisponible'}</p>
+            <p className="text-xs text-text-muted mt-0.5">
+              {location
+                ? `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)} · ${formatDate(location.capturedAt)}`
+                : 'Aucune donnée GPS enregistrée'}
+            </p>
           </div>
-          <MapPin size={18} className="text-accent-400" />
+          {location ? (
+            <a
+              href={`https://www.google.com/maps?q=${location.latitude},${location.longitude}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent-400 hover:text-accent-300 ml-3 flex-shrink-0"
+            >
+              <MapPin size={20} />
+            </a>
+          ) : (
+            <MapPin size={18} className="text-text-muted flex-shrink-0" />
+          )}
         </div>
       </Card>
 

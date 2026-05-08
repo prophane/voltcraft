@@ -44,13 +44,13 @@ export class VehicleService {
     const vehicle = await this.repo.findActive(userId)
     if (!vehicle) throw new NotFoundError('Vehicle')
 
-    const snapshot = await this.repo.getLatestSnapshot(vehicle.id)
-    if (!snapshot?.latitude || !snapshot?.longitude) {
-      return null
-    }
+    // Tesla doesn't always include GPS when parked — find the last snapshot that has coords.
+    const snapshot = await this.repo.getLatestLocationSnapshot(vehicle.id)
+    if (!snapshot) return null
+
     return {
-      latitude: snapshot.latitude,
-      longitude: snapshot.longitude,
+      latitude: snapshot.latitude!,
+      longitude: snapshot.longitude!,
       heading: snapshot.heading,
       capturedAt: snapshot.capturedAt,
       isCached: true,

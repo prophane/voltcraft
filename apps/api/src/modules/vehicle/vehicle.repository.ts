@@ -66,6 +66,18 @@ export class VehicleRepository {
     })
   }
 
+  async getLatestLocationSnapshot(vehicleId: string) {
+    return this.db.vehicleStateSnapshot.findFirst({
+      where: {
+        vehicleId,
+        latitude: { not: null },
+        longitude: { not: null },
+      },
+      orderBy: { capturedAt: 'desc' },
+      select: { latitude: true, longitude: true, heading: true, capturedAt: true },
+    })
+  }
+
   async getRecentSnapshots(vehicleId: string, hours = 24) {
     const since = new Date(Date.now() - hours * 3_600_000)
     return this.db.vehicleStateSnapshot.findMany({
