@@ -219,6 +219,10 @@ docker compose --profile teslamate up -d teslamate-db teslamate teslamate-grafan
 3. Vérifier l'arrivée des données de trajet/charge
 4. Ouvrir Grafana sur `http://localhost:3002`
 
+Notes:
+- MQTT TeslaMate est optionnel et désactivé par défaut dans cette intégration.
+- Grafana TeslaMate utilise `TESLAMATE_GRAFANA_USER` / `TESLAMATE_GRAFANA_PASSWORD`.
+
 ### 4. Vérifications rapides
 
 ```bash
