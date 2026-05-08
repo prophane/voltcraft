@@ -68,11 +68,140 @@ export class TeslaSyncService {
 
       await this.vehicleRepo.createSnapshot(vehicle.id, snapshot as never)
       await this.ecoPolicy.setCachedState(vehicle.id, snapshot as never, isAsleep)
+
+      // Keep higher-level entities (trips/charge sessions) in sync with telemetry.
+      await this.updateTripTracking(vehicle.id, snapshot)
+      await this.updateChargeTracking(vehicle.id, snapshot)
+
       await this.vehicleRepo.updateLastSync(vehicle.teslaAccountId)
 
       return snapshot
     } finally {
       await this.ecoPolicy.releaseSyncLock(vehicle.id)
     }
+  }
+
+  private async updateTripTracking(vehicleId: string, snapshot: {
+    isDriving: boolean
+    speed: number | null
+    latitude: number | null
+    longitude: number | null
+    odometer: number | null
+    batteryLevel: number
+  }) {
+    const openTrip = await this.db.trip.findFirst({
+      where: { vehicleId, endedAt: null },
+      orderBy: { startedAt: 'desc' },
+    })
+
+    if (snapshot.isDriving) {
+      if (!openTrip) {
+        await this.db.trip.create({
+          data: {
+            vehicleId,
+            startedAt: new Date(),
+            startLatitude: snapshot.latitude,
+            startLongitude: snapshot.longitude,
+            startBatteryLevel: snapshot.batteryLevel,
+            maxSpeedKmh: snapshot.speed ?? null,
+          },
+        })
+        return
+      }
+
+      if (snapshot.speed != null && (openTrip.maxSpeedKmh == null || snapshot.speed > openTrip.maxSpeedKmh)) {
+        await this.db.trip.update({
+          where: { id: openTrip.id },
+          data: { maxSpeedKmh: snapshot.speed },
+        })
+      }
+      return
+    }
+
+    if (!openTrip) {
+      return
+    }
+
+    const endedAt = new Date()
+    const durationMin = Math.max(1, Math.round((endedAt.getTime() - openTrip.startedAt.getTime()) / 60_000))
+
+    // Estimate trip distance from odometer delta over trip period when available.
+    let distanceKm: number | null = openTrip.distanceKm ?? null
+    if (snapshot.odometer != null) {
+      const firstSnapshot = await this.db.vehicleStateSnapshot.findFirst({
+        where: {
+          vehicleId,
+          capturedAt: { gte: openTrip.startedAt },
+          odometer: { not: null },
+        },
+        orderBy: { capturedAt: 'asc' },
+        select: { odometer: true },
+      })
+
+      if (firstSnapshot?.odometer != null) {
+        const delta = snapshot.odometer - firstSnapshot.odometer
+        distanceKm = delta > 0 ? Math.round(delta * 100) / 100 : distanceKm
+      }
+    }
+
+    await this.db.trip.update({
+      where: { id: openTrip.id },
+      data: {
+        endedAt,
+        durationMin,
+        distanceKm,
+        endLatitude: snapshot.latitude,
+        endLongitude: snapshot.longitude,
+        endBatteryLevel: snapshot.batteryLevel,
+      },
+    })
+  }
+
+  private async updateChargeTracking(vehicleId: string, snapshot: {
+    isCharging: boolean
+    chargeState: string | null
+    batteryLevel: number
+    chargeLimitSoc: number | null
+    latitude: number | null
+    longitude: number | null
+  }) {
+    const openSession = await this.db.chargeSession.findFirst({
+      where: { vehicleId, endedAt: null },
+      orderBy: { startedAt: 'desc' },
+    })
+
+    if (snapshot.isCharging) {
+      if (!openSession) {
+        await this.db.chargeSession.create({
+          data: {
+            vehicleId,
+            startedAt: new Date(),
+            startBatteryLevel: snapshot.batteryLevel,
+            chargeLimitSoc: snapshot.chargeLimitSoc,
+            latitude: snapshot.latitude,
+            longitude: snapshot.longitude,
+            chargeType: 'UNKNOWN',
+          },
+        })
+      }
+      return
+    }
+
+    if (!openSession) {
+      return
+    }
+
+    const endedAt = new Date()
+    const durationMin = Math.max(1, Math.round((endedAt.getTime() - openSession.startedAt.getTime()) / 60_000))
+
+    await this.db.chargeSession.update({
+      where: { id: openSession.id },
+      data: {
+        endedAt,
+        durationMin,
+        endBatteryLevel: snapshot.batteryLevel,
+        chargeLimitSoc: snapshot.chargeLimitSoc,
+      },
+    })
   }
 }
