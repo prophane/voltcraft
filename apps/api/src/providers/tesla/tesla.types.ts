@@ -28,6 +28,7 @@ export interface TeslaClimateState {
   inside_temp: number | null
   outside_temp: number | null
   seat_heater_left: number
+  cabin_overheat_protection?: string | null
 }
 
 export interface TeslaDriveState {

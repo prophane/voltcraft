@@ -44,9 +44,14 @@ export class TeslaSyncService {
       const climateState = data.climate_state ?? ({} as Partial<typeof data.climate_state>)
       const driveState = data.drive_state ?? ({} as Partial<typeof data.drive_state>)
       const vehicleState = data.vehicle_state ?? ({} as Partial<typeof data.vehicle_state>)
+      const copModeRaw = (climateState.cabin_overheat_protection ?? '').toString().toLowerCase()
+      const cabinOverheatProtectionMode =
+        copModeRaw.includes('fan') ? 'fan_only'
+          : copModeRaw.includes('on') || copModeRaw.includes('a/c') || copModeRaw.includes('ac') ? 'on'
+            : 'off'
 
       const isAsleep = data.state === 'asleep' || data.state === 'offline'
-      const snapshot = {
+      const snapshotForDb = {
         vehicleState: data.state,
         odometer: vehicleState.odometer ?? null,
 
@@ -79,12 +84,17 @@ export class TeslaSyncService {
         atHome: false, // computed by home geofence check elsewhere
       }
 
-      await this.vehicleRepo.createSnapshot(vehicle.id, snapshot as never)
+      const snapshot = {
+        ...snapshotForDb,
+        cabinOverheatProtectionMode,
+      }
+
+      await this.vehicleRepo.createSnapshot(vehicle.id, snapshotForDb as never)
       await this.ecoPolicy.setCachedState(vehicle.id, snapshot as never, isAsleep)
 
       // Keep higher-level entities (trips/charge sessions) in sync with telemetry.
-      await this.updateTripTracking(vehicle.id, snapshot)
-      await this.updateChargeTracking(vehicle.id, snapshot)
+      await this.updateTripTracking(vehicle.id, snapshotForDb)
+      await this.updateChargeTracking(vehicle.id, snapshotForDb)
 
       await this.vehicleRepo.updateLastSync(vehicle.teslaAccountId)
 

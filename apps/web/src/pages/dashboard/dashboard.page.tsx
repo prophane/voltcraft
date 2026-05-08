@@ -76,6 +76,27 @@ function QuickActionTile({
 export function DashboardPage() {
   const qc = useQueryClient()
 
+  const refreshVehicleQueries = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['vehicle', 'current'] }),
+      qc.invalidateQueries({ queryKey: ['vehicle', 'state'] }),
+      qc.invalidateQueries({ queryKey: ['vehicle', 'location'] }),
+    ])
+
+    await Promise.all([
+      qc.refetchQueries({ queryKey: ['vehicle', 'current'] }),
+      qc.refetchQueries({ queryKey: ['vehicle', 'state'] }),
+      qc.refetchQueries({ queryKey: ['vehicle', 'location'] }),
+    ])
+  }
+
+  const runCommandAndRefresh = async (command: () => Promise<unknown>) => {
+    await command()
+    // Force a telemetry refresh so UI lock state reflects the command result quickly.
+    await vehicleApi.sync().catch(() => undefined)
+    await refreshVehicleQueries()
+  }
+
   const { data: vehicle } = useQuery({
     queryKey: ['vehicle', 'current'],
     queryFn: vehicleApi.getCurrent,
@@ -104,24 +125,20 @@ export function DashboardPage() {
 
   const syncMutation = useMutation({
     mutationFn: vehicleApi.sync,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle'] }),
+    onSuccess: () => refreshVehicleQueries(),
   })
 
   const lockMutation = useMutation({
-    mutationFn: commandsApi.lock,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle'] }),
+    mutationFn: () => runCommandAndRefresh(commandsApi.lock),
   })
   const unlockMutation = useMutation({
-    mutationFn: commandsApi.unlock,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle'] }),
+    mutationFn: () => runCommandAndRefresh(commandsApi.unlock),
   })
   const climateStartMutation = useMutation({
-    mutationFn: commandsApi.climateStart,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle'] }),
+    mutationFn: () => runCommandAndRefresh(commandsApi.climateStart),
   })
   const wakeMutation = useMutation({
-    mutationFn: commandsApi.wake,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle'] }),
+    mutationFn: () => runCommandAndRefresh(commandsApi.wake),
   })
 
   const hasTelemetry = Boolean(
@@ -153,6 +170,12 @@ export function DashboardPage() {
     : state.isLocked
       ? 'Verrouille'
       : 'Deverrouille'
+
+  const copLabel = state?.cabinOverheatProtectionMode === 'on'
+    ? 'COP ON'
+    : state?.cabinOverheatProtectionMode === 'fan_only'
+      ? 'COP FAN'
+      : 'COP OFF'
 
   return (
     <div className="max-w-md lg:max-w-5xl mx-auto space-y-5">
@@ -223,7 +246,7 @@ export function DashboardPage() {
           <QuickActionTile
             icon={<Thermometer size={18} />}
             label="Climate"
-            subtitle={state?.insideTemp != null ? `${Math.round(state.insideTemp)}°` : undefined}
+            subtitle={state?.insideTemp != null ? `${Math.round(state.insideTemp)}° · ${copLabel}` : copLabel}
             onClick={() => climateStartMutation.mutate()}
             loading={climateStartMutation.isPending}
             disabled={!vehicle}

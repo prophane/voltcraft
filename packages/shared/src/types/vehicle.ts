@@ -28,6 +28,7 @@ export interface VehicleStateSnapshot {
   insideTemp: number | null  // °C
   outsideTemp: number | null // °C
   isSeatHeaterOn: boolean
+  cabinOverheatProtectionMode?: 'off' | 'fan_only' | 'on'
 
   // Locks
   isLocked: boolean
