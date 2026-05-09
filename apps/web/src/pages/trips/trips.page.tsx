@@ -178,8 +178,8 @@ function buildPathInsights(points: TripPathPoint[]): TripPathInsights | null {
 
   const firstOdo = timePoints.find((p) => p.odometer != null)?.odometer ?? null
   const lastOdo = [...timePoints].reverse().find((p) => p.odometer != null)?.odometer ?? null
-  const avgSpeed = speeds.length > 0 ? speeds.reduce((sum, s) => sum + s, 0) / speeds.length : null
-  const maxSpeed = speeds.length > 0 ? Math.max(...speeds) : null
+  const avgSpeed = speeds.length >= 3 ? speeds.reduce((sum, s) => sum + s, 0) / speeds.length : null
+  const maxSpeed = speeds.length >= 3 ? Math.max(...speeds) : null
 
   const bins = [0, 20, 40, 60, 80, 100, 120, 140]
   const counts = Array.from({ length: bins.length }, () => 0)
@@ -480,6 +480,9 @@ export function TripsPage() {
               ? buildTripRouteEmbedUrl(detailStartCoords, detailEndCoords, selectedPath)
               : null
             const pathInsights = isSelected ? buildPathInsights(selectedPath) : null
+            const avgSpeedFromTrip = (detailTrip.distanceKm ?? 0) > 0 && (detailTrip.durationMin ?? 0) > 0
+              ? (detailTrip.distanceKm as number) / ((detailTrip.durationMin as number) / 60)
+              : null
 
             return (
             <Card
@@ -591,7 +594,7 @@ export function TripsPage() {
                         <DetailMetric
                           icon={Gauge}
                           label="Vitesse moy"
-                          value={pathInsights.avgSpeed != null ? `${Math.round(pathInsights.avgSpeed)} km/h` : '—'}
+                          value={avgSpeedFromTrip != null ? `${Math.round(avgSpeedFromTrip)} km/h` : pathInsights.avgSpeed != null ? `${Math.round(pathInsights.avgSpeed)} km/h` : '—'}
                         />
                         <DetailMetric
                           icon={Gauge}
@@ -607,7 +610,11 @@ export function TripsPage() {
 
                       <div className="rounded-xl border border-border-subtle bg-bg-overlay/55 p-3">
                         <p className="text-xs uppercase tracking-wide text-text-muted mb-2">Distribution vitesse</p>
-                        <SpeedDistribution bins={pathInsights.speedBins} />
+                        {pathInsights.speedBins.reduce((sum, bin) => sum + bin.count, 0) >= 3 ? (
+                          <SpeedDistribution bins={pathInsights.speedBins} />
+                        ) : (
+                          <p className="text-xs text-text-muted">Échantillons vitesse insuffisants pour histogramme fiable.</p>
+                        )}
                         <p className="text-xs text-text-muted mt-2">
                           Énergie nette consommée: {pathInsights.consumedKwh > 0 ? `${pathInsights.consumedKwh.toFixed(2)} kWh` : '—'}
                         </p>

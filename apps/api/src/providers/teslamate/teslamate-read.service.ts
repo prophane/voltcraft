@@ -113,6 +113,16 @@ function coordLabel(lat: unknown, lon: unknown) {
   return `${la.toFixed(5)}, ${lo.toFixed(5)}`
 }
 
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+  return 6371 * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)))
+}
+
 function toVehicleState(row: TeslaMateVehicleRow, fallback?: FallbackSnapshot) {
   const stale = isStaleTelemetry(row.captured_at ?? fallback?.capturedAt)
 
@@ -235,13 +245,19 @@ export class TeslaMateReadService {
     const rows = await this.query<{
       start_odometer: number | string | null
       end_odometer: number | string | null
-      distance_km: number | string | null
+      start_latitude: number | string | null
+      start_longitude: number | string | null
+      end_latitude: number | string | null
+      end_longitude: number | string | null
     }>(
       `
         SELECT
           sp.odometer AS start_odometer,
           ep.odometer AS end_odometer,
-          d.distance AS distance_km
+          sp.latitude AS start_latitude,
+          sp.longitude AS start_longitude,
+          ep.latitude AS end_latitude,
+          ep.longitude AS end_longitude
         FROM drives d
         INNER JOIN cars c ON c.id = d.car_id
         LEFT JOIN positions sp ON sp.id = d.start_position_id
@@ -249,9 +265,12 @@ export class TeslaMateReadService {
         WHERE c.vin = $1
           AND sp.odometer IS NOT NULL
           AND ep.odometer IS NOT NULL
-          AND d.distance IS NOT NULL
+          AND sp.latitude IS NOT NULL
+          AND sp.longitude IS NOT NULL
+          AND ep.latitude IS NOT NULL
+          AND ep.longitude IS NOT NULL
         ORDER BY d.start_date DESC
-        LIMIT 8
+        LIMIT 16
       `,
       [vin],
     )
@@ -261,8 +280,14 @@ export class TeslaMateReadService {
     for (const row of rows) {
       const start = toNumber(row.start_odometer)
       const end = toNumber(row.end_odometer)
-      const distanceKm = toNumber(row.distance_km)
-      if (start == null || end == null || distanceKm == null) continue
+      const startLat = toNumber(row.start_latitude)
+      const startLon = toNumber(row.start_longitude)
+      const endLat = toNumber(row.end_latitude)
+      const endLon = toNumber(row.end_longitude)
+      if (start == null || end == null || startLat == null || startLon == null || endLat == null || endLon == null) continue
+
+      const distanceKm = haversineKm(startLat, startLon, endLat, endLon)
+      if (!Number.isFinite(distanceKm) || distanceKm < 0.5) continue
 
       const delta = end - start
       if (!Number.isFinite(delta) || delta <= 0) continue
@@ -307,6 +332,7 @@ export class TeslaMateReadService {
 
     const chargePower = toNumber(row.charger_power)
     const odometerMultiplier = await this.inferOdometerMultiplier(vehicle.vin)
+    const speedMultiplier = odometerMultiplier
     const teslamateOdometer = toNumber(row.odometer)
     const teslamateOdometerKm = teslamateOdometer != null ? teslamateOdometer * odometerMultiplier : null
     const odometer = resolveOdometer(teslamateOdometerKm, toNumber(fallback?.odometer), toDate(row.captured_at))
@@ -334,7 +360,7 @@ export class TeslaMateReadService {
       isTrunkOpen: fallback?.isTrunkOpen ?? false,
       isFrunkOpen: fallback?.isFrunkOpen ?? false,
       isDriving: row.open_drive_id != null || fallback?.isDriving === true,
-      speed: toNumber(row.speed) ?? fallback?.speed ?? null,
+      speed: toNumber(row.speed) != null ? (toNumber(row.speed) as number) * speedMultiplier : fallback?.speed ?? null,
       power: toNumber(row.power) ?? fallback?.power ?? null,
       latitude: toNumber(row.latitude) ?? fallback?.latitude ?? null,
       longitude: toNumber(row.longitude) ?? fallback?.longitude ?? null,
@@ -467,6 +493,8 @@ export class TeslaMateReadService {
 
   async getTripPath(vin: string, id: string) {
     if (this.failed) return []
+    const odometerMultiplier = await this.inferOdometerMultiplier(vin)
+    const speedMultiplier = odometerMultiplier
     const rows = await this.query<Array<Record<string, unknown>>[number]>(
       `
         SELECT
@@ -496,9 +524,9 @@ export class TeslaMateReadService {
       latitude: toNumber(row.latitude),
       longitude: toNumber(row.longitude),
       heading: null,
-      speed: toNumber(row.speed),
+      speed: toNumber(row.speed) != null ? (toNumber(row.speed) as number) * speedMultiplier : null,
       power: toNumber(row.power),
-      odometer: toNumber(row.odometer),
+      odometer: toNumber(row.odometer) != null ? (toNumber(row.odometer) as number) * odometerMultiplier : null,
       batteryLevel: toNumber(row.batteryLevel),
       isDriving: true,
     }))
