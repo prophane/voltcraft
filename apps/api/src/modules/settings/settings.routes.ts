@@ -11,6 +11,7 @@ import { persistTeslaOAuthConfig } from '../../config/tesla-config.js'
 import { persistTeslamateConfig } from '../../config/teslamate-config.js'
 import { TeslaClient } from '../../providers/tesla/tesla.client.js'
 import { formatTeslaMateUnavailableMessage } from '../../providers/teslamate/teslamate-read.service.js'
+import { TeslaMateGeofenceService } from '../../providers/teslamate/teslamate-geofence.service.js'
 import { z } from 'zod'
 
 const teslaOAuthCfgSchema = z.object({
@@ -244,6 +245,89 @@ export async function settingsRoutes(app: FastifyInstance) {
         code,
         message: formatTeslaMateUnavailableMessage('connection test', error),
       }))
+    }
+  })
+
+  // Geofence management (known locations)
+  const geofenceService = new TeslaMateGeofenceService()
+
+  app.get('/geofences', { schema: { tags: ['settings'] } }, async (req) => {
+    if (!env.AUTH_DISABLED) {
+      const token = await requireAuth(req)
+      await authService.validateSession(token)
+    }
+
+    try {
+      const geofences = await geofenceService.listGeofences()
+      return ok(geofences)
+    } catch (error) {
+      return ok({
+        error: formatTeslaMateUnavailableMessage('geofence list', error),
+        geofences: [],
+      })
+    }
+  })
+
+  app.post('/geofences', { schema: { tags: ['settings'] } }, async (req, reply) => {
+    if (!env.AUTH_DISABLED) {
+      const token = await requireAuth(req)
+      await authService.validateSession(token)
+    }
+
+    const input = z.object({
+      name: z.string().min(1),
+      latitude: z.number().min(-90).max(90),
+      longitude: z.number().min(-180).max(180),
+      radius: z.number().min(10).max(10000),
+      costPerUnit: z.number().min(0).optional(),
+      billingType: z.enum(['per_kwh', 'per_minute']).optional(),
+    }).parse(req.body)
+
+    try {
+      const geofence = await geofenceService.createGeofence(input)
+      return reply.status(201).send(ok(geofence))
+    } catch (error) {
+      return reply.status(500).send({ error: formatTeslaMateUnavailableMessage('geofence creation', error) })
+    }
+  })
+
+  app.patch('/geofences/:id', { schema: { tags: ['settings'] } }, async (req, reply) => {
+    if (!env.AUTH_DISABLED) {
+      const token = await requireAuth(req)
+      await authService.validateSession(token)
+    }
+
+    const { id } = z.object({ id: z.coerce.number().int().positive() }).parse(req.params)
+    const input = z.object({
+      name: z.string().min(1).optional(),
+      latitude: z.number().min(-90).max(90).optional(),
+      longitude: z.number().min(-180).max(180).optional(),
+      radius: z.number().min(10).max(10000).optional(),
+      costPerUnit: z.number().min(0).optional(),
+      billingType: z.enum(['per_kwh', 'per_minute']).optional(),
+    }).parse(req.body)
+
+    try {
+      const geofence = await geofenceService.updateGeofence(id, input)
+      return ok(geofence)
+    } catch (error) {
+      return reply.status(500).send({ error: formatTeslaMateUnavailableMessage('geofence update', error) })
+    }
+  })
+
+  app.delete('/geofences/:id', { schema: { tags: ['settings'] } }, async (req, reply) => {
+    if (!env.AUTH_DISABLED) {
+      const token = await requireAuth(req)
+      await authService.validateSession(token)
+    }
+
+    const { id } = z.object({ id: z.coerce.number().int().positive() }).parse(req.params)
+
+    try {
+      await geofenceService.deleteGeofence(id)
+      return ok({ deleted: true })
+    } catch (error) {
+      return reply.status(500).send({ error: formatTeslaMateUnavailableMessage('geofence deletion', error) })
     }
   })
 }
