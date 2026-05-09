@@ -1,10 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { settingsApi, diagnosticsApi } from '@/features/vehicle/api'
-import type { TeslamateSettingsStatus, TeslamateSettingsInput } from '@/features/vehicle/api'
+import type {
+  TeslamateSettingsStatus,
+  TeslamateSettingsInput,
+  TeslamateConnectionTestResult,
+} from '@/features/vehicle/api'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
+import { ApiError } from '@/lib/api-client'
 import { TeslaSettingsSection } from './tesla-section'
 import { MENU_ICON_REGISTRY } from '@/components/layout/nav-config'
 import { getNavPreferences, resetNavPreferences, setNavPreferences, type NavPreferences } from '@/features/preferences/nav-preferences'
@@ -56,6 +61,24 @@ export function SettingsPage() {
   const updateTeslamateMutation = useMutation({
     mutationFn: (data: TeslamateSettingsInput) => settingsApi.updateTeslamate(data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'teslamate'] }),
+  })
+
+  const [teslamateTestResult, setTeslamateTestResult] = useState<TeslamateConnectionTestResult | null>(null)
+  const testTeslamateConnectionMutation = useMutation({
+    mutationFn: (data: Pick<TeslamateSettingsInput, 'dbName' | 'dbUser' | 'dbPassword'>) =>
+      settingsApi.testTeslamateConnection(data),
+    onSuccess: (result) => {
+      setTeslamateTestResult(result)
+    },
+    onError: (error) => {
+      if (error instanceof ApiError) {
+        setTeslamateTestResult({ connected: false, code: error.code, message: error.message })
+      } else if (error instanceof Error) {
+        setTeslamateTestResult({ connected: false, code: 'UNKNOWN', message: error.message })
+      } else {
+        setTeslamateTestResult({ connected: false, code: 'UNKNOWN', message: 'Connection test failed.' })
+      }
+    },
   })
 
   useEffect(() => {
@@ -400,10 +423,35 @@ export function SettingsPage() {
               >
                 Sauvegarder la config TeslaMate
               </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={testTeslamateConnectionMutation.isPending}
+                onClick={() =>
+                  testTeslamateConnectionMutation.mutate({
+                    dbName: teslamateForm.dbName,
+                    dbUser: teslamateForm.dbUser,
+                    dbPassword: teslamateForm.dbPassword,
+                  })
+                }
+              >
+                Tester la connexion
+              </Button>
               {updateTeslamateMutation.isSuccess && (
                 <p className="text-xs text-success">Configuration enregistree.</p>
               )}
             </div>
+
+            {teslamateTestResult && (
+              <div className={`rounded-lg border p-3 text-xs ${teslamateTestResult.connected
+                ? 'border-success/30 bg-success/10 text-success'
+                : 'border-error/30 bg-error/10 text-text-secondary'}`}>
+                <p className="font-medium mb-1">
+                  {teslamateTestResult.connected ? 'Connexion TeslaMate OK' : `Connexion TeslaMate KO (${teslamateTestResult.code})`}
+                </p>
+                <p>{teslamateTestResult.message}</p>
+              </div>
+            )}
           </div>
         )}
       </Card>

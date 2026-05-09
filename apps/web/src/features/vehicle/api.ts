@@ -148,6 +148,12 @@ export interface TeslamateSettingsInput {
   backendOnly?: boolean
 }
 
+export interface TeslamateConnectionTestResult {
+  connected: boolean
+  code: string
+  message: string
+}
+
 export const settingsApi = {
   get: () => api.get<unknown>('/settings'),
   update: (data: unknown) => api.patch('/settings', data),
@@ -156,6 +162,8 @@ export const settingsApi = {
   registerTeslaPartner: (domain: string) => api.post('/settings/tesla/register-partner', { domain }),
   getTeslamate: () => api.get<TeslamateSettingsStatus>('/settings/teslamate'),
   updateTeslamate: (data: TeslamateSettingsInput) => api.patch('/settings/teslamate', data),
+  testTeslamateConnection: (data: Pick<TeslamateSettingsInput, 'dbName' | 'dbUser' | 'dbPassword'>) =>
+    api.post<TeslamateConnectionTestResult>('/settings/teslamate/test-connection', data),
 }
 
 export const diagnosticsApi = {

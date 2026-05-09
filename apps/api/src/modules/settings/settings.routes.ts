@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import { Pool } from 'pg'
 import { SettingsRepository } from './settings.repository.js'
 import { AuthRepository } from '../auth/auth.repository.js'
 import { AuthService } from '../auth/auth.service.js'
@@ -9,6 +10,7 @@ import { env } from '../../config/env.js'
 import { persistTeslaOAuthConfig } from '../../config/tesla-config.js'
 import { persistTeslamateConfig } from '../../config/teslamate-config.js'
 import { TeslaClient } from '../../providers/tesla/tesla.client.js'
+import { formatTeslaMateUnavailableMessage } from '../../providers/teslamate/teslamate-read.service.js'
 import { z } from 'zod'
 
 const teslaOAuthCfgSchema = z.object({
@@ -28,6 +30,12 @@ const teslamateCfgSchema = z.object({
   port: z.number().int().min(1).max(65535).optional(),
   grafanaPort: z.number().int().min(1).max(65535).optional(),
   backendOnly: z.boolean().optional(),
+})
+
+const teslamateConnectionTestSchema = z.object({
+  dbName: z.string().min(1).optional(),
+  dbUser: z.string().min(1).optional(),
+  dbPassword: z.string().min(1).optional(),
 })
 
 export async function settingsRoutes(app: FastifyInstance) {
@@ -189,5 +197,53 @@ export async function settingsRoutes(app: FastifyInstance) {
         grafanaPort: env.TESLAMATE_GRAFANA_PORT,
       },
     }))
+  })
+
+  app.post('/teslamate/test-connection', { schema: { tags: ['settings'] } }, async (req, reply) => {
+    if (!env.AUTH_DISABLED) {
+      const token = await requireAuth(req)
+      await authService.validateSession(token)
+    }
+
+    const input = teslamateConnectionTestSchema.parse(req.body ?? {})
+    const dbName = input.dbName?.trim() || env.TESLAMATE_DB_NAME
+    const dbUser = input.dbUser?.trim() || env.TESLAMATE_DB_USER
+    const dbPassword = input.dbPassword?.trim() || env.TESLAMATE_DB_PASSWORD
+
+    if (!dbPassword) {
+      return reply.status(200).send(ok({
+        connected: false,
+        code: 'MISSING_PASSWORD',
+        message: 'TESLAMATE_DB_PASSWORD is missing. Set it in settings before testing.',
+      }))
+    }
+
+    const pool = new Pool({
+      host: env.TESLAMATE_DB_HOST,
+      port: env.TESLAMATE_DB_PORT,
+      database: dbName,
+      user: dbUser,
+      password: dbPassword,
+      connectionTimeoutMillis: 5000,
+    })
+
+    try {
+      await pool.query('SELECT 1')
+      return reply.status(200).send(ok({
+        connected: true,
+        code: 'OK',
+        message: `TeslaMate DB connection successful (${dbUser}@${env.TESLAMATE_DB_HOST}:${env.TESLAMATE_DB_PORT}/${dbName}).`,
+      }))
+    } catch (error) {
+      const code = typeof error === 'object' && error && 'code' in error && typeof (error as { code?: unknown }).code === 'string'
+        ? (error as { code: string }).code
+        : 'UNKNOWN'
+
+      return reply.status(200).send(ok({
+        connected: false,
+        code,
+        message: formatTeslaMateUnavailableMessage('connection test', error),
+      }))
+    }
   })
 }
