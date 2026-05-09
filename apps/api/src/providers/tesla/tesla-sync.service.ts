@@ -54,7 +54,7 @@ export class TeslaSyncService {
       const isAsleep = data.state === 'asleep' || data.state === 'offline'
       const snapshotForDb = {
         vehicleState: data.state,
-        odometer: vehicleState.odometer ?? null,
+        odometer: vehicleState.odometer != null ? vehicleState.odometer * 1.609344 : null,
 
         batteryLevel: chargeState.battery_level ?? 0,
         batteryRange: (chargeState.battery_range ?? 0) * 1.609344, // miles → km
@@ -76,7 +76,7 @@ export class TeslaSyncService {
         isFrunkOpen: (vehicleState.ft ?? 0) > 0,
 
         isDriving: isDrivingNow,
-        speed: driveState.speed ?? null,
+        speed: driveState.speed != null ? driveState.speed * 1.609344 : null,
         power: driveState.power ?? null,
 
         latitude,

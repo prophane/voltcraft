@@ -181,6 +181,7 @@ export class TeslaMateReadService {
       })
     : null
     private failed = false
+    private readonly odometerMultiplierCache = new Map<string, { value: number; at: number }>()
 
   isEnabled() {
       return this.enabled
@@ -195,6 +196,62 @@ export class TeslaMateReadService {
         this.failed = true
         return [] as T[]
       }
+  }
+
+  private async inferOdometerMultiplier(vin: string): Promise<number> {
+    const cached = this.odometerMultiplierCache.get(vin)
+    if (cached && Date.now() - cached.at < 60 * 60_000) {
+      return cached.value
+    }
+
+    const rows = await this.query<{
+      start_odometer: number | string | null
+      end_odometer: number | string | null
+      distance_km: number | string | null
+    }>(
+      `
+        SELECT
+          sp.odometer AS start_odometer,
+          ep.odometer AS end_odometer,
+          d.distance AS distance_km
+        FROM drives d
+        INNER JOIN cars c ON c.id = d.car_id
+        LEFT JOIN positions sp ON sp.id = d.start_position_id
+        LEFT JOIN positions ep ON ep.id = d.end_position_id
+        WHERE c.vin = $1
+          AND sp.odometer IS NOT NULL
+          AND ep.odometer IS NOT NULL
+          AND d.distance IS NOT NULL
+        ORDER BY d.start_date DESC
+        LIMIT 8
+      `,
+      [vin],
+    )
+
+    let mileVotes = 0
+    let kmVotes = 0
+    for (const row of rows) {
+      const start = toNumber(row.start_odometer)
+      const end = toNumber(row.end_odometer)
+      const distanceKm = toNumber(row.distance_km)
+      if (start == null || end == null || distanceKm == null) continue
+
+      const delta = end - start
+      if (!Number.isFinite(delta) || delta <= 0) continue
+
+      const asKmError = Math.abs(delta - distanceKm)
+      const asMiError = Math.abs(delta * 1.609344 - distanceKm)
+
+      if (asMiError + 0.2 < asKmError) {
+        mileVotes += 1
+      } else {
+        kmVotes += 1
+      }
+    }
+
+    const multiplier = mileVotes > kmVotes ? 1.609344 : 1
+    this.odometerMultiplierCache.set(vin, { value: multiplier, at: Date.now() })
+    return multiplier
   }
 
   async getCurrentVehicle(vehicle: VehicleIdentity, fallback?: FallbackSnapshot) {
@@ -221,7 +278,10 @@ export class TeslaMateReadService {
     if (!row) return null
 
     const chargePower = toNumber(row.charger_power)
-    const odometer = resolveOdometer(toNumber(row.odometer), toNumber(fallback?.odometer), toDate(row.captured_at))
+    const odometerMultiplier = await this.inferOdometerMultiplier(vehicle.vin)
+    const teslamateOdometer = toNumber(row.odometer)
+    const teslamateOdometerKm = teslamateOdometer != null ? teslamateOdometer * odometerMultiplier : null
+    const odometer = resolveOdometer(teslamateOdometerKm, toNumber(fallback?.odometer), toDate(row.captured_at))
 
     return {
       vehicleId: vehicle.id,
