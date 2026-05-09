@@ -1,8 +1,11 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { chargesApi } from '@/features/vehicle/api'
 import { Card } from '@/components/ui/card'
 import { CardSkeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
+import { api, ApiError } from '@/lib/api-client'
 import { formatDate, formatDuration } from '@/lib/utils'
+import { useState } from 'react'
 import { Battery, Clock, Euro, Gauge, MapPin, Zap } from 'lucide-react'
 
 type ChargeSessionRecord = {
@@ -20,6 +23,8 @@ type ChargeSessionRecord = {
   maxChargeKw?: number | null
   avgChargeKw?: number | null
   address?: string | null
+  latitude?: number | null
+  longitude?: number | null
 }
 
 function parseNumber(value: unknown): number | null {
@@ -32,6 +37,13 @@ function parseString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const v = value.trim()
   return v.length > 0 ? v : null
+}
+
+function cleanLocationName(address: string | null | undefined): string {
+  if (!address) return ''
+  const value = address.trim()
+  if (!value || value.toLowerCase() === 'emplacement inconnu') return ''
+  return value
 }
 
 function normalizeSession(raw: unknown): ChargeSessionRecord | null {
@@ -56,6 +68,8 @@ function normalizeSession(raw: unknown): ChargeSessionRecord | null {
     maxChargeKw: parseNumber(row.maxChargeKw ?? row.max_charge_kw),
     avgChargeKw: parseNumber(row.avgChargeKw ?? row.avg_charge_kw),
     address: parseString(row.address),
+    latitude: parseNumber(row.latitude),
+    longitude: parseNumber(row.longitude),
   }
 }
 
@@ -79,6 +93,12 @@ function chargeTypeLabel(type?: string | null) {
 }
 
 export function ChargesPage() {
+  const queryClient = useQueryClient()
+  const [expandedGeofenceForId, setExpandedGeofenceForId] = useState<string | null>(null)
+  const [geofenceName, setGeofenceName] = useState('')
+  const [geofenceRadius, setGeofenceRadius] = useState(100)
+  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null)
+
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['charges'],
     queryFn: () => chargesApi.list(),
@@ -89,6 +109,22 @@ export function ChargesPage() {
     placeholderData: (previousData) => previousData,
   })
 
+  const createGeofenceMutation = useMutation({
+    mutationFn: (payload: { name: string; latitude: number; longitude: number; radius: number }) =>
+      api.post('/settings/geofences', payload),
+    onSuccess: (_, variables) => {
+      setFeedbackMessage(`Geofence "${variables.name}" creee avec succes.`)
+      setExpandedGeofenceForId(null)
+      setGeofenceName('')
+      setGeofenceRadius(100)
+      queryClient.invalidateQueries({ queryKey: ['geofences'] })
+    },
+    onError: (mutationError) => {
+      const message = mutationError instanceof ApiError ? mutationError.message : 'Erreur inconnue'
+      setFeedbackMessage(`Creation impossible: ${message}`)
+    },
+  })
+
   const sessions = normalizeSessions(data)
   const addressCounts = sessions.reduce((acc, session) => {
     const key = session.address ?? ''
@@ -96,6 +132,39 @@ export function ChargesPage() {
     acc.set(key, (acc.get(key) ?? 0) + 1)
     return acc
   }, new Map<string, number>())
+
+  const openGeofenceForm = (session: ChargeSessionRecord) => {
+    setExpandedGeofenceForId(session.id)
+    setGeofenceName(cleanLocationName(session.address))
+    setGeofenceRadius(100)
+    setFeedbackMessage(null)
+  }
+
+  const cancelGeofenceForm = () => {
+    setExpandedGeofenceForId(null)
+    setGeofenceName('')
+    setGeofenceRadius(100)
+  }
+
+  const submitGeofence = (session: ChargeSessionRecord) => {
+    if (session.latitude == null || session.longitude == null) {
+      setFeedbackMessage('Coordonnees indisponibles pour ce lieu.')
+      return
+    }
+
+    const name = geofenceName.trim()
+    if (!name) {
+      setFeedbackMessage('Le nom du lieu est requis.')
+      return
+    }
+
+    createGeofenceMutation.mutate({
+      name,
+      latitude: session.latitude,
+      longitude: session.longitude,
+      radius: geofenceRadius,
+    })
+  }
 
   return (
     <div className="space-y-6">
@@ -165,7 +234,15 @@ export function ChargesPage() {
                   </div>
                   <div className="p-2 rounded-lg bg-bg-overlay/50 border border-border-subtle">
                     <p className="text-[11px] uppercase text-text-muted">Lieu</p>
-                    <p className="text-text-primary font-medium mt-1 inline-flex items-center gap-1"><MapPin size={12} /> {session.address ?? 'Emplacement inconnu'}</p>
+                    <button
+                      type="button"
+                      className="text-text-primary font-medium mt-1 inline-flex items-center gap-1 underline-offset-2 hover:underline disabled:no-underline disabled:opacity-80"
+                      onClick={() => openGeofenceForm(session)}
+                      disabled={session.latitude == null || session.longitude == null}
+                      title={session.latitude == null || session.longitude == null ? 'Coordonnees indisponibles' : 'Ajouter ce lieu en geofence'}
+                    >
+                      <MapPin size={12} /> {session.address ?? 'Emplacement inconnu'}
+                    </button>
                     <p className="text-[11px] text-text-muted mt-1">{session.address && (addressCounts.get(session.address) ?? 0) > 1 ? 'Lieu connu' : 'Nouveau lieu'}</p>
                   </div>
                   <div className="p-2 rounded-lg bg-bg-overlay/50 border border-border-subtle">
@@ -174,10 +251,49 @@ export function ChargesPage() {
                     <p className="text-[11px] text-text-muted mt-1">{session.pricePerKwh != null ? `${session.pricePerKwh.toFixed(2)} €/kWh` : 'Tarif inconnu'}</p>
                   </div>
                 </div>
+
+                {expandedGeofenceForId === session.id && (
+                  <div className="rounded-lg border border-border-subtle bg-bg-overlay/50 p-3 space-y-3">
+                    <p className="text-xs uppercase text-text-muted">Ajouter en geofence</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Nom du lieu"
+                        className="w-full bg-bg-overlay border border-border rounded px-2 py-1.5 text-sm text-text-primary"
+                        value={geofenceName}
+                        onChange={(event) => setGeofenceName(event.target.value)}
+                      />
+                      <input
+                        type="number"
+                        min="10"
+                        max="10000"
+                        className="w-full bg-bg-overlay border border-border rounded px-2 py-1.5 text-sm text-text-primary"
+                        value={geofenceRadius}
+                        onChange={(event) => setGeofenceRadius(Math.max(10, Number(event.target.value) || 100))}
+                      />
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          loading={createGeofenceMutation.isPending}
+                          onClick={() => submitGeofence(session)}
+                        >
+                          Enregistrer
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={cancelGeofenceForm}>
+                          Annuler
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
           ))}
         </div>
+      )}
+
+      {feedbackMessage && (
+        <Card className="text-sm text-text-secondary">{feedbackMessage}</Card>
       )}
     </div>
   )

@@ -693,7 +693,7 @@ export class TeslaMateReadService {
           cp.start_battery_level AS "startBatteryLevel",
           cp.end_battery_level AS "endBatteryLevel",
           cp.duration_min AS "durationMin",
-          NULL::float8 AS "estimatedCost",
+          cp.cost::float8 AS "estimatedCost",
           cp.start_rated_range_km,
           cp.end_rated_range_km,
           cp.position_id,
@@ -759,6 +759,9 @@ export class TeslaMateReadService {
           cp.end_date AS "endedAt",
           COALESCE(cp.charge_energy_added, lc.charge_energy_added) AS "energyAddedKwh",
           cp.start_battery_level AS "startBatteryLevel",
+          cp.end_battery_level AS "endBatteryLevel",
+          cp.duration_min AS "durationMin",
+          cp.cost::float8 AS "estimatedCost",
           CASE
             WHEN g.name IS NOT NULL THEN g.name
             WHEN a.name IS NOT NULL AND a.road IS NOT NULL THEN a.name || ', ' || a.road || ', ' || COALESCE(a.city, a.county)
@@ -822,7 +825,7 @@ export class TeslaMateReadService {
       `
         SELECT
           COALESCE(SUM(COALESCE(cp.charge_energy_added, lc.charge_energy_added)), 0) AS energy_added_kwh,
-          0::numeric AS estimated_cost,
+          COALESCE(SUM(cp.cost), 0) AS estimated_cost,
           COALESCE(SUM(cp.duration_min), 0) AS duration_min,
           COUNT(*)::int AS total
         FROM charging_processes cp
