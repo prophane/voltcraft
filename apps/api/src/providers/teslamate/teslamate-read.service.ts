@@ -67,6 +67,7 @@ type TeslaMateVehicleRow = {
   open_state: 'online' | 'offline' | 'asleep' | null
   open_charge_id: number | null
   open_drive_id: number | null
+  charge_captured_at: Date | null
   charge_energy_added: number | string | null
   charger_power: number | string | null
   charger_phases: number | null
@@ -89,6 +90,13 @@ function isStaleTelemetry(value: unknown, maxAgeMinutes = 20): boolean {
   const date = toDate(value)
   if (!date) return false
   return Date.now() - date.getTime() > maxAgeMinutes * 60_000
+}
+
+function isChargeSignalFresh(positionCapturedAt: unknown, chargeCapturedAt: unknown, maxSkewMinutes = 6): boolean {
+  const posAt = toDate(positionCapturedAt)
+  const chargeAt = toDate(chargeCapturedAt)
+  if (!posAt || !chargeAt) return false
+  return chargeAt.getTime() >= posAt.getTime() - maxSkewMinutes * 60_000
 }
 
 function resolveOdometer(teslamateOdometer: number | null, fallbackOdometer: number | null, capturedAt: Date | null) {
@@ -127,13 +135,13 @@ function toVehicleState(row: TeslaMateVehicleRow, fallback?: FallbackSnapshot) {
   const stale = isStaleTelemetry(row.captured_at ?? fallback?.capturedAt)
   const chargePower = toNumber(row.charger_power)
   const chargerCurrent = toNumber(row.charger_actual_current)
+  const chargeSignalFresh = isChargeSignalFresh(row.captured_at, row.charge_captured_at)
   const isCharging = row.open_charge_id != null
     ? (
-      chargePower != null
-        ? chargePower > 0
-        : chargerCurrent != null
-          ? chargerCurrent > 0
-          : false
+      chargeSignalFresh && (
+        (chargePower != null && chargePower > 0)
+        || (chargerCurrent != null && chargerCurrent > 0)
+      )
     )
     : fallback?.isCharging === true
 
@@ -374,14 +382,14 @@ export class TeslaMateReadService {
 
     const chargePower = toNumber(row.charger_power)
     const chargerCurrent = toNumber(row.charger_actual_current)
+    const chargeSignalFresh = isChargeSignalFresh(row.captured_at, row.charge_captured_at)
     const isPluggedIn = row.open_charge_id != null
     const isCharging = row.open_charge_id != null
       ? (
-        chargePower != null
-          ? chargePower > 0
-          : chargerCurrent != null
-            ? chargerCurrent > 0
-            : false
+        chargeSignalFresh && (
+          (chargePower != null && chargePower > 0)
+          || (chargerCurrent != null && chargerCurrent > 0)
+        )
       )
       : fallback?.isCharging === true
     const chargeState = row.open_charge_id != null
@@ -1025,6 +1033,7 @@ export class TeslaMateReadService {
           st.state AS open_state,
           cp.id AS open_charge_id,
           d.id AS open_drive_id,
+          ch.date AS charge_captured_at,
           ch.charge_energy_added,
           ch.charger_power,
           ch.charger_phases,
