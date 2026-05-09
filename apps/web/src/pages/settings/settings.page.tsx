@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
 import { ApiError } from '@/lib/api-client'
 import { TeslaSettingsSection } from './tesla-section'
+import { GeofencesSection } from './geofences-section'
 import { MENU_ICON_REGISTRY } from '@/components/layout/nav-config'
 import { getNavPreferences, resetNavPreferences, setNavPreferences, type NavPreferences } from '@/features/preferences/nav-preferences'
 import { NAV_ITEMS } from '@/components/layout/nav-config'
@@ -455,6 +456,9 @@ export function SettingsPage() {
           </div>
         )}
       </Card>
+
+      {/* Geofences - Known Locations */}
+      <GeofencesSection />
 
       {/* Diagnostics */}
       <Card>
