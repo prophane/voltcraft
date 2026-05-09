@@ -266,6 +266,10 @@ export function TripsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['trips'],
     queryFn: () => tripsApi.list(),
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    staleTime: 0,
   })
 
   const { data: selectedTripData, isFetching: isFetchingTrip, isError: hasTripError } = useQuery({

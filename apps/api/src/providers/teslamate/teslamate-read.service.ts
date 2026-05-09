@@ -563,13 +563,17 @@ export class TeslaMateReadService {
           cp.start_rated_range_km,
           cp.end_rated_range_km,
           cp.position_id,
-          a.display_name AS address,
+          COALESCE(a.display_name, pa.display_name) AS address,
           p.latitude::float8 AS latitude,
-          p.longitude::float8 AS longitude
+          p.longitude::float8 AS longitude,
+          cp_agg.max_charger_power_kw AS "maxChargeKw",
+          cp_agg.avg_charger_power_kw AS "avgChargeKw",
+          cp_agg.latest_charger_power_kw AS "chargerPower"
         FROM charging_processes cp
         INNER JOIN cars c ON c.id = cp.car_id
         LEFT JOIN addresses a ON a.id = cp.address_id
         LEFT JOIN positions p ON p.id = cp.position_id
+        LEFT JOIN addresses pa ON pa.id = p.address_id
         LEFT JOIN LATERAL (
           SELECT ch.charge_energy_added
           FROM charges ch
@@ -577,6 +581,20 @@ export class TeslaMateReadService {
           ORDER BY ch.date DESC
           LIMIT 1
         ) lc ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT
+            MAX(ch.charger_power)::float8 AS max_charger_power_kw,
+            AVG(ch.charger_power)::float8 AS avg_charger_power_kw,
+            (
+              SELECT ch2.charger_power
+              FROM charges ch2
+              WHERE ch2.charging_process_id = cp.id
+              ORDER BY ch2.date DESC
+              LIMIT 1
+            )::float8 AS latest_charger_power_kw
+          FROM charges ch
+          WHERE ch.charging_process_id = cp.id
+        ) cp_agg ON TRUE
         WHERE c.vin = $1${where.sql}
         ORDER BY cp.start_date DESC
         LIMIT $${where.params.length + 2}
@@ -604,13 +622,17 @@ export class TeslaMateReadService {
           cp.end_battery_level AS "endBatteryLevel",
           cp.duration_min AS "durationMin",
           cp.cost AS "estimatedCost",
-          a.display_name AS address,
+          COALESCE(a.display_name, pa.display_name) AS address,
           p.latitude::float8 AS latitude,
-          p.longitude::float8 AS longitude
+          p.longitude::float8 AS longitude,
+          cp_agg.max_charger_power_kw AS "maxChargeKw",
+          cp_agg.avg_charger_power_kw AS "avgChargeKw",
+          cp_agg.latest_charger_power_kw AS "chargerPower"
         FROM charging_processes cp
         INNER JOIN cars c ON c.id = cp.car_id
         LEFT JOIN addresses a ON a.id = cp.address_id
         LEFT JOIN positions p ON p.id = cp.position_id
+        LEFT JOIN addresses pa ON pa.id = p.address_id
         LEFT JOIN LATERAL (
           SELECT ch.charge_energy_added
           FROM charges ch
@@ -618,6 +640,20 @@ export class TeslaMateReadService {
           ORDER BY ch.date DESC
           LIMIT 1
         ) lc ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT
+            MAX(ch.charger_power)::float8 AS max_charger_power_kw,
+            AVG(ch.charger_power)::float8 AS avg_charger_power_kw,
+            (
+              SELECT ch2.charger_power
+              FROM charges ch2
+              WHERE ch2.charging_process_id = cp.id
+              ORDER BY ch2.date DESC
+              LIMIT 1
+            )::float8 AS latest_charger_power_kw
+          FROM charges ch
+          WHERE ch.charging_process_id = cp.id
+        ) cp_agg ON TRUE
         WHERE c.vin = $1 AND cp.id = $2::int
         LIMIT 1
       `,
@@ -909,24 +945,37 @@ export class TeslaMateReadService {
   }
 
   private normalizeCharge(row: Record<string, unknown>) {
+    const maxChargeKw = toNumber(row.maxChargeKw)
+    const avgChargeKw = toNumber(row.avgChargeKw)
+    const chargerPower = toNumber(row.chargerPower)
+    const energyAddedKwh = toNumber(row.energyAddedKwh)
+    const estimatedCost = toNumber(row.estimatedCost)
+
+    let chargeType: 'AC_LEVEL_1' | 'AC_LEVEL_2' | 'DC_FAST' | 'SUPERCHARGER' | 'UNKNOWN' = 'UNKNOWN'
+    const peakKw = maxChargeKw ?? chargerPower ?? avgChargeKw ?? 0
+    if (peakKw >= 120) chargeType = 'SUPERCHARGER'
+    else if (peakKw >= 40) chargeType = 'DC_FAST'
+    else if (peakKw >= 7) chargeType = 'AC_LEVEL_2'
+    else if (peakKw > 0) chargeType = 'AC_LEVEL_1'
+
     return {
       id: String(row.id),
       startedAt: toDate(row.startedAt),
       endedAt: toDate(row.endedAt),
-      energyAddedKwh: toNumber(row.energyAddedKwh),
+      energyAddedKwh,
       startBatteryLevel: toNumber(row.startBatteryLevel),
       endBatteryLevel: toNumber(row.endBatteryLevel),
       chargeLimitSoc: null,
-      chargeType: 'UNKNOWN',
-      maxChargeKw: null,
-      avgChargeKw: null,
-      chargerPower: null,
+      chargeType,
+      maxChargeKw,
+      avgChargeKw,
+      chargerPower,
       durationMin: toNumber(row.durationMin),
       latitude: toNumber(row.latitude),
       longitude: toNumber(row.longitude),
       address: row.address ? String(row.address) : null,
-      pricePerKwh: null,
-      estimatedCost: toNumber(row.estimatedCost),
+      pricePerKwh: estimatedCost != null && energyAddedKwh != null && energyAddedKwh > 0 ? estimatedCost / energyAddedKwh : null,
+      estimatedCost,
       currency: 'EUR',
       notes: null,
     }
