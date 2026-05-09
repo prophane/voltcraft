@@ -446,8 +446,8 @@ export class TeslaMateReadService {
             WHEN c.efficiency IS NOT NULL THEN ROUND((c.efficiency * 100)::numeric, 2)
             ELSE NULL
           END AS "avgConsumptionKwh100",
-          COALESCE(sa.display_name, sa.name, spa.display_name, spa.name) AS "startAddress",
-          COALESCE(ea.display_name, ea.name, epa.display_name, epa.name) AS "endAddress",
+          COALESCE(sa.display_name, sa.name) AS "startAddress",
+          COALESCE(ea.display_name, ea.name) AS "endAddress",
           sp.latitude::float8 AS "startLatitude",
           sp.longitude::float8 AS "startLongitude",
           ep.latitude::float8 AS "endLatitude",
@@ -460,8 +460,6 @@ export class TeslaMateReadService {
         LEFT JOIN positions ep ON ep.id = d.end_position_id
         LEFT JOIN addresses sa ON sa.id = d.start_address_id
         LEFT JOIN addresses ea ON ea.id = d.end_address_id
-        LEFT JOIN addresses spa ON spa.id = sp.address_id
-        LEFT JOIN addresses epa ON epa.id = ep.address_id
         WHERE c.vin = $1${where.sql}
         ORDER BY d.start_date DESC
         LIMIT $${where.params.length + 2}
@@ -495,8 +493,8 @@ export class TeslaMateReadService {
             WHEN c.efficiency IS NOT NULL THEN ROUND((c.efficiency * 100)::numeric, 2)
             ELSE NULL
           END AS "avgConsumptionKwh100",
-          COALESCE(sa.display_name, sa.name, spa.display_name, spa.name) AS "startAddress",
-          COALESCE(ea.display_name, ea.name, epa.display_name, epa.name) AS "endAddress",
+          COALESCE(sa.display_name, sa.name) AS "startAddress",
+          COALESCE(ea.display_name, ea.name) AS "endAddress",
           sp.latitude::float8 AS "startLatitude",
           sp.longitude::float8 AS "startLongitude",
           ep.latitude::float8 AS "endLatitude",
@@ -509,8 +507,6 @@ export class TeslaMateReadService {
         LEFT JOIN positions ep ON ep.id = d.end_position_id
         LEFT JOIN addresses sa ON sa.id = d.start_address_id
         LEFT JOIN addresses ea ON ea.id = d.end_address_id
-        LEFT JOIN addresses spa ON spa.id = sp.address_id
-        LEFT JOIN addresses epa ON epa.id = ep.address_id
         WHERE c.vin = $1 AND d.id = $2::int
         LIMIT 1
       `,
@@ -660,7 +656,7 @@ export class TeslaMateReadService {
           cp.start_rated_range_km,
           cp.end_rated_range_km,
           cp.position_id,
-          COALESCE(a.display_name, a.name, pa.display_name, pa.name) AS address,
+          COALESCE(a.display_name, a.name) AS address,
           p.latitude::float8 AS latitude,
           p.longitude::float8 AS longitude,
           cp_agg.max_charger_power_kw AS "maxChargeKw",
@@ -670,7 +666,6 @@ export class TeslaMateReadService {
         INNER JOIN cars c ON c.id = cp.car_id
         LEFT JOIN addresses a ON a.id = cp.address_id
         LEFT JOIN positions p ON p.id = cp.position_id
-        LEFT JOIN addresses pa ON pa.id = p.address_id
         LEFT JOIN LATERAL (
           SELECT ch.charge_energy_added
           FROM charges ch
@@ -719,7 +714,7 @@ export class TeslaMateReadService {
           cp.end_battery_level AS "endBatteryLevel",
           cp.duration_min AS "durationMin",
           NULL::float8 AS "estimatedCost",
-          COALESCE(a.display_name, a.name, pa.display_name, pa.name) AS address,
+          COALESCE(a.display_name, a.name) AS address,
           p.latitude::float8 AS latitude,
           p.longitude::float8 AS longitude,
           cp_agg.max_charger_power_kw AS "maxChargeKw",
@@ -729,7 +724,6 @@ export class TeslaMateReadService {
         INNER JOIN cars c ON c.id = cp.car_id
         LEFT JOIN addresses a ON a.id = cp.address_id
         LEFT JOIN positions p ON p.id = cp.position_id
-        LEFT JOIN addresses pa ON pa.id = p.address_id
         LEFT JOIN LATERAL (
           SELECT ch.charge_energy_added
           FROM charges ch
