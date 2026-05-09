@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { tripsApi } from '@/features/vehicle/api'
+import { statsApi, tripsApi } from '@/features/vehicle/api'
 import { Card } from '@/components/ui/card'
 import { CardSkeleton } from '@/components/ui/skeleton'
 import { formatDate, formatKm, formatDuration } from '@/lib/utils'
@@ -133,7 +133,25 @@ function isMeaningfulTrip(trip: TripRecord) {
   const distance = trip.distanceKm ?? 0
   const duration = trip.durationMin ?? 0
   const energy = trip.energyUsedKwh ?? 0
-  return distance > 0.2 || energy > 0.1 || duration >= 5
+  return distance > 0.3 || energy > 0.1
+}
+
+async function reverseGeocode(lat: number, lon: number) {
+  const url = new URL('https://nominatim.openstreetmap.org/reverse')
+  url.searchParams.set('format', 'jsonv2')
+  url.searchParams.set('lat', String(lat))
+  url.searchParams.set('lon', String(lon))
+  url.searchParams.set('zoom', '18')
+  url.searchParams.set('addressdetails', '1')
+  url.searchParams.set('accept-language', 'fr')
+
+  const res = await fetch(url.toString(), {
+    headers: { Accept: 'application/json' },
+  })
+
+  if (!res.ok) return null
+  const body = (await res.json()) as { display_name?: string }
+  return body.display_name ?? null
 }
 
 function MiniTripTrace({ seed }: { seed: string }) {
@@ -222,6 +240,38 @@ export function TripsPage() {
   const selectedTrip = useMemo(() => normalizeTrip(selectedTripData), [selectedTripData])
   const selectedPath = useMemo(() => normalizePath(selectedPathData), [selectedPathData])
 
+  const { data: summary30 } = useQuery({
+    queryKey: ['stats', 'summary', 30],
+    queryFn: () => statsApi.summary(30),
+    staleTime: 300_000,
+  })
+
+  const baselineConsumption = useMemo(() => {
+    const value = parseNumber((summary30 as Record<string, unknown> | undefined)?.['avgConsumptionKwhPer100km'])
+    return value != null && value > 0 ? value : null
+  }, [summary30])
+
+  const startCoords = selectedTrip?.startLatitude != null && selectedTrip?.startLongitude != null
+    ? { lat: selectedTrip.startLatitude, lon: selectedTrip.startLongitude }
+    : null
+  const endCoords = selectedTrip?.endLatitude != null && selectedTrip?.endLongitude != null
+    ? { lat: selectedTrip.endLatitude, lon: selectedTrip.endLongitude }
+    : null
+
+  const { data: startResolvedAddress } = useQuery({
+    queryKey: ['trips', selectedTripId, 'start-address'],
+    queryFn: () => reverseGeocode(startCoords!.lat, startCoords!.lon),
+    enabled: !!selectedTripId && !!startCoords && !(selectedTrip?.startAddress && selectedTrip.startAddress.length > 0),
+    staleTime: 10 * 60_000,
+  })
+
+  const { data: endResolvedAddress } = useQuery({
+    queryKey: ['trips', selectedTripId, 'end-address'],
+    queryFn: () => reverseGeocode(endCoords!.lat, endCoords!.lon),
+    enabled: !!selectedTripId && !!endCoords && !(selectedTrip?.endAddress && selectedTrip.endAddress.length > 0),
+    staleTime: 10 * 60_000,
+  })
+
   const filteredTrips = useMemo(() => {
     if (tab === 'all') return trips
     if (tab === 'work') return trips.filter(isWorkTrip)
@@ -294,8 +344,46 @@ export function TripsPage() {
             const tripId = String(trip.id)
             const isSelected = selectedTripId === tripId
             const detailTrip = isSelected && selectedTrip?.id === tripId ? selectedTrip : trip
-            const startLabel = formatPointLabel(detailTrip.startAddress, detailTrip.startLatitude, detailTrip.startLongitude)
-            const endLabel = formatPointLabel(detailTrip.endAddress, detailTrip.endLatitude, detailTrip.endLongitude)
+            const startLabel = formatPointLabel(
+              detailTrip.startAddress ?? (isSelected ? (startResolvedAddress ?? null) : null),
+              detailTrip.startLatitude,
+              detailTrip.startLongitude,
+            )
+            const endLabel = formatPointLabel(
+              detailTrip.endAddress ?? (isSelected ? (endResolvedAddress ?? null) : null),
+              detailTrip.endLatitude,
+              detailTrip.endLongitude,
+            )
+            const estimatedEnergy = detailTrip.energyUsedKwh
+              ?? (baselineConsumption != null && (detailTrip.distanceKm ?? 0) > 0
+                ? ((detailTrip.distanceKm ?? 0) * baselineConsumption) / 100
+                : null)
+            const detailConsumption = consumptionWhKm(detailTrip)
+              ?? (baselineConsumption != null ? baselineConsumption * 10 : null)
+            const detailStartCoords = detailTrip.startLatitude != null && detailTrip.startLongitude != null
+              ? { lat: detailTrip.startLatitude, lon: detailTrip.startLongitude }
+              : null
+            const detailEndCoords = detailTrip.endLatitude != null && detailTrip.endLongitude != null
+              ? { lat: detailTrip.endLatitude, lon: detailTrip.endLongitude }
+              : null
+            const detailMapUrl = (() => {
+              const points = [detailStartCoords, detailEndCoords].filter(Boolean) as Array<{ lat: number; lon: number }>
+              if (points.length === 0) return null
+              const lats = points.map((p) => p.lat)
+              const lons = points.map((p) => p.lon)
+              const minLat = Math.min(...lats)
+              const maxLat = Math.max(...lats)
+              const minLon = Math.min(...lons)
+              const maxLon = Math.max(...lons)
+              const padLat = Math.max(0.005, (maxLat - minLat) * 0.4)
+              const padLon = Math.max(0.005, (maxLon - minLon) * 0.4)
+              const left = minLon - padLon
+              const right = maxLon + padLon
+              const top = maxLat + padLat
+              const bottom = minLat - padLat
+              const marker = detailEndCoords ?? detailStartCoords
+              return `https://www.openstreetmap.org/export/embed.html?bbox=${left},${bottom},${right},${top}&layer=mapnik&marker=${marker?.lat},${marker?.lon}`
+            })()
 
             return (
             <Card
@@ -337,7 +425,7 @@ export function TripsPage() {
                   <MiniTripTrace seed={trip.id} />
                   <div className="flex items-center justify-end gap-4 text-xs text-text-muted">
                     <span className="inline-flex items-center gap-1"><Clock size={11} /> {trip.durationMin ? formatDuration(Number(trip.durationMin)) : '—'}</span>
-                    <span className="inline-flex items-center gap-1"><Zap size={11} /> {trip.energyUsedKwh ? `${Number(trip.energyUsedKwh).toFixed(1)} kWh` : '—'}</span>
+                    <span className="inline-flex items-center gap-1"><Zap size={11} /> {estimatedEnergy != null ? `${Number(estimatedEnergy).toFixed(1)} kWh` : '—'}</span>
                     <button
                       type="button"
                       onClick={(event) => {
@@ -373,8 +461,8 @@ export function TripsPage() {
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                     <DetailMetric icon={Route} label="Distance" value={formatKm(detailTrip.distanceKm ?? 0)} />
                     <DetailMetric icon={Clock} label="Durée" value={detailTrip.durationMin ? formatDuration(Math.round(detailTrip.durationMin)) : '—'} />
-                    <DetailMetric icon={Zap} label="Énergie" value={detailTrip.energyUsedKwh ? `${Number(detailTrip.energyUsedKwh).toFixed(1)} kWh` : '—'} />
-                    <DetailMetric icon={Gauge} label="Conso" value={consumptionWhKm(detailTrip) ? `${Math.round(consumptionWhKm(detailTrip) as number)} Wh/km` : '—'} />
+                    <DetailMetric icon={Zap} label="Énergie" value={estimatedEnergy != null ? `${Number(estimatedEnergy).toFixed(1)} kWh` : '—'} />
+                    <DetailMetric icon={Gauge} label="Conso" value={detailConsumption != null ? `${Math.round(detailConsumption)} Wh/km` : '—'} />
                     <DetailMetric icon={BatteryCharging} label="SOC départ" value={detailTrip.startBatteryLevel != null ? `${Math.round(detailTrip.startBatteryLevel)}%` : '—'} />
                     <DetailMetric icon={BatteryCharging} label="SOC arrivée" value={detailTrip.endBatteryLevel != null ? `${Math.round(detailTrip.endBatteryLevel)}%` : '—'} />
                     <DetailMetric
@@ -401,6 +489,31 @@ export function TripsPage() {
                       <DetailedTripTrace points={selectedPath} />
                     )}
                   </div>
+
+                  {detailMapUrl && (
+                    <div className="space-y-2">
+                      <p className="text-xs uppercase tracking-wide text-text-muted">Carte du trajet</p>
+                      <iframe
+                        title="Carte trajet"
+                        src={detailMapUrl}
+                        className="w-full h-64 lg:h-80 rounded-lg border border-border-subtle"
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                      />
+                      {detailStartCoords && detailEndCoords && (
+                        <div className="flex justify-end">
+                          <a
+                            href={`https://www.google.com/maps/dir/?api=1&origin=${detailStartCoords.lat},${detailStartCoords.lon}&destination=${detailEndCoords.lat},${detailEndCoords.lon}&travelmode=driving`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-accent-400 hover:text-accent-300 inline-flex items-center gap-1 text-xs"
+                          >
+                            <MapPin size={14} /> Ouvrir l itinéraire dans Google Maps
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </Card>
