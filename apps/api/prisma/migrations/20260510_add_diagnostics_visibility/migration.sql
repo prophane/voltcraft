@@ -1,0 +1,9 @@
+-- AlterTable
+ALTER TABLE "UserSettings" ADD COLUMN "showDiagAppHealth" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "showDiagVehicleHealth" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "showDiagAnalytics" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "showDiagAnomalies" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "showDiagBatteryHealth" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "showDiagThermal" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "showDiagActivity" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "showDiagComparison" BOOLEAN NOT NULL DEFAULT true;

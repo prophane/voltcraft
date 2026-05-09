@@ -26,6 +26,7 @@ import { cn, formatDate, formatKm, formatPercent } from '@/lib/utils'
 
 type TelemetrySource = 'TeslaMate' | 'Voltcraft' | 'Cache' | 'Unknown'
 type DiagnosticsViewMode = 'essential' | 'expert'
+type DiagnosticsTab = 'app-health' | 'vehicle-health' | 'analytics'
 type AlertSeverity = 'Critique' | 'A surveiller' | 'Info'
 
 function ageMinutes(iso?: string | null) {
@@ -103,6 +104,7 @@ function EmptyState({ message }: { message: string }) {
 
 export function DiagnosticsPage() {
   const [viewMode, setViewMode] = useState<DiagnosticsViewMode>('essential')
+  const [activeTab, setActiveTab] = useState<DiagnosticsTab>('app-health')
 
   const { data: vehicle } = useQuery({
     queryKey: ['vehicle', 'current'],
@@ -201,6 +203,16 @@ export function DiagnosticsPage() {
   const batteryDeltaCriticalPct = Math.max(batteryDeltaWarnPct + 0.1, Number(userSettings?.diagnosticsBatteryDeltaCriticalPct ?? 5))
   const idleWarnHours7d = Math.max(0, Number(userSettings?.diagnosticsIdleWarnHours7d ?? 8))
   const idleCriticalHours7d = Math.max(idleWarnHours7d + 0.1, Number(userSettings?.diagnosticsIdleCriticalHours7d ?? 12))
+
+  // Visibility toggles from settings
+  const showDiagAppHealth = userSettings?.showDiagAppHealth !== false
+  const showDiagVehicleHealth = userSettings?.showDiagVehicleHealth !== false
+  const showDiagAnalytics = userSettings?.showDiagAnalytics !== false
+  const showDiagAnomalies = userSettings?.showDiagAnomalies !== false
+  const showDiagBatteryHealth = userSettings?.showDiagBatteryHealth !== false
+  const showDiagThermal = userSettings?.showDiagThermal !== false
+  const showDiagActivity = userSettings?.showDiagActivity !== false
+  const showDiagComparison = userSettings?.showDiagComparison !== false
 
   const historyRows = Array.isArray(history) ? (history as VehicleHistorySnapshot[]) : []
   const latestHistory = historyRows[0]
@@ -584,6 +596,39 @@ export function DiagnosticsPage() {
               <span>{vehicleStatus}</span>
               <span>•</span>
               <span>{vehicle?.lastSeenAt ? `Vu le ${formatDate(vehicle.lastSeenAt)}` : 'Jamais vu'}</span>
+            </div>
+
+            <div className="inline-flex rounded-xl border border-border-subtle bg-bg-overlay/60 p-1">
+              <button
+                type="button"
+                onClick={() => setActiveTab('app-health')}
+                className={cn(
+                  'px-3 py-1.5 text-xs rounded-lg transition-colors',
+                  activeTab === 'app-health' ? 'bg-accent-500/20 text-text-primary' : 'text-text-secondary hover:text-text-primary',
+                )}
+              >
+                Santé App
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('vehicle-health')}
+                className={cn(
+                  'px-3 py-1.5 text-xs rounded-lg transition-colors',
+                  activeTab === 'vehicle-health' ? 'bg-accent-500/20 text-text-primary' : 'text-text-secondary hover:text-text-primary',
+                )}
+              >
+                Santé Véhicule
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('analytics')}
+                className={cn(
+                  'px-3 py-1.5 text-xs rounded-lg transition-colors',
+                  activeTab === 'analytics' ? 'bg-accent-500/20 text-text-primary' : 'text-text-secondary hover:text-text-primary',
+                )}
+              >
+                Analyses
+              </button>
             </div>
 
             <div className="inline-flex rounded-xl border border-border-subtle bg-bg-overlay/60 p-1">

@@ -393,6 +393,16 @@ model UserSettings {
   diagnosticsIdleWarnHours7d      Float  @default(8)
   diagnosticsIdleCriticalHours7d  Float  @default(12)
 
+  // Diagnostics UI visibility (show/hide sections)
+  showDiagAppHealth         Boolean @default(true)
+  showDiagVehicleHealth     Boolean @default(true)
+  showDiagAnalytics        Boolean @default(true)
+  showDiagAnomalies        Boolean @default(true)
+  showDiagBatteryHealth    Boolean @default(true)
+  showDiagThermal          Boolean @default(true)
+  showDiagActivity         Boolean @default(true)
+  showDiagComparison       Boolean @default(true)
+
   // Home geofence
   homeLatitude  Float?
   homeLongitude Float?
