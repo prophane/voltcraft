@@ -447,6 +447,9 @@ export class TeslaMateReadService {
           p.longitude::float8 AS longitude,
           NULL::int AS heading,
           p.speed AS speed,
+          p.power AS power,
+          p.odometer AS odometer,
+          p.battery_level AS "batteryLevel",
           TRUE AS "isDriving"
         FROM positions p
         INNER JOIN drives d ON d.id = p.drive_id
@@ -466,6 +469,9 @@ export class TeslaMateReadService {
       longitude: toNumber(row.longitude),
       heading: null,
       speed: toNumber(row.speed),
+      power: toNumber(row.power),
+      odometer: toNumber(row.odometer),
+      batteryLevel: toNumber(row.batteryLevel),
       isDriving: true,
     }))
   }

@@ -30,6 +30,21 @@ type TripPathPoint = {
   longitude?: number | null
   capturedAt?: string | null
   speed?: number | null
+  power?: number | null
+  odometer?: number | null
+  batteryLevel?: number | null
+}
+
+type SpeedBin = { label: string; count: number; pct: number }
+
+type TripPathInsights = {
+  odometerFrom: number | null
+  odometerTo: number | null
+  consumedKwh: number
+  recoveredKwh: number
+  avgSpeed: number | null
+  maxSpeed: number | null
+  speedBins: SpeedBin[]
 }
 
 type TripTab = 'all' | 'work' | 'personal'
@@ -118,9 +133,77 @@ function normalizePath(raw: unknown): TripPathPoint[] {
         longitude: parseNumber(row.longitude),
         capturedAt: parseString(row.capturedAt ?? row.captured_at),
         speed: parseNumber(row.speed),
+        power: parseNumber(row.power),
+        odometer: parseNumber(row.odometer),
+        batteryLevel: parseNumber(row.batteryLevel ?? row.battery_level),
       }
     })
     .filter(Boolean) as TripPathPoint[]
+}
+
+function buildPathInsights(points: TripPathPoint[]): TripPathInsights | null {
+  if (points.length < 2) return null
+
+  const timePoints = points
+    .map((p) => ({
+      at: p.capturedAt ? new Date(p.capturedAt).getTime() : NaN,
+      speed: p.speed ?? null,
+      power: p.power ?? null,
+      odometer: p.odometer ?? null,
+    }))
+    .filter((p) => Number.isFinite(p.at))
+    .sort((a, b) => a.at - b.at)
+
+  if (timePoints.length < 2) return null
+
+  let consumedKwh = 0
+  let recoveredKwh = 0
+  const speeds: number[] = []
+
+  for (let i = 1; i < timePoints.length; i++) {
+    const prev = timePoints[i - 1]
+    const curr = timePoints[i]
+    if (!prev || !curr) continue
+    const dtHours = (curr.at - prev.at) / 3_600_000
+    if (dtHours <= 0 || dtHours > 0.5) continue
+
+    const pPrev = prev.power ?? 0
+    const pCurr = curr.power ?? 0
+    const avgPower = (pPrev + pCurr) / 2
+    if (avgPower >= 0) consumedKwh += avgPower * dtHours
+    else recoveredKwh += Math.abs(avgPower) * dtHours
+
+    if (curr.speed != null && curr.speed >= 0) speeds.push(curr.speed)
+  }
+
+  const firstOdo = timePoints.find((p) => p.odometer != null)?.odometer ?? null
+  const lastOdo = [...timePoints].reverse().find((p) => p.odometer != null)?.odometer ?? null
+  const avgSpeed = speeds.length > 0 ? speeds.reduce((sum, s) => sum + s, 0) / speeds.length : null
+  const maxSpeed = speeds.length > 0 ? Math.max(...speeds) : null
+
+  const bins = [0, 20, 40, 60, 80, 100, 120, 140]
+  const counts = Array.from({ length: bins.length }, () => 0)
+  for (const speed of speeds) {
+    let idx = bins.findIndex((edge, i) => speed >= edge && (i === bins.length - 1 || speed < bins[i + 1]))
+    if (idx < 0) idx = bins.length - 1
+    counts[idx] += 1
+  }
+  const total = counts.reduce((sum, count) => sum + count, 0)
+  const speedBins: SpeedBin[] = bins.map((edge, idx) => ({
+    label: idx === bins.length - 1 ? `${edge}+` : `${edge}-${bins[idx + 1]}`,
+    count: counts[idx],
+    pct: total > 0 ? (counts[idx] / total) * 100 : 0,
+  }))
+
+  return {
+    odometerFrom: firstOdo,
+    odometerTo: lastOdo,
+    consumedKwh,
+    recoveredKwh,
+    avgSpeed,
+    maxSpeed,
+    speedBins,
+  }
 }
 
 function formatPointLabel(address?: string | null, lat?: number | null, lon?: number | null) {
@@ -384,6 +467,7 @@ export function TripsPage() {
               const marker = detailEndCoords ?? detailStartCoords
               return `https://www.openstreetmap.org/export/embed.html?bbox=${left},${bottom},${right},${top}&layer=mapnik&marker=${marker?.lat},${marker?.lon}`
             })()
+            const pathInsights = isSelected ? buildPathInsights(selectedPath) : null
 
             return (
             <Card
@@ -481,6 +565,44 @@ export function TripsPage() {
                     />
                   </div>
 
+                  {pathInsights && (
+                    <div className="space-y-3">
+                      <p className="text-xs uppercase tracking-wide text-text-muted">Deep dive conduite</p>
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                        <DetailMetric
+                          icon={Route}
+                          label="Odomètre"
+                          value={pathInsights.odometerFrom != null && pathInsights.odometerTo != null
+                            ? `${Math.round(pathInsights.odometerFrom)} - ${Math.round(pathInsights.odometerTo)} km`
+                            : '—'}
+                        />
+                        <DetailMetric
+                          icon={Gauge}
+                          label="Vitesse moy"
+                          value={pathInsights.avgSpeed != null ? `${Math.round(pathInsights.avgSpeed)} km/h` : '—'}
+                        />
+                        <DetailMetric
+                          icon={Gauge}
+                          label="Vitesse max"
+                          value={pathInsights.maxSpeed != null ? `${Math.round(pathInsights.maxSpeed)} km/h` : '—'}
+                        />
+                        <DetailMetric
+                          icon={Zap}
+                          label="Récupération"
+                          value={pathInsights.recoveredKwh > 0 ? `${pathInsights.recoveredKwh.toFixed(2)} kWh` : '—'}
+                        />
+                      </div>
+
+                      <div className="rounded-xl border border-border-subtle bg-bg-overlay/55 p-3">
+                        <p className="text-xs uppercase tracking-wide text-text-muted mb-2">Distribution vitesse</p>
+                        <SpeedDistribution bins={pathInsights.speedBins} />
+                        <p className="text-xs text-text-muted mt-2">
+                          Énergie nette consommée: {pathInsights.consumedKwh > 0 ? `${pathInsights.consumedKwh.toFixed(2)} kWh` : '—'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <p className="text-xs uppercase tracking-wide text-text-muted mb-2">Trace du trajet</p>
                     {hasPathError ? (
@@ -541,6 +663,27 @@ function DetailMetric({
         <span>{label}</span>
       </div>
       <p className="text-sm text-text-primary font-medium mt-2">{value}</p>
+    </div>
+  )
+}
+
+function SpeedDistribution({ bins }: { bins: SpeedBin[] }) {
+  const maxPct = Math.max(...bins.map((b) => b.pct), 1)
+  return (
+    <div className="grid grid-cols-4 lg:grid-cols-8 gap-2 items-end">
+      {bins.map((bin) => (
+        <div key={bin.label} className="text-center">
+          <div className="h-20 rounded-md border border-border-subtle bg-bg-overlay/60 flex items-end overflow-hidden">
+            <div
+              className="w-full bg-accent-500/80"
+              style={{ height: `${Math.max(8, (bin.pct / maxPct) * 100)}%` }}
+              title={`${bin.label}: ${bin.pct.toFixed(1)}%`}
+            />
+          </div>
+          <p className="text-[10px] text-text-muted mt-1">{bin.label}</p>
+          <p className="text-[10px] text-text-secondary">{bin.pct.toFixed(0)}%</p>
+        </div>
+      ))}
     </div>
   )
 }

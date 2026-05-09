@@ -52,6 +52,9 @@ export class TripsRepository {
         longitude: true,
         heading: true,
         speed: true,
+        power: true,
+        odometer: true,
+        batteryLevel: true,
         isDriving: true,
       },
     })
