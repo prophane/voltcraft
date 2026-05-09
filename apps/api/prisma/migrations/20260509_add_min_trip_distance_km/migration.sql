@@ -1,0 +1,2 @@
+ALTER TABLE "user_settings"
+ADD COLUMN "minTripDistanceKm" DOUBLE PRECISION NOT NULL DEFAULT 0.3;

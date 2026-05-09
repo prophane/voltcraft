@@ -382,6 +382,9 @@ model UserSettings {
   pricePerKwh Float  @default(0.15)
   currency    String @default("EUR")
 
+  // Trips
+  minTripDistanceKm Float @default(0.3)
+
   // Home geofence
   homeLatitude  Float?
   homeLongitude Float?

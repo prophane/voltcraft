@@ -36,6 +36,7 @@ export function SettingsPage() {
   const au = apiUsage as Record<string, number> | undefined
 
   const [priceKwh, setPriceKwh] = useState<string>('')
+  const [minTripDistanceKm, setMinTripDistanceKm] = useState<string>('')
   const [menuDraft, setMenuDraft] = useState<NavPreferences>(() => getNavPreferences())
   const [menuSavedAt, setMenuSavedAt] = useState<string | null>(null)
   const [teslamateForm, setTeslamateForm] = useState<TeslamateSettingsInput>({
@@ -185,6 +186,30 @@ export function SettingsPage() {
                 loading={updateMutation.isPending}
                 onClick={() => updateMutation.mutate({ pricePerKwh: parseFloat(priceKwh) })}
                 disabled={!priceKwh}
+              >
+                Sauvegarder
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <label className="stat-label block mb-1">Distance minimale d un trajet (km)</label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="200"
+                className="bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary w-32"
+                placeholder={s?.['minTripDistanceKm']?.toString() ?? '0.3'}
+                value={minTripDistanceKm}
+                onChange={(e) => setMinTripDistanceKm(e.target.value)}
+              />
+              <Button
+                size="sm"
+                loading={updateMutation.isPending}
+                onClick={() => updateMutation.mutate({ minTripDistanceKm: parseFloat(minTripDistanceKm) })}
+                disabled={!minTripDistanceKm}
               >
                 Sauvegarder
               </Button>

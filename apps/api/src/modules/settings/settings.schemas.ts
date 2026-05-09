@@ -4,6 +4,7 @@ export const updateSettingsSchema = z.object({
   distanceUnit: z.enum(['km', 'miles']).optional(),
   temperatureUnit: z.enum(['celsius', 'fahrenheit']).optional(),
   pricePerKwh: z.number().min(0).max(10).optional(),
+  minTripDistanceKm: z.number().min(0).max(200).optional(),
   currency: z.string().length(3).optional(),
   homeLatitude: z.number().optional(),
   homeLongitude: z.number().optional(),

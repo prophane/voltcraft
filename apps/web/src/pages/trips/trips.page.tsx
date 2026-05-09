@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { statsApi, tripsApi } from '@/features/vehicle/api'
+import { settingsApi, statsApi, tripsApi } from '@/features/vehicle/api'
 import { MapContainer, Polyline, TileLayer, CircleMarker } from 'react-leaflet'
 import { useLocation } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
@@ -259,11 +259,10 @@ function formatPointLabel(address?: string | null, lat?: number | null, lon?: nu
   return 'Point inconnu'
 }
 
-function isMeaningfulTrip(trip: TripRecord) {
+function isMeaningfulTrip(trip: TripRecord, minDistanceKm: number) {
   const distance = trip.distanceKm ?? 0
-  const duration = trip.durationMin ?? 0
   const energy = trip.energyUsedKwh ?? 0
-  return distance > 0.3 || energy > 0.1
+  return distance > minDistanceKm || energy > 0.1
 }
 
 async function reverseGeocode(lat: number, lon: number) {
@@ -288,6 +287,12 @@ export function TripsPage() {
   const location = useLocation()
   const [tab, setTab] = useState<TripTab>('all')
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
+
+  const { data: settingsData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => settingsApi.get(),
+    staleTime: 60_000,
+  })
 
   const {
     data,
@@ -316,7 +321,16 @@ export function TripsPage() {
     enabled: !!selectedTripId,
   })
 
-  const trips = useMemo(() => normalizeTrips(data).filter(isMeaningfulTrip), [data])
+  const minTripDistanceKm = useMemo(() => {
+    const raw = (settingsData as Record<string, unknown> | undefined)?.['minTripDistanceKm']
+    const value = parseNumber(raw)
+    return value != null && value >= 0 ? value : 0.3
+  }, [settingsData])
+
+  const trips = useMemo(
+    () => normalizeTrips(data).filter((trip) => isMeaningfulTrip(trip, minTripDistanceKm)),
+    [data, minTripDistanceKm],
+  )
   const selectedTrip = useMemo(() => normalizeTrip(selectedTripData), [selectedTripData])
   const selectedPath = useMemo(() => normalizePath(selectedPathData), [selectedPathData])
 
