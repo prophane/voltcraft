@@ -295,10 +295,14 @@ function compactAddress(address?: string | null) {
     ? `${parts[0]} ${parts[1]}`
     : parts[0]
 
+  const isNoise = (p: string) =>
+    /france|m[ée]tropolitaine|occitanie|[- ]d[ée]partement|haute-garonne|bas-rhin|haut-rhin|gironde|h[ée]rault|bouches/i.test(p)
+      || /^[A-ZÀÂÆÇÉÈÊËÎÏÔÙÛÜŒ][a-zàâæçéèêëîïôùûüœ]+[- ][A-ZÀÂÆÇÉÈÊËÎÏÔÙÛÜŒ][a-zàâæçéèêëîïôùûüœ]+$/.test(p) // département nom composé
+
   const postalIndex = parts.findIndex((p) => /^\d{5}$/.test(p))
   const city = postalIndex > 0
-    ? parts[postalIndex - 1]
-    : parts.find((p) => /(^[A-Za-zÀ-ÿ'\- ]+$)/.test(p) && !/france|m[ée]tropolitaine|occitanie/i.test(p))
+    ? parts.slice(0, postalIndex).reverse().find((p) => !isNoise(p) && p !== first)
+    : parts.find((p) => /(^[A-Za-zÀ-ÿ'\- ]+$)/.test(p) && !isNoise(p))
 
   if (city && city !== first) return `${first}, ${city}`
   return first
