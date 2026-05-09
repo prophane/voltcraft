@@ -1007,11 +1007,18 @@ export class TeslaMateReadService {
   }
 
   private normalizeCharge(row: Record<string, unknown>) {
-    const maxChargeKw = toNumber(row.maxChargeKw)
-    const avgChargeKw = toNumber(row.avgChargeKw)
-    const chargerPower = toNumber(row.chargerPower)
+    const durationMin = toNumber(row.durationMin)
     const energyAddedKwh = toNumber(row.energyAddedKwh)
     const estimatedCost = toNumber(row.estimatedCost)
+
+    const derivedAvgChargeKw =
+      energyAddedKwh != null && durationMin != null && durationMin > 0
+        ? energyAddedKwh / (durationMin / 60)
+        : null
+
+    const avgChargeKw = toNumber(row.avgChargeKw) ?? derivedAvgChargeKw
+    const chargerPower = toNumber(row.chargerPower) ?? avgChargeKw
+    const maxChargeKw = toNumber(row.maxChargeKw) ?? chargerPower
 
     let chargeType: 'AC_LEVEL_1' | 'AC_LEVEL_2' | 'DC_FAST' | 'SUPERCHARGER' | 'UNKNOWN' = 'UNKNOWN'
     const peakKw = maxChargeKw ?? chargerPower ?? avgChargeKw ?? 0
@@ -1032,10 +1039,10 @@ export class TeslaMateReadService {
       maxChargeKw,
       avgChargeKw,
       chargerPower,
-      durationMin: toNumber(row.durationMin),
+      durationMin,
       latitude: toNumber(row.latitude),
       longitude: toNumber(row.longitude),
-      address: row.address ? String(row.address) : null,
+      address: row.address ? String(row.address) : coordLabel(row.latitude, row.longitude),
       pricePerKwh: estimatedCost != null && energyAddedKwh != null && energyAddedKwh > 0 ? estimatedCost / energyAddedKwh : null,
       estimatedCost,
       currency: 'EUR',
