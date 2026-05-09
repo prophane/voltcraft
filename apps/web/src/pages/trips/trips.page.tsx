@@ -578,7 +578,10 @@ export function TripsPage() {
               </div>
 
               {isSelected && (
-                <div className="mt-4 pt-4 border-t border-border-subtle space-y-4">
+                <div
+                  className="mt-4 pt-4 border-t border-border-subtle space-y-4"
+                  onClick={(event) => event.stopPropagation()}
+                >
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
                       <p className="text-xs uppercase tracking-wide text-text-muted">Détail trajet</p>
