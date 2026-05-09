@@ -453,8 +453,20 @@ export class TeslaMateReadService {
               THEN ROUND((c.efficiency * 100)::numeric, 1)
             ELSE NULL
           END AS "avgConsumptionKwh100",
-          COALESCE(sa.display_name, sa.name) AS "startAddress",
-          COALESCE(ea.display_name, ea.name) AS "endAddress",
+          CASE
+            WHEN sg.name IS NOT NULL THEN sg.name
+            WHEN sa.name IS NOT NULL AND sa.road IS NOT NULL THEN sa.name || ', ' || sa.road || ', ' || COALESCE(sa.city, sa.county)
+            WHEN sa.house_number IS NOT NULL AND sa.road IS NOT NULL THEN sa.house_number || ' ' || sa.road || ', ' || COALESCE(sa.city, sa.county)
+            WHEN sa.road IS NOT NULL THEN sa.road || ', ' || COALESCE(sa.city, sa.county)
+            ELSE COALESCE(sa.name, sa.display_name)
+          END AS "startAddress",
+          CASE
+            WHEN eg.name IS NOT NULL THEN eg.name
+            WHEN ea.name IS NOT NULL AND ea.road IS NOT NULL THEN ea.name || ', ' || ea.road || ', ' || COALESCE(ea.city, ea.county)
+            WHEN ea.house_number IS NOT NULL AND ea.road IS NOT NULL THEN ea.house_number || ' ' || ea.road || ', ' || COALESCE(ea.city, ea.county)
+            WHEN ea.road IS NOT NULL THEN ea.road || ', ' || COALESCE(ea.city, ea.county)
+            ELSE COALESCE(ea.name, ea.display_name)
+          END AS "endAddress",
           sp.latitude::float8 AS "startLatitude",
           sp.longitude::float8 AS "startLongitude",
           ep.latitude::float8 AS "endLatitude",
@@ -467,6 +479,8 @@ export class TeslaMateReadService {
         LEFT JOIN positions ep ON ep.id = d.end_position_id
         LEFT JOIN addresses sa ON sa.id = d.start_address_id
         LEFT JOIN addresses ea ON ea.id = d.end_address_id
+        LEFT JOIN geofences sg ON sg.id = d.start_geofence_id
+        LEFT JOIN geofences eg ON eg.id = d.end_geofence_id
         WHERE c.vin = $1${where.sql}
         ORDER BY d.start_date DESC
         LIMIT $${where.params.length + 2}
@@ -506,8 +520,20 @@ export class TeslaMateReadService {
               THEN ROUND((c.efficiency * 100)::numeric, 1)
             ELSE NULL
           END AS "avgConsumptionKwh100",
-          COALESCE(sa.display_name, sa.name) AS "startAddress",
-          COALESCE(ea.display_name, ea.name) AS "endAddress",
+          CASE
+            WHEN sg.name IS NOT NULL THEN sg.name
+            WHEN sa.name IS NOT NULL AND sa.road IS NOT NULL THEN sa.name || ', ' || sa.road || ', ' || COALESCE(sa.city, sa.county)
+            WHEN sa.house_number IS NOT NULL AND sa.road IS NOT NULL THEN sa.house_number || ' ' || sa.road || ', ' || COALESCE(sa.city, sa.county)
+            WHEN sa.road IS NOT NULL THEN sa.road || ', ' || COALESCE(sa.city, sa.county)
+            ELSE COALESCE(sa.name, sa.display_name)
+          END AS "startAddress",
+          CASE
+            WHEN eg.name IS NOT NULL THEN eg.name
+            WHEN ea.name IS NOT NULL AND ea.road IS NOT NULL THEN ea.name || ', ' || ea.road || ', ' || COALESCE(ea.city, ea.county)
+            WHEN ea.house_number IS NOT NULL AND ea.road IS NOT NULL THEN ea.house_number || ' ' || ea.road || ', ' || COALESCE(ea.city, ea.county)
+            WHEN ea.road IS NOT NULL THEN ea.road || ', ' || COALESCE(ea.city, ea.county)
+            ELSE COALESCE(ea.name, ea.display_name)
+          END AS "endAddress",
           sp.latitude::float8 AS "startLatitude",
           sp.longitude::float8 AS "startLongitude",
           ep.latitude::float8 AS "endLatitude",
@@ -520,6 +546,8 @@ export class TeslaMateReadService {
         LEFT JOIN positions ep ON ep.id = d.end_position_id
         LEFT JOIN addresses sa ON sa.id = d.start_address_id
         LEFT JOIN addresses ea ON ea.id = d.end_address_id
+        LEFT JOIN geofences sg ON sg.id = d.start_geofence_id
+        LEFT JOIN geofences eg ON eg.id = d.end_geofence_id
         WHERE c.vin = $1 AND d.id = $2::int
         LIMIT 1
       `,
