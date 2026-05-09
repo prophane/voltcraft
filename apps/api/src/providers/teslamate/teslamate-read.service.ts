@@ -91,6 +91,28 @@ function isStaleTelemetry(value: unknown, maxAgeMinutes = 20): boolean {
   return Date.now() - date.getTime() > maxAgeMinutes * 60_000
 }
 
+function resolveOdometer(teslamateOdometer: number | null, fallbackOdometer: number | null, capturedAt: Date | null) {
+  if (teslamateOdometer == null) return fallbackOdometer ?? null
+  if (fallbackOdometer == null) return teslamateOdometer
+
+  const stale = isStaleTelemetry(capturedAt, 180)
+  const diff = Math.abs(teslamateOdometer - fallbackOdometer)
+
+  if (stale || diff >= 10) {
+    // Prefer the higher value when sources diverge strongly; it avoids common mi/km or stale-point underestimation.
+    return Math.max(teslamateOdometer, fallbackOdometer)
+  }
+
+  return teslamateOdometer
+}
+
+function coordLabel(lat: unknown, lon: unknown) {
+  const la = toNumber(lat)
+  const lo = toNumber(lon)
+  if (la == null || lo == null) return null
+  return `${la.toFixed(5)}, ${lo.toFixed(5)}`
+}
+
 function toVehicleState(row: TeslaMateVehicleRow, fallback?: FallbackSnapshot) {
   const stale = isStaleTelemetry(row.captured_at ?? fallback?.capturedAt)
 
@@ -199,11 +221,12 @@ export class TeslaMateReadService {
     if (!row) return null
 
     const chargePower = toNumber(row.charger_power)
+    const odometer = resolveOdometer(toNumber(row.odometer), toNumber(fallback?.odometer), toDate(row.captured_at))
 
     return {
       vehicleId: vehicle.id,
       capturedAt: toDate(row.captured_at) ?? fallback?.capturedAt ?? new Date(),
-      odometer: toNumber(row.odometer) ?? null,
+      odometer,
       batteryLevel: row.battery_level ?? fallback?.batteryLevel ?? 0,
       batteryRange: toNumber(row.battery_range_km) ?? fallback?.batteryRange ?? 0,
       chargeLimitSoc: fallback?.chargeLimitSoc ?? null,
@@ -644,6 +667,9 @@ export class TeslaMateReadService {
   }
 
   private normalizeTrip(row: Record<string, unknown>) {
+    const startAddress = row.startAddress ? String(row.startAddress) : coordLabel(row.startLatitude, row.startLongitude)
+    const endAddress = row.endAddress ? String(row.endAddress) : coordLabel(row.endLatitude, row.endLongitude)
+
     return {
       id: String(row.id),
       startedAt: toDate(row.startedAt),
@@ -652,8 +678,8 @@ export class TeslaMateReadService {
       distanceKm: toNumber(row.distanceKm),
       energyUsedKwh: toNumber(row.energyUsedKwh),
       avgConsumptionKwh100: toNumber(row.avgConsumptionKwh100),
-      startAddress: row.startAddress ? String(row.startAddress) : null,
-      endAddress: row.endAddress ? String(row.endAddress) : null,
+      startAddress,
+      endAddress,
       startLatitude: toNumber(row.startLatitude),
       startLongitude: toNumber(row.startLongitude),
       endLatitude: toNumber(row.endLatitude),

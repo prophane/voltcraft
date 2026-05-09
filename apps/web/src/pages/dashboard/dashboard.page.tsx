@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { vehicleApi, statsApi } from '@/features/vehicle/api'
 import { Card } from '@/components/ui/card'
@@ -62,6 +62,8 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 export function DashboardPage() {
+  const [mapZoom, setMapZoom] = useState<'street' | 'district' | 'city'>('district')
+
   const { data: vehicle } = useQuery({
     queryKey: ['vehicle', 'current'],
     queryFn: vehicleApi.getCurrent,
@@ -173,16 +175,16 @@ export function DashboardPage() {
     if (!location) return null
     const lon = location.longitude
     const lat = location.latitude
-    const delta = 0.01
+    const delta = mapZoom === 'street' ? 0.0025 : mapZoom === 'district' ? 0.008 : 0.02
     const left = lon - delta
     const right = lon + delta
     const top = lat + delta
     const bottom = lat - delta
     return `https://www.openstreetmap.org/export/embed.html?bbox=${left},${bottom},${right},${top}&layer=mapnik&marker=${lat},${lon}`
-  }, [location])
+  }, [location, mapZoom])
 
   return (
-    <div className="max-w-md lg:max-w-5xl mx-auto space-y-5">
+    <div className="max-w-md lg:max-w-6xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-semibold tracking-tight text-text-primary">Dashboard</h1>
@@ -241,10 +243,34 @@ export function DashboardPage() {
 
           {location && latitude != null && longitude != null && mapEmbedUrl ? (
             <div className="mt-3 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-text-muted">Zoom carte</p>
+                <div className="flex items-center gap-1.5">
+                  {([
+                    { key: 'street', label: 'Rue' },
+                    { key: 'district', label: 'Quartier' },
+                    { key: 'city', label: 'Ville' },
+                  ] as const).map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => setMapZoom(item.key)}
+                      className={cn(
+                        'px-2.5 py-1 rounded-md border text-xs transition-colors',
+                        mapZoom === item.key
+                          ? 'border-accent-500/40 bg-accent-500/10 text-accent-400'
+                          : 'border-border-subtle text-text-secondary hover:text-text-primary',
+                      )}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <iframe
                 title="Carte position véhicule"
                 src={mapEmbedUrl}
-                className="w-full h-44 rounded-lg border border-border-subtle"
+                className="w-full h-48 lg:h-64 rounded-lg border border-border-subtle"
                 loading="lazy"
                 referrerPolicy="no-referrer-when-downgrade"
               />
