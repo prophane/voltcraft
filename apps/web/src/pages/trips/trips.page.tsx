@@ -314,8 +314,7 @@ function formatPointLabel(address?: string | null, lat?: number | null, lon?: nu
     if (Number.isFinite(dist) && dist <= home.radiusM) return 'Maison'
   }
 
-  const compact = compactAddress(address)
-  if (compact) return compact
+  if (address) return address
   if (lat != null && lon != null) return `${lat.toFixed(5)}, ${lon.toFixed(5)}`
   return 'Point inconnu'
 }
