@@ -15,6 +15,35 @@ interface Geofence {
   billingType?: string
 }
 
+function normalizeGeofence(row: unknown): Geofence | null {
+  if (!row || typeof row !== 'object') return null
+  const record = row as Record<string, unknown>
+  const toNumber = (value: unknown) => {
+    if (typeof value === 'number') return value
+    if (typeof value === 'string') {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) ? parsed : null
+    }
+    return null
+  }
+
+  const id = toNumber(record.id)
+  const latitude = toNumber(record.latitude)
+  const longitude = toNumber(record.longitude)
+  const radius = toNumber(record.radius)
+  if (id == null || latitude == null || longitude == null || radius == null) return null
+
+  return {
+    id,
+    name: String(record.name ?? ''),
+    latitude,
+    longitude,
+    radius,
+    costPerUnit: toNumber(record.costPerUnit ?? record.cost_per_unit) ?? undefined,
+    billingType: typeof record.billingType === 'string' ? record.billingType : typeof record.billing_type === 'string' ? record.billing_type : undefined,
+  }
+}
+
 export function GeofencesSection() {
   const qc = useQueryClient()
   const [isCreating, setIsCreating] = useState(false)
@@ -25,7 +54,7 @@ export function GeofencesSection() {
     queryKey: ['geofences'],
     queryFn: async () => {
       const response = await api.get('/settings/geofences')
-      return Array.isArray(response) ? response : []
+      return Array.isArray(response) ? response.map(normalizeGeofence).filter(Boolean) as Geofence[] : []
     },
   })
 

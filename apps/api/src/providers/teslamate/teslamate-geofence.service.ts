@@ -1,6 +1,15 @@
 import { Pool } from 'pg'
 import { env } from '../../config/env.js'
 
+function toNumber(value: unknown) {
+  if (typeof value === 'number') return value
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
 export interface Geofence {
   id: number
   name: string
@@ -58,7 +67,19 @@ export class TeslaMateGeofenceService {
     const rows = await this.query<Geofence>(
       'SELECT id, name, latitude, longitude, radius, cost_per_unit AS "costPerUnit", session_fee AS "sessionFee", billing_type AS "billingType" FROM geofences ORDER BY name',
     )
-    return rows
+    return rows.map((row) => {
+      const record = row as unknown as Record<string, unknown>
+      return {
+        id: toNumber(record.id) ?? 0,
+        name: String(record.name ?? ''),
+        latitude: toNumber(record.latitude) ?? 0,
+        longitude: toNumber(record.longitude) ?? 0,
+        radius: toNumber(record.radius) ?? 0,
+        costPerUnit: toNumber(record.costPerUnit) ?? undefined,
+        sessionFee: toNumber(record.sessionFee) ?? undefined,
+        billingType: record.billingType == null ? undefined : String(record.billingType),
+      }
+    })
   }
 
   async createGeofence(input: CreateGeofenceInput): Promise<Geofence> {
@@ -68,7 +89,17 @@ export class TeslaMateGeofenceService {
        RETURNING id, name, latitude, longitude, radius, cost_per_unit AS "costPerUnit", session_fee AS "sessionFee", billing_type AS "billingType"`,
       [input.name, input.latitude, input.longitude, input.radius, input.costPerUnit ?? 0, input.sessionFee ?? null, input.billingType ?? 'per_kwh'],
     )
-    return result[0] as Geofence
+    const record = result[0] as unknown as Record<string, unknown>
+    return {
+      id: toNumber(record.id) ?? 0,
+      name: String(record.name ?? ''),
+      latitude: toNumber(record.latitude) ?? 0,
+      longitude: toNumber(record.longitude) ?? 0,
+      radius: toNumber(record.radius) ?? 0,
+      costPerUnit: toNumber(record.costPerUnit) ?? undefined,
+      sessionFee: toNumber(record.sessionFee) ?? undefined,
+      billingType: record.billingType == null ? undefined : String(record.billingType),
+    }
   }
 
   async updateGeofence(id: number, input: Partial<CreateGeofenceInput>): Promise<Geofence> {
@@ -112,7 +143,17 @@ export class TeslaMateGeofenceService {
       `UPDATE geofences SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING id, name, latitude, longitude, radius, cost_per_unit AS "costPerUnit", session_fee AS "sessionFee", billing_type AS "billingType"`,
       params,
     )
-    return result[0] as Geofence
+    const record = result[0] as unknown as Record<string, unknown>
+    return {
+      id: toNumber(record.id) ?? id,
+      name: String(record.name ?? ''),
+      latitude: toNumber(record.latitude) ?? 0,
+      longitude: toNumber(record.longitude) ?? 0,
+      radius: toNumber(record.radius) ?? 0,
+      costPerUnit: toNumber(record.costPerUnit) ?? undefined,
+      sessionFee: toNumber(record.sessionFee) ?? undefined,
+      billingType: record.billingType == null ? undefined : String(record.billingType),
+    }
   }
 
   async deleteGeofence(id: number): Promise<boolean> {
