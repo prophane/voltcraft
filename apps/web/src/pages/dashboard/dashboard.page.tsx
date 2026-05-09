@@ -206,9 +206,11 @@ export function DashboardPage() {
   }, [vehicle?.displayName])
 
   const statusLabel = useMemo(() => {
+    if (state?.isCharging) return 'Charging'
+    if (state?.isPluggedIn) return 'Plugged'
     if (!vehicle?.state) return hasTelemetry ? 'Online' : 'No data yet'
     return vehicle.state === 'online' ? 'Online' : vehicle.state
-  }, [hasTelemetry, vehicle?.state])
+  }, [hasTelemetry, state?.isCharging, state?.isPluggedIn, vehicle?.state])
 
   const extendedState = state as (typeof state & {
     chargeLimitSoc?: number | null
@@ -258,6 +260,8 @@ export function DashboardPage() {
       : 'Deverrouille'
 
   const statusDetail = useMemo(() => {
+    if (state?.isCharging) return 'Charging'
+    if (state?.isPluggedIn) return 'Plugged'
     if (!hasTelemetry) return 'No data yet'
     if (vehicle?.state === 'online') return 'Online'
     if (vehicle?.state === 'asleep') return 'Asleep'
@@ -265,7 +269,7 @@ export function DashboardPage() {
     if (vehicle?.state === 'charging') return 'Charging'
     if (vehicle?.state === 'driving') return 'Driving'
     return vehicle?.state ?? 'Unknown'
-  }, [hasTelemetry, vehicle?.state])
+  }, [hasTelemetry, state?.isCharging, state?.isPluggedIn, vehicle?.state])
 
   const mapEmbedUrl = useMemo(() => {
     if (latitude == null || longitude == null) return null

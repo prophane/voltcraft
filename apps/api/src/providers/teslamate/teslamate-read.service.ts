@@ -125,8 +125,12 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 
 function toVehicleState(row: TeslaMateVehicleRow, fallback?: FallbackSnapshot) {
   const stale = isStaleTelemetry(row.captured_at ?? fallback?.capturedAt)
+  const chargePower = toNumber(row.charger_power)
+  const isCharging = row.open_charge_id != null && chargePower != null
+    ? chargePower > 0
+    : fallback?.isCharging === true
 
-  if (row.open_charge_id) return 'charging'
+  if (isCharging) return 'charging'
   if (row.open_drive_id) return 'driving'
 
   // TeslaMate may still report "online" while last telemetry is old.
@@ -362,6 +366,13 @@ export class TeslaMateReadService {
     if (!row) return null
 
     const chargePower = toNumber(row.charger_power)
+    const isPluggedIn = row.open_charge_id != null || fallback?.isPluggedIn === true
+    const isCharging = row.open_charge_id != null && chargePower != null
+      ? chargePower > 0
+      : fallback?.isCharging === true
+    const chargeState = row.open_charge_id != null
+      ? (isCharging ? 'Charging' : 'Stopped')
+      : 'Disconnected'
     const odometerMultiplier = await this.inferOdometerMultiplier(vehicle.vin)
     const speedMultiplier = odometerMultiplier
     const teslamateOdometer = toNumber(row.odometer)
@@ -377,11 +388,9 @@ export class TeslaMateReadService {
       batteryLevel: row.battery_level ?? fallback?.batteryLevel ?? 0,
       batteryRange: toNumber(row.battery_range_km) ?? fallback?.batteryRange ?? 0,
       chargeLimitSoc: fallback?.chargeLimitSoc ?? null,
-      chargeState:
-        fallback?.chargeState
-        ?? (row.open_charge_id ? (chargePower && chargePower > 0 ? 'Charging' : 'Stopped') : 'Disconnected'),
-      isCharging: row.open_charge_id != null || fallback?.isCharging === true,
-      isPluggedIn: row.open_charge_id != null || fallback?.isPluggedIn === true,
+      chargeState,
+      isCharging,
+      isPluggedIn,
       chargeRate: fallback?.chargeRate ?? 0,
       timeToFullCharge: fallback?.timeToFullCharge ?? 0,
       climateOn: row.is_climate_on ?? fallback?.climateOn ?? false,
