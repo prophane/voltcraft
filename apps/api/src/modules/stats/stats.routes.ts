@@ -5,6 +5,7 @@ import { VehicleRepository } from '../vehicle/vehicle.repository.js'
 import { AuthRepository } from '../auth/auth.repository.js'
 import { AuthService } from '../auth/auth.service.js'
 import { requireAuth } from '../auth/auth.routes.js'
+import { AppError } from '../../common/errors/app-error.js'
 import { NotFoundError } from '../../common/errors/app-error.js'
 import { calcAvgConsumption } from './calculators/summary.calculator.js'
 import { ok } from '../../common/http/response.js'
@@ -46,6 +47,7 @@ export async function statsRoutes(app: FastifyInstance) {
     if (teslamate.isEnabled()) {
       const summary = await teslamate.getSummary(vehicle.vin, since, days)
       if (summary) return ok(summary)
+      throw new AppError('TESLAMATE_UNAVAILABLE', 'TeslaMate summary query failed', 503)
     }
 
     const [distanceKm, energyAddedKwh, energyUsedKwh, cost, tripsCount, chargesCount] = await Promise.all([

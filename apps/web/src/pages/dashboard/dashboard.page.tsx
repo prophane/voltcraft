@@ -326,7 +326,7 @@ export function DashboardPage() {
         <div className="grid grid-cols-2 gap-4 mt-4">
           <div>
             <p className="text-xs text-text-muted uppercase">Distance</p>
-            <p className="text-3xl font-semibold text-text-primary mt-1">{Math.round(distanceKm ?? 0)} km</p>
+            <p className="text-3xl font-semibold text-text-primary mt-1">{distanceKm != null ? `${Math.round(distanceKm)} km` : '—'}</p>
           </div>
           <div>
             <p className="text-xs text-text-muted uppercase">Énergie consommée</p>

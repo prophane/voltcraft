@@ -5,6 +5,7 @@ import { VehicleRepository } from '../vehicle/vehicle.repository.js'
 import { AuthRepository } from '../auth/auth.repository.js'
 import { AuthService } from '../auth/auth.service.js'
 import { requireAuth } from '../auth/auth.routes.js'
+import { AppError } from '../../common/errors/app-error.js'
 import { NotFoundError } from '../../common/errors/app-error.js'
 import { ok, paginated } from '../../common/http/response.js'
 import { withVehicleAutoBootstrap } from '../vehicle/vehicle-auto-bootstrap.js'
@@ -52,6 +53,7 @@ export async function chargesRoutes(app: FastifyInstance) {
       if (teslamateCharges) {
         return paginated(teslamateCharges.sessions, teslamateCharges.total, query.page, query.pageSize)
       }
+      throw new AppError('TESLAMATE_UNAVAILABLE', 'TeslaMate charges query failed', 503)
     }
     const { sessions, total } = await chargesRepo.findMany(vehicle.id, {
       page: query.page,

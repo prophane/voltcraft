@@ -202,6 +202,8 @@ export class TeslaMateReadService {
         const result = await this.pool.query<T>(text, values)
         return result.rows
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        console.error(`[TeslaMateReadService] query failed: ${message}`)
         return [] as T[]
       }
   }
@@ -397,8 +399,8 @@ export class TeslaMateReadService {
             WHEN c.efficiency IS NOT NULL THEN ROUND((c.efficiency * 100)::numeric, 2)
             ELSE NULL
           END AS "avgConsumptionKwh100",
-          COALESCE(sa.display_name, spa.display_name) AS "startAddress",
-          COALESCE(ea.display_name, epa.display_name) AS "endAddress",
+          COALESCE(sa.display_name, sa.name, spa.display_name, spa.name) AS "startAddress",
+          COALESCE(ea.display_name, ea.name, epa.display_name, epa.name) AS "endAddress",
           sp.latitude::float8 AS "startLatitude",
           sp.longitude::float8 AS "startLongitude",
           ep.latitude::float8 AS "endLatitude",
@@ -450,8 +452,8 @@ export class TeslaMateReadService {
             WHEN c.efficiency IS NOT NULL THEN ROUND((c.efficiency * 100)::numeric, 2)
             ELSE NULL
           END AS "avgConsumptionKwh100",
-          COALESCE(sa.display_name, spa.display_name) AS "startAddress",
-          COALESCE(ea.display_name, epa.display_name) AS "endAddress",
+          COALESCE(sa.display_name, sa.name, spa.display_name, spa.name) AS "startAddress",
+          COALESCE(ea.display_name, ea.name, epa.display_name, epa.name) AS "endAddress",
           sp.latitude::float8 AS "startLatitude",
           sp.longitude::float8 AS "startLongitude",
           ep.latitude::float8 AS "endLatitude",
@@ -612,11 +614,11 @@ export class TeslaMateReadService {
           cp.start_battery_level AS "startBatteryLevel",
           cp.end_battery_level AS "endBatteryLevel",
           cp.duration_min AS "durationMin",
-          cp.cost AS "estimatedCost",
+          NULL::float8 AS "estimatedCost",
           cp.start_rated_range_km,
           cp.end_rated_range_km,
           cp.position_id,
-          COALESCE(a.display_name, pa.display_name) AS address,
+          COALESCE(a.display_name, a.name, pa.display_name, pa.name) AS address,
           p.latitude::float8 AS latitude,
           p.longitude::float8 AS longitude,
           cp_agg.max_charger_power_kw AS "maxChargeKw",
@@ -677,8 +679,8 @@ export class TeslaMateReadService {
           cp.start_battery_level AS "startBatteryLevel",
           cp.end_battery_level AS "endBatteryLevel",
           cp.duration_min AS "durationMin",
-          cp.cost AS "estimatedCost",
-          COALESCE(a.display_name, pa.display_name) AS address,
+          NULL::float8 AS "estimatedCost",
+          COALESCE(a.display_name, a.name, pa.display_name, pa.name) AS address,
           p.latitude::float8 AS latitude,
           p.longitude::float8 AS longitude,
           cp_agg.max_charger_power_kw AS "maxChargeKw",
@@ -737,7 +739,7 @@ export class TeslaMateReadService {
       `
         SELECT
           COALESCE(SUM(COALESCE(cp.charge_energy_added, lc.charge_energy_added)), 0) AS energy_added_kwh,
-          COALESCE(SUM(cp.cost), 0) AS estimated_cost,
+          0::numeric AS estimated_cost,
           COALESCE(SUM(cp.duration_min), 0) AS duration_min,
           COUNT(*)::int AS total
         FROM charging_processes cp
@@ -774,15 +776,16 @@ export class TeslaMateReadService {
 
   async getSummary(vin: string, since: Date, days: number) {
     const distanceMultiplier = await this.inferOdometerMultiplier(vin)
-    const rows = await this.query<{
-      distance_km: number | string | null
-      energy_added_kwh: number | string | null
-      energy_used_kwh: number | string | null
-      estimated_cost_eur: number | string | null
-      trips_count: number | string
-      charge_sessions_count: number | string
-    }>(
-      `
+    try {
+      const rows = await this.queryOrThrow<{
+        distance_km: number | string | null
+        energy_added_kwh: number | string | null
+        energy_used_kwh: number | string | null
+        estimated_cost_eur: number | string | null
+        trips_count: number | string
+        charge_sessions_count: number | string
+      }>(
+        `
         WITH drive_stats AS (
           SELECT
             COALESCE(SUM(d.distance), 0) AS distance_km,
@@ -796,7 +799,7 @@ export class TeslaMateReadService {
         charge_stats AS (
           SELECT
             COALESCE(SUM(COALESCE(cp.charge_energy_added, lc.charge_energy_added)), 0) AS energy_added_kwh,
-            COALESCE(SUM(cp.cost), 0) AS estimated_cost_eur,
+            0::numeric AS estimated_cost_eur,
             COUNT(*)::int AS charge_sessions_count
           FROM charging_processes cp
           INNER JOIN cars c ON c.id = cp.car_id
@@ -819,23 +822,26 @@ export class TeslaMateReadService {
           cs.charge_sessions_count
         FROM drive_stats ds
         CROSS JOIN charge_stats cs
-      `,
-      [vin, since],
-    )
+        `,
+        [vin, since],
+      )
 
-    const row = rows[0]
-    const distanceKm = (toNumber(row?.distance_km) ?? 0) * distanceMultiplier
-    const energyUsedKwh = toNumber(row?.energy_used_kwh) ?? 0
+      const row = rows[0]
+      const distanceKm = (toNumber(row?.distance_km) ?? 0) * distanceMultiplier
+      const energyUsedKwh = toNumber(row?.energy_used_kwh) ?? 0
 
-    return {
-      periodDays: days,
-      distanceKm: Math.round(distanceKm * 10) / 10,
-      energyAddedKwh: Math.round((toNumber(row?.energy_added_kwh) ?? 0) * 10) / 10,
-      energyUsedKwh: Math.round(energyUsedKwh * 10) / 10,
-      estimatedCostEur: Math.round((toNumber(row?.estimated_cost_eur) ?? 0) * 100) / 100,
-      avgConsumptionKwhPer100km: distanceKm > 0 ? Math.round((energyUsedKwh / distanceKm) * 100 * 10) / 10 : null,
-      tripsCount: Number(row?.trips_count ?? 0),
-      chargeSessionsCount: Number(row?.charge_sessions_count ?? 0),
+      return {
+        periodDays: days,
+        distanceKm: Math.round(distanceKm * 10) / 10,
+        energyAddedKwh: Math.round((toNumber(row?.energy_added_kwh) ?? 0) * 10) / 10,
+        energyUsedKwh: Math.round(energyUsedKwh * 10) / 10,
+        estimatedCostEur: Math.round((toNumber(row?.estimated_cost_eur) ?? 0) * 100) / 100,
+        avgConsumptionKwhPer100km: distanceKm > 0 ? Math.round((energyUsedKwh / distanceKm) * 100 * 10) / 10 : null,
+        tripsCount: Number(row?.trips_count ?? 0),
+        chargeSessionsCount: Number(row?.charge_sessions_count ?? 0),
+      }
+    } catch {
+      return null
     }
   }
 
@@ -1008,11 +1014,25 @@ export class TeslaMateReadService {
     const durationMin = toNumber(row.durationMin)
     const energyAddedKwh = toNumber(row.energyAddedKwh)
     const estimatedCost = toNumber(row.estimatedCost)
+    const startSoc = toNumber(row.startBatteryLevel)
+    const endSoc = toNumber(row.endBatteryLevel)
 
-    const derivedAvgChargeKw =
+    const derivedEnergyFromSoc =
+      startSoc != null && endSoc != null && endSoc > startSoc
+        ? ((endSoc - startSoc) / 100) * 75
+        : null
+
+    const derivedAvgChargeKwFromEnergy =
       energyAddedKwh != null && durationMin != null && durationMin > 0
         ? energyAddedKwh / (durationMin / 60)
         : null
+
+    const derivedAvgChargeKwFromSoc =
+      derivedEnergyFromSoc != null && durationMin != null && durationMin > 0
+        ? derivedEnergyFromSoc / (durationMin / 60)
+        : null
+
+    const derivedAvgChargeKw = derivedAvgChargeKwFromEnergy ?? derivedAvgChargeKwFromSoc
 
     const avgChargeKw = toNumber(row.avgChargeKw) ?? derivedAvgChargeKw
     const chargerPower = toNumber(row.chargerPower) ?? avgChargeKw
@@ -1029,7 +1049,7 @@ export class TeslaMateReadService {
       id: String(row.id),
       startedAt: toDate(row.startedAt),
       endedAt: toDate(row.endedAt),
-      energyAddedKwh,
+      energyAddedKwh: energyAddedKwh ?? derivedEnergyFromSoc,
       startBatteryLevel: toNumber(row.startBatteryLevel),
       endBatteryLevel: toNumber(row.endBatteryLevel),
       chargeLimitSoc: null,

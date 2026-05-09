@@ -50,6 +50,7 @@ type TripPathInsights = {
 }
 
 type TripTab = 'all' | 'work' | 'personal'
+type ResolvedTripAddresses = Record<string, { start: string | null; end: string | null }>
 
 function textContainsWorkHint(value?: string | null): boolean {
   if (!value) return false
@@ -333,7 +334,7 @@ export function TripsPage() {
     enabled: !!selectedTripId,
   })
 
-  const { data: selectedPathData, isFetching: isFetchingPath, isError: hasPathError } = useQuery({
+  const { data: selectedPathData, isFetching: isFetchingPath } = useQuery({
     queryKey: ['trips', selectedTripId, 'path'],
     queryFn: () => tripsApi.path(selectedTripId as string),
     enabled: !!selectedTripId,
@@ -456,6 +457,36 @@ export function TripsPage() {
     return trips.filter((t) => !isWorkTrip(t))
   }, [tab, trips])
 
+  const { data: listResolvedAddresses } = useQuery({
+    queryKey: [
+      'trips',
+      'list-addresses',
+      filteredTrips
+        .slice(0, 20)
+        .map((trip) => `${trip.id}:${trip.startLatitude ?? ''}:${trip.startLongitude ?? ''}:${trip.endLatitude ?? ''}:${trip.endLongitude ?? ''}`)
+        .join('|'),
+    ],
+    queryFn: async () => {
+      const candidates = filteredTrips.slice(0, 20)
+      const entries = await Promise.all(candidates.map(async (trip) => {
+        const start = trip.startAddress && trip.startAddress.trim().length > 0
+          ? trip.startAddress
+          : trip.startLatitude != null && trip.startLongitude != null
+            ? await reverseGeocode(trip.startLatitude, trip.startLongitude)
+            : null
+        const end = trip.endAddress && trip.endAddress.trim().length > 0
+          ? trip.endAddress
+          : trip.endLatitude != null && trip.endLongitude != null
+            ? await reverseGeocode(trip.endLatitude, trip.endLongitude)
+            : null
+        return [String(trip.id), { start, end }] as const
+      }))
+      return Object.fromEntries(entries) as ResolvedTripAddresses
+    },
+    enabled: filteredTrips.length > 0,
+    staleTime: 30 * 60_000,
+  })
+
   const summary = useMemo(() => {
     const totalDistance = filteredTrips.reduce((acc, t) => acc + (t.distanceKm ?? 0), 0)
     const totalDuration = filteredTrips.reduce((acc, t) => acc + (t.durationMin ?? 0), 0)
@@ -566,7 +597,7 @@ export function TripsPage() {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-text-primary">
-                        {formatPointLabel(trip.startAddress, trip.startLatitude, trip.startLongitude)} → {formatPointLabel(trip.endAddress, trip.endLatitude, trip.endLongitude)}
+                        {formatPointLabel(listResolvedAddresses?.[tripId]?.start ?? trip.startAddress, trip.startLatitude, trip.startLongitude)} → {formatPointLabel(listResolvedAddresses?.[tripId]?.end ?? trip.endAddress, trip.endLatitude, trip.endLongitude)}
                       </p>
                       <p className="text-xs text-text-muted mt-0.5">{formatDate(trip.startedAt)}</p>
                     </div>
