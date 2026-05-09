@@ -457,7 +457,7 @@ export function DashboardPage() {
               <div className="grid grid-cols-3 gap-3 text-sm">
                 <div>
                   <p className="text-[11px] text-text-muted uppercase">Distance</p>
-                  <p className="text-text-secondary">{latestTrip.distanceKm != null ? `${Math.round(latestTrip.distanceKm)} km` : '—'}</p>
+                  <p className="text-text-secondary">{latestTrip.distanceKm != null ? `${formatNumberWithSpaces(latestTrip.distanceKm)} km` : '—'}</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-text-muted uppercase">Durée</p>
