@@ -86,6 +86,7 @@ export function ChargesPage() {
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     staleTime: 0,
+    placeholderData: (previousData) => previousData,
   })
 
   const sessions = normalizeSessions(data)

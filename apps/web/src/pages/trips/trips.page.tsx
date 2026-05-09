@@ -270,6 +270,7 @@ export function TripsPage() {
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     staleTime: 0,
+    placeholderData: (previousData) => previousData,
   })
 
   const { data: selectedTripData, isFetching: isFetchingTrip, isError: hasTripError } = useQuery({
