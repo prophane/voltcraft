@@ -302,7 +302,9 @@ export class TeslaMateReadService {
       }
     }
 
-    const multiplier = mileVotes > kmVotes ? 1.609344 : 1
+    const totalVotes = mileVotes + kmVotes
+    // Tesla Fleet / TeslaMate telemetry is frequently in miles; when unsure, prefer miles->km conversion.
+    const multiplier = totalVotes === 0 ? 1.609344 : mileVotes >= kmVotes ? 1.609344 : 1
     this.odometerMultiplierCache.set(vin, { value: multiplier, at: Date.now() })
     return multiplier
   }
@@ -388,6 +390,7 @@ export class TeslaMateReadService {
 
   async getTrips(vin: string, opts: PaginationOpts) {
     if (this.failed) return null
+    const distanceMultiplier = await this.inferOdometerMultiplier(vin)
     const where = buildTripWhereClause(opts.from, opts.to)
     const countRows = await this.query<{ total: string | number }>(
       `
@@ -442,13 +445,14 @@ export class TeslaMateReadService {
     )
 
     return {
-      trips: rows.map((row: MappedRecord) => this.normalizeTrip(row)),
+      trips: rows.map((row: MappedRecord) => this.normalizeTrip(row, distanceMultiplier)),
       total: Number(countRows[0]?.total ?? 0),
     }
   }
 
   async getTripById(vin: string, id: string) {
     if (this.failed) return null
+    const distanceMultiplier = await this.inferOdometerMultiplier(vin)
     const rows = await this.query<Array<Record<string, unknown>>[number]>(
       `
         SELECT
@@ -488,7 +492,7 @@ export class TeslaMateReadService {
     )
 
     const row = rows[0]
-    return row ? this.normalizeTrip(row) : null
+    return row ? this.normalizeTrip(row, distanceMultiplier) : null
   }
 
   async getTripPath(vin: string, id: string) {
@@ -672,6 +676,7 @@ export class TeslaMateReadService {
 
   async getSummary(vin: string, since: Date, days: number) {
     if (this.failed) return null
+    const distanceMultiplier = await this.inferOdometerMultiplier(vin)
     const rows = await this.query<{
       distance_km: number | string | null
       energy_added_kwh: number | string | null
@@ -722,7 +727,7 @@ export class TeslaMateReadService {
     )
 
     const row = rows[0]
-    const distanceKm = toNumber(row?.distance_km) ?? 0
+    const distanceKm = (toNumber(row?.distance_km) ?? 0) * distanceMultiplier
     const energyUsedKwh = toNumber(row?.energy_used_kwh) ?? 0
 
     return {
@@ -739,6 +744,7 @@ export class TeslaMateReadService {
 
   async getDailyEfficiency(vin: string, since: Date) {
     if (this.failed) return null
+    const distanceMultiplier = await this.inferOdometerMultiplier(vin)
 
     const rows = await this.query<{
       day: Date | string
@@ -786,7 +792,7 @@ export class TeslaMateReadService {
 
     return rows.map((row) => ({
       day: toDate(row.day) ?? new Date(),
-      distance_km: toNumber(row.distance_km) ?? 0,
+      distance_km: (toNumber(row.distance_km) ?? 0) * distanceMultiplier,
       charged_kwh: toNumber(row.charged_kwh) ?? 0,
     }))
   }
@@ -876,18 +882,20 @@ export class TeslaMateReadService {
     return rows[0] ?? null
   }
 
-  private normalizeTrip(row: Record<string, unknown>) {
+  private normalizeTrip(row: Record<string, unknown>, distanceMultiplier = 1) {
     const startAddress = row.startAddress ? String(row.startAddress) : coordLabel(row.startLatitude, row.startLongitude)
     const endAddress = row.endAddress ? String(row.endAddress) : coordLabel(row.endLatitude, row.endLongitude)
+    const distanceKm = toNumber(row.distanceKm)
+    const avgConsumptionKwh100 = toNumber(row.avgConsumptionKwh100)
 
     return {
       id: String(row.id),
       startedAt: toDate(row.startedAt),
       endedAt: toDate(row.endedAt),
       durationMin: toNumber(row.durationMin),
-      distanceKm: toNumber(row.distanceKm),
+      distanceKm: distanceKm != null ? distanceKm * distanceMultiplier : null,
       energyUsedKwh: toNumber(row.energyUsedKwh),
-      avgConsumptionKwh100: toNumber(row.avgConsumptionKwh100),
+      avgConsumptionKwh100: avgConsumptionKwh100 != null ? avgConsumptionKwh100 / distanceMultiplier : null,
       startAddress,
       endAddress,
       startLatitude: toNumber(row.startLatitude),

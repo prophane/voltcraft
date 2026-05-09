@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { queryClient } from './lib/query-client'
 import { App } from './app/app-shell'
 import { ErrorBoundary } from './app/error-boundary'
+import 'leaflet/dist/leaflet.css'
 import './styles/globals.css'
 
 async function cleanupLegacyServiceWorkers() {

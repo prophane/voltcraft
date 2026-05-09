@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { statsApi, tripsApi } from '@/features/vehicle/api'
+import { MapContainer, Polyline, TileLayer, CircleMarker } from 'react-leaflet'
 import { Card } from '@/components/ui/card'
 import { CardSkeleton } from '@/components/ui/skeleton'
 import { formatDate, formatKm, formatDuration } from '@/lib/utils'
@@ -206,31 +207,25 @@ function buildPathInsights(points: TripPathPoint[]): TripPathInsights | null {
   }
 }
 
-function buildTripRouteEmbedUrl(
-  start: { lat: number; lon: number } | null,
-  end: { lat: number; lon: number } | null,
-  path: TripPathPoint[],
-) {
-  if (!start || !end) return null
+function normalizeRoutePoints(start: { lat: number; lon: number } | null, end: { lat: number; lon: number } | null, path: TripPathPoint[]) {
+  const raw = path
+    .filter((p) => typeof p.latitude === 'number' && typeof p.longitude === 'number')
+    .map((p) => [p.latitude as number, p.longitude as number] as [number, number])
 
-  const valid = path.filter(
-    (p) => typeof p.latitude === 'number' && typeof p.longitude === 'number',
-  ) as Array<{ latitude: number; longitude: number }>
-
-  let waypoints = ''
-  if (valid.length > 2) {
-    const maxWaypoints = 8
-    const step = Math.max(1, Math.floor(valid.length / maxWaypoints))
-    const sampled = valid
-      .filter((_, index) => index > 0 && index < valid.length - 1 && index % step === 0)
-      .slice(0, maxWaypoints)
-
-    if (sampled.length > 0) {
-      waypoints = `&waypoints=${encodeURIComponent(sampled.map((p) => `${p.latitude},${p.longitude}`).join('|'))}`
-    }
+  if (raw.length >= 2) {
+    return raw
   }
 
-  return `https://www.google.com/maps?output=embed&saddr=${start.lat},${start.lon}&daddr=${end.lat},${end.lon}${waypoints}`
+  if (start && end) {
+    return [
+      [start.lat, start.lon] as [number, number],
+      [end.lat, end.lon] as [number, number],
+    ]
+  }
+
+  if (start) return [[start.lat, start.lon] as [number, number]]
+  if (end) return [[end.lat, end.lon] as [number, number]]
+  return []
 }
 
 function formatPointLabel(address?: string | null, lat?: number | null, lon?: number | null) {
@@ -476,9 +471,7 @@ export function TripsPage() {
             const detailEndCoords = detailTrip.endLatitude != null && detailTrip.endLongitude != null
               ? { lat: detailTrip.endLatitude, lon: detailTrip.endLongitude }
               : null
-            const detailMapUrl = isSelected
-              ? buildTripRouteEmbedUrl(detailStartCoords, detailEndCoords, selectedPath)
-              : null
+            const detailRoutePoints = isSelected ? normalizeRoutePoints(detailStartCoords, detailEndCoords, selectedPath) : []
             const pathInsights = isSelected ? buildPathInsights(selectedPath) : null
             const avgSpeedFromTrip = (detailTrip.distanceKm ?? 0) > 0 && (detailTrip.durationMin ?? 0) > 0
               ? (detailTrip.distanceKm as number) / ((detailTrip.durationMin as number) / 60)
@@ -631,16 +624,34 @@ export function TripsPage() {
                     )}
                   </div>
 
-                  {detailMapUrl && (
+                  {detailRoutePoints.length > 0 && (
                     <div className="space-y-2">
                       <p className="text-xs uppercase tracking-wide text-text-muted">Carte du trajet</p>
-                      <iframe
-                        title="Carte trajet"
-                        src={detailMapUrl}
-                        className="w-full h-64 lg:h-80 rounded-lg border border-border-subtle"
-                        loading="lazy"
-                        referrerPolicy="no-referrer-when-downgrade"
-                      />
+                      <div className="w-full h-64 lg:h-80 rounded-lg border border-border-subtle overflow-hidden">
+                        <MapContainer
+                          bounds={detailRoutePoints}
+                          className="h-full w-full"
+                          scrollWheelZoom
+                        >
+                          <TileLayer
+                            attribution='&copy; OpenStreetMap contributors'
+                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                          />
+                          {detailRoutePoints.length >= 2 && (
+                            <Polyline positions={detailRoutePoints} pathOptions={{ color: '#E8112D', weight: 5 }} />
+                          )}
+                          <CircleMarker
+                            center={detailRoutePoints[0] as [number, number]}
+                            radius={6}
+                            pathOptions={{ color: '#16a34a', fillColor: '#16a34a', fillOpacity: 0.9 }}
+                          />
+                          <CircleMarker
+                            center={detailRoutePoints[detailRoutePoints.length - 1] as [number, number]}
+                            radius={6}
+                            pathOptions={{ color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9 }}
+                          />
+                        </MapContainer>
+                      </div>
                       {detailStartCoords && detailEndCoords && (
                         <div className="flex justify-end">
                           <a
