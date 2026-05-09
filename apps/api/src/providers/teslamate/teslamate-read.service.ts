@@ -192,7 +192,6 @@ export class TeslaMateReadService {
     : null
     private failed = false
     private readonly odometerMultiplierCache = new Map<string, { value: number; at: number }>()
-    private readonly lengthUnitCache = new Map<string, { value: 'km' | 'mi'; at: number }>()
 
   isEnabled() {
       return this.enabled
@@ -210,35 +209,8 @@ export class TeslaMateReadService {
   }
 
   private async inferOdometerMultiplier(vin: string): Promise<number> {
-    const unitCached = this.lengthUnitCache.get(vin)
-    if (unitCached && Date.now() - unitCached.at < 60 * 60_000) {
-      return unitCached.value === 'mi' ? 1.609344 : 1
-    }
-
-    const unitRows = await this.query<{ key: string | null; value: string | null }>(
-      `
-        SELECT s.key, s.value
-        FROM settings s
-        WHERE LOWER(s.key) IN ('unit_of_length', 'unit_of_length_preference', 'length_unit')
-        LIMIT 3
-      `,
-      [],
-    )
-
-    for (const row of unitRows) {
-      const value = (row.value ?? '').toLowerCase()
-      if (value.includes('mi')) {
-        this.lengthUnitCache.set(vin, { value: 'mi', at: Date.now() })
-        return 1.609344
-      }
-      if (value.includes('km')) {
-        this.lengthUnitCache.set(vin, { value: 'km', at: Date.now() })
-        return 1
-      }
-    }
-
     const cached = this.odometerMultiplierCache.get(vin)
-    if (cached && Date.now() - cached.at < 60 * 60_000) {
+    if (cached && Date.now() - cached.at < 5 * 60_000) {
       return cached.value
     }
 
@@ -302,9 +274,8 @@ export class TeslaMateReadService {
       }
     }
 
-    const totalVotes = mileVotes + kmVotes
-    // Tesla Fleet / TeslaMate telemetry is frequently in miles; when unsure, prefer miles->km conversion.
-    const multiplier = totalVotes === 0 ? 1.609344 : mileVotes >= kmVotes ? 1.609344 : 1
+    // When ambiguous, prefer miles->km because TeslaMate often stores odometer/speed in miles from Tesla API.
+    const multiplier = mileVotes + kmVotes === 0 ? 1.609344 : mileVotes >= kmVotes ? 1.609344 : 1
     this.odometerMultiplierCache.set(vin, { value: multiplier, at: Date.now() })
     return multiplier
   }
