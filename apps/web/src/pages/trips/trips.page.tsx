@@ -148,6 +148,32 @@ function normalizeTrips(raw: unknown): TripRecord[] {
   return []
 }
 
+function extractTotalPages(raw: unknown): number {
+  if (!raw || typeof raw !== 'object') return 1
+  const meta = (raw as Record<string, unknown>).meta
+  if (!meta || typeof meta !== 'object') return 1
+  const totalPages = parseNumber((meta as Record<string, unknown>).totalPages)
+  if (totalPages == null) return 1
+  return Math.max(1, Math.floor(totalPages))
+}
+
+async function fetchAllTrips() {
+  const pageSize = 100
+  const maxPages = 50
+  let page = 1
+  let totalPages = 1
+  const trips: TripRecord[] = []
+
+  while (page <= totalPages && page <= maxPages) {
+    const response = await tripsApi.list(page, pageSize)
+    trips.push(...normalizeTrips(response))
+    totalPages = extractTotalPages(response)
+    page += 1
+  }
+
+  return trips
+}
+
 function normalizePath(raw: unknown): TripPathPoint[] {
   if (!Array.isArray(raw)) return []
   return raw
@@ -301,7 +327,7 @@ export function TripsPage() {
     refetch: refetchTrips,
   } = useQuery({
     queryKey: ['trips'],
-    queryFn: () => tripsApi.list(),
+    queryFn: () => fetchAllTrips(),
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
