@@ -105,6 +105,7 @@ export const statsApi = {
   batteryHealthMeasurements: (days = 180) => api.get<unknown>(`/stats/battery-health/measurements?days=${days}`),
   efficiency: (days = 30) => api.get<unknown>(`/stats/efficiency?days=${days}`),
   idles: (days = 7, minDurationMin = 5) => api.get<unknown>(`/stats/idles?days=${days}&minDurationMin=${minDurationMin}`),
+  anomalies: (days = 30) => api.get<unknown>(`/stats/anomalies?days=${days}`),
 }
 
 export const automationsApi = {

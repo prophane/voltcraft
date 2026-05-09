@@ -153,6 +153,12 @@ export function DiagnosticsPage() {
     staleTime: 5 * 60_000,
   })
 
+  const { data: anomalies } = useQuery({
+    queryKey: ['stats', 'anomalies', 30],
+    queryFn: () => statsApi.anomalies(30),
+    staleTime: 5 * 60_000,
+  })
+
   const { data: teslaConnection } = useQuery({
     queryKey: ['diagnostics', 'tesla-connection'],
     queryFn: diagnosticsApi.teslaConnection,
@@ -1023,6 +1029,102 @@ export function DiagnosticsPage() {
           </div>
         </Card>
       </div>
+      )}
+
+      {viewMode === 'expert' && (
+      <Card className="p-0 overflow-hidden">
+        <div className="p-5 lg:p-6 border-b border-border-subtle">
+          <CardTitle>Anomalies de consommation</CardTitle>
+          <h2 className="mt-2 text-xl font-semibold text-text-primary">Trajets avec consommation anormale détectés sur 30 jours</h2>
+        </div>
+
+        <div className="p-5 lg:p-6">
+          {anomalies ? (
+            (() => {
+              const anomaliesData = anomalies as {
+                anomalies?: Array<{
+                  tripId: string
+                  startedAt: string
+                  distance: number
+                  consumption: number
+                  severity: 'high' | 'moderate' | 'low'
+                  deviation: number
+                  type: 'inefficient' | 'efficient'
+                }>
+                baseline?: { mean: number; stdDev: number; tripCount: number }
+              }
+
+              const anomalyList = anomaliesData?.anomalies ?? []
+              const baseline = anomaliesData?.baseline
+
+              return (
+                <div className="space-y-4">
+                  {baseline && (
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="rounded-2xl border border-border-subtle bg-bg-overlay/60 p-3">
+                        <p className="text-xs uppercase tracking-wide text-text-muted">Baseline</p>
+                        <p className="mt-1 text-lg font-semibold text-text-primary">{baseline.mean.toFixed(1)}</p>
+                        <p className="text-xs text-text-muted">kWh/100 km</p>
+                      </div>
+                      <div className="rounded-2xl border border-border-subtle bg-bg-overlay/60 p-3">
+                        <p className="text-xs uppercase tracking-wide text-text-muted">Écart-type</p>
+                        <p className="mt-1 text-lg font-semibold text-text-primary">{baseline.stdDev.toFixed(1)}</p>
+                        <p className="text-xs text-text-muted">σ (std dev)</p>
+                      </div>
+                      <div className="rounded-2xl border border-border-subtle bg-bg-overlay/60 p-3">
+                        <p className="text-xs uppercase tracking-wide text-text-muted">Trajets valides</p>
+                        <p className="mt-1 text-lg font-semibold text-text-primary">{baseline.tripCount}</p>
+                        <p className="text-xs text-text-muted">analysés</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {anomalyList.length > 0 ? (
+                    <div className="space-y-2">
+                      {anomalyList.map((anomaly) => {
+                        const severityColor = anomaly.severity === 'high'
+                          ? 'border-warning/50 bg-warning/10'
+                          : anomaly.severity === 'moderate'
+                            ? 'border-accent-500/30 bg-accent-500/10'
+                            : 'border-border-subtle bg-bg-overlay/60'
+                        const typeLabel = anomaly.type === 'inefficient' ? '⬆ Inefficace' : '⬇ Efficace'
+                        const deviationLabel = Math.abs(anomaly.deviation).toFixed(2)
+
+                        return (
+                          <div key={anomaly.tripId} className={cn('rounded-xl border p-3', severityColor)}>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-text-primary">
+                                  {typeLabel} • {anomaly.distance.toFixed(1)} km
+                                </p>
+                                <p className="text-xs text-text-muted mt-0.5">
+                                  {new Date(anomaly.startedAt).toLocaleDateString('fr-FR')} à {new Date(anomaly.startedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-semibold text-text-primary">
+                                  {anomaly.consumption.toFixed(1)} kWh/100
+                                </p>
+                                <p className="text-xs text-text-muted">
+                                  {deviationLabel}σ
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <EmptyState message="Aucune anomalie de consommation détectée sur cette période." />
+                  )}
+                </div>
+              )
+            })()
+          ) : (
+            <EmptyState message="Analyse des anomalies en cours de chargement..." />
+          )}
+        </div>
+      </Card>
       )}
 
       <div className="grid xl:grid-cols-3 gap-4">

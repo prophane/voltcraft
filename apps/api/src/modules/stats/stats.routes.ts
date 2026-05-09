@@ -8,6 +8,7 @@ import { requireAuth } from '../auth/auth.routes.js'
 import { AppError } from '../../common/errors/app-error.js'
 import { NotFoundError } from '../../common/errors/app-error.js'
 import { calcAvgConsumption } from './calculators/summary.calculator.js'
+import { detectConsumptionAnomalies } from './calculators/anomalies.calculator.js'
 import { ok } from '../../common/http/response.js'
 import { withVehicleAutoBootstrap } from '../vehicle/vehicle-auto-bootstrap.js'
 import {
@@ -136,5 +137,28 @@ export async function statsRoutes(app: FastifyInstance) {
     const vehicle = await getVehicleForRead(session.userId)
     const idles = await statsRepo.getIdleSessions(vehicle.id, since, minDurationMin)
     return ok(idles)
+  })
+
+  // GET /stats/anomalies?days=30
+  app.get('/anomalies', { schema: { tags: ['stats'] } }, async (req) => {
+    const token = await requireAuth(req)
+    const session = await authService.validateSession(token)
+    const { days } = periodSchema.parse(req.query)
+    const since = new Date(Date.now() - days * 86_400_000)
+    const vehicle = await getVehicleForRead(session.userId)
+
+    const trips = await statsRepo.getTripsForAnomalyDetection(vehicle.id, since)
+    const tripData = trips
+      .filter((t) => t.distanceKm != null && t.distanceKm > 0.1 && t.energyUsedKwh != null && t.energyUsedKwh > 0)
+      .map((t) => ({
+        id: t.id,
+        startedAt: t.startedAt,
+        distance: t.distanceKm ?? 0,
+        consumption: ((t.energyUsedKwh ?? 0) / (t.distanceKm ?? 1)) * 100, // kWh/100km
+      }))
+      .filter((t) => Number.isFinite(t.consumption) && t.consumption > 0)
+
+    const result = detectConsumptionAnomalies(tripData, days)
+    return ok(result)
   })
 }

@@ -240,4 +240,12 @@ export class StatsRepository {
 
     return sessions
   }
+
+  async getTripsForAnomalyDetection(vehicleId: string, since: Date) {
+    return this.db.trip.findMany({
+      where: { vehicleId, startedAt: { gte: since } },
+      select: { id: true, startedAt: true, distanceKm: true, energyUsedKwh: true },
+      orderBy: { startedAt: 'desc' },
+    })
+  }
 }

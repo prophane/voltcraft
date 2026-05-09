@@ -50,6 +50,10 @@ function formatDurationMin(value: number | null) {
   return `${hours} h ${rest} min`
 }
 
+function formatNumberWithSpaces(value: number): string {
+  return Math.round(value).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+}
+
 function parseLatestTrip(raw: unknown): LatestTrip | null {
   if (Array.isArray(raw)) return parseLatestTrip(raw[0])
   if (!raw || typeof raw !== 'object') return null
@@ -104,7 +108,7 @@ function ArcGauge({ level, rangeKm, hasData }: { level: number | null; rangeKm: 
           {hasData ? Math.round(level ?? 0) : '—'}
           <span className="text-2xl align-top">{hasData ? '%' : ''}</span>
         </p>
-        <p className="text-2xl text-text-secondary mt-1">{hasData ? `${Math.round(rangeKm ?? 0)} km` : 'No data'}</p>
+        <p className="text-2xl text-text-secondary mt-1">{hasData ? `${formatNumberWithSpaces(rangeKm ?? 0)} km` : 'No data'}</p>
         <p className="text-sm text-text-muted mt-1">Battery</p>
       </div>
     </div>
@@ -324,12 +328,12 @@ export function DashboardPage() {
           <div className="mt-5 rounded-2xl border border-border-subtle bg-bg-overlay/70 p-4">
             <div className="grid gap-1">
               <InfoRow label="Vehicle status" value={statusDetail} />
-              <InfoRow label="Range" value={batteryRange != null ? `${Math.round(batteryRange)} km` : '—'} />
+              <InfoRow label="Range" value={batteryRange != null ? `${formatNumberWithSpaces(batteryRange)} km` : '—'} />
               <InfoRow label="Charge limit" value={extendedState?.chargeLimitSoc != null ? `${extendedState.chargeLimitSoc}%` : '—'} />
               <InfoRow label="State of charge" value={batteryLevel != null ? `${Math.round(batteryLevel)}%` : '—'} />
               <InfoRow label="Outside temperature" value={outsideTemp != null ? `${outsideTemp.toFixed(1)} °C` : '—'} />
               <InfoRow label="Inside temperature" value={insideTemp != null ? `${insideTemp.toFixed(1)} °C` : '—'} />
-              <InfoRow label="Mileage" value={odometer != null ? `${Math.round(odometer)} km` : '—'} />
+              <InfoRow label="Mileage" value={odometer != null ? `${formatNumberWithSpaces(odometer)} km` : '—'} />
             </div>
           </div>
         </Card>
@@ -427,7 +431,7 @@ export function DashboardPage() {
           <div className="grid grid-cols-2 gap-4 mt-4">
             <div>
               <p className="text-xs text-text-muted uppercase">Distance</p>
-              <p className="text-3xl font-semibold text-text-primary mt-1">{distanceKm != null ? `${Math.round(distanceKm)} km` : '—'}</p>
+              <p className="text-3xl font-semibold text-text-primary mt-1">{distanceKm != null ? `${formatNumberWithSpaces(distanceKm)} km` : '—'}</p>
             </div>
             <div>
               <p className="text-xs text-text-muted uppercase">Énergie</p>
