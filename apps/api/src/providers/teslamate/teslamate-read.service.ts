@@ -196,39 +196,64 @@ export function formatTeslaMateUnavailableMessage(action: string, error: unknown
 }
 
 export class TeslaMateReadService {
-  private readonly enabled = Boolean(env.TESLAMATE_DB_PASSWORD)
-  private readonly pool = this.enabled
-    ? new Pool({
-        host: env.TESLAMATE_DB_HOST,
-        port: env.TESLAMATE_DB_PORT,
-        database: env.TESLAMATE_DB_NAME,
-        user: env.TESLAMATE_DB_USER,
-        password: env.TESLAMATE_DB_PASSWORD,
-        max: 4,
-      })
-    : null
-    private readonly odometerMultiplierCache = new Map<string, { value: number; at: number }>()
+  private pool: Pool | null = null
+  private poolConfigKey: string | null = null
+  private readonly odometerMultiplierCache = new Map<string, { value: number; at: number }>()
+
+  private getConfigKey() {
+    return [
+      env.TESLAMATE_DB_HOST,
+      env.TESLAMATE_DB_PORT,
+      env.TESLAMATE_DB_NAME,
+      env.TESLAMATE_DB_USER,
+      env.TESLAMATE_DB_PASSWORD,
+    ].join('|')
+  }
+
+  private getPool() {
+    if (!env.TESLAMATE_DB_PASSWORD) {
+      return null
+    }
+
+    const nextKey = this.getConfigKey()
+    if (this.pool && this.poolConfigKey === nextKey) {
+      return this.pool
+    }
+
+    this.pool = new Pool({
+      host: env.TESLAMATE_DB_HOST,
+      port: env.TESLAMATE_DB_PORT,
+      database: env.TESLAMATE_DB_NAME,
+      user: env.TESLAMATE_DB_USER,
+      password: env.TESLAMATE_DB_PASSWORD,
+      max: 4,
+    })
+    this.poolConfigKey = nextKey
+    return this.pool
+  }
 
   isEnabled() {
-      return this.enabled
+    return Boolean(env.TESLAMATE_DB_PASSWORD)
   }
 
   private async query<T>(text: string, values: unknown[]) {
-    if (!this.pool) return [] as T[]
-      try {
-        const result = await this.pool.query<T>(text, values)
-        return result.rows
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        console.error(`[TeslaMateReadService] query failed: ${message}`)
-        return [] as T[]
-      }
+    const pool = this.getPool()
+    if (!pool) return [] as T[]
+    try {
+      const result = await pool.query<T>(text, values)
+      return result.rows
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error(`[TeslaMateReadService] query failed: ${message}`)
+      return [] as T[]
+    }
   }
 
   private async queryOrThrow<T>(text: string, values: unknown[]) {
-    if (!this.pool) return [] as T[]
+    const pool = this.getPool()
+    if (!pool) return [] as T[]
     try {
-      const result = await this.pool.query<T>(text, values)
+      const result = await pool.query<T>(text, values)
       return result.rows
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
