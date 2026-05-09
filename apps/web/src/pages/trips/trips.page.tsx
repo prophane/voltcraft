@@ -23,8 +23,6 @@ type TripRecord = {
   startLongitude?: number | null
   endLatitude?: number | null
   endLongitude?: number | null
-  avgSpeedKmh?: number | null
-  maxSpeedKmh?: number | null
   startBatteryLevel?: number | null
   endBatteryLevel?: number | null
 }
@@ -111,8 +109,6 @@ function normalizeTrip(raw: unknown): TripRecord | null {
     startLongitude: parseNumber(row.startLongitude ?? row.start_longitude),
     endLatitude: parseNumber(row.endLatitude ?? row.end_latitude),
     endLongitude: parseNumber(row.endLongitude ?? row.end_longitude),
-    avgSpeedKmh: parseNumber(row.avgSpeedKmh ?? row.avg_speed_kmh),
-    maxSpeedKmh: parseNumber(row.maxSpeedKmh ?? row.max_speed_kmh),
     startBatteryLevel: parseNumber(row.startBatteryLevel ?? row.start_battery_level),
     endBatteryLevel: parseNumber(row.endBatteryLevel ?? row.end_battery_level),
   }
@@ -521,8 +517,8 @@ export function TripsPage() {
             const avgSpeedFromTrip = (detailTrip.distanceKm ?? 0) > 0 && (detailTrip.durationMin ?? 0) > 0
               ? (detailTrip.distanceKm as number) / ((detailTrip.durationMin as number) / 60)
               : null
-            const avgSpeedDisplay = detailTrip.avgSpeedKmh ?? avgSpeedFromTrip ?? pathInsights?.avgSpeed ?? null
-            const maxSpeedDisplay = detailTrip.maxSpeedKmh ?? pathInsights?.maxSpeed ?? null
+            const avgSpeedDisplay = avgSpeedFromTrip ?? pathInsights?.avgSpeed ?? null
+            const maxSpeedDisplay = pathInsights?.maxSpeed ?? null
 
             return (
             <Card
