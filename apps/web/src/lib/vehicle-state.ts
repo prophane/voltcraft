@@ -42,6 +42,8 @@ export function getVehicleComposedState(input: VehicleStateInput): VehicleCompos
   }
 
   // 5. Fall back to vehicle.state if available
+  if (vehicleState === 'charging') return VEHICLE_STATES.CHARGING
+  if (vehicleState === 'driving') return VEHICLE_STATES.DRIVING
   if (vehicleState === 'online') return VEHICLE_STATES.ONLINE
   if (vehicleState === 'asleep') return VEHICLE_STATES.ASLEEP
   if (vehicleState === 'offline') return VEHICLE_STATES.OFFLINE

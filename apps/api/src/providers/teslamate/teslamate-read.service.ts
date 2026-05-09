@@ -366,10 +366,10 @@ export class TeslaMateReadService {
     if (!row) return null
 
     const chargePower = toNumber(row.charger_power)
-    const isPluggedIn = row.open_charge_id != null || fallback?.isPluggedIn === true
-    const isCharging = row.open_charge_id != null && chargePower != null
-      ? chargePower > 0
-      : fallback?.isCharging === true
+    const isPluggedIn = row.open_charge_id != null || row.open_state === 'charging' || fallback?.isPluggedIn === true
+    const isCharging = row.open_charge_id != null
+      ? (chargePower != null ? chargePower > 0 : row.open_state === 'charging' || fallback?.isCharging === true)
+      : row.open_state === 'charging' || fallback?.isCharging === true
     const chargeState = row.open_charge_id != null
       ? (isCharging ? 'Charging' : 'Stopped')
       : 'Disconnected'
