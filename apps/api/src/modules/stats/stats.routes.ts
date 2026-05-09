@@ -109,6 +109,12 @@ export async function statsRoutes(app: FastifyInstance) {
     const { days } = periodSchema.parse(req.query)
     const since = new Date(Date.now() - days * 86_400_000)
     const vehicle = await getVehicleForRead(session.userId)
+
+    if (teslamate.isEnabled()) {
+      const metrics = await teslamate.getDailyEfficiency(vehicle.vin, since)
+      if (metrics) return ok(metrics)
+    }
+
     const metrics = await statsRepo.getDailyTripMetrics(vehicle.id, since)
     return ok(metrics)
   })

@@ -551,7 +551,7 @@ export class TeslaMateReadService {
           cp.id::text AS id,
           cp.start_date AS "startedAt",
           cp.end_date AS "endedAt",
-          cp.charge_energy_added AS "energyAddedKwh",
+          COALESCE(cp.charge_energy_added, lc.charge_energy_added) AS "energyAddedKwh",
           cp.start_battery_level AS "startBatteryLevel",
           cp.end_battery_level AS "endBatteryLevel",
           cp.duration_min AS "durationMin",
@@ -566,6 +566,13 @@ export class TeslaMateReadService {
         INNER JOIN cars c ON c.id = cp.car_id
         LEFT JOIN addresses a ON a.id = cp.address_id
         LEFT JOIN positions p ON p.id = cp.position_id
+        LEFT JOIN LATERAL (
+          SELECT ch.charge_energy_added
+          FROM charges ch
+          WHERE ch.charging_process_id = cp.id
+          ORDER BY ch.date DESC
+          LIMIT 1
+        ) lc ON TRUE
         WHERE c.vin = $1${where.sql}
         ORDER BY cp.start_date DESC
         LIMIT $${where.params.length + 2}
@@ -588,7 +595,7 @@ export class TeslaMateReadService {
           cp.id::text AS id,
           cp.start_date AS "startedAt",
           cp.end_date AS "endedAt",
-          cp.charge_energy_added AS "energyAddedKwh",
+          COALESCE(cp.charge_energy_added, lc.charge_energy_added) AS "energyAddedKwh",
           cp.start_battery_level AS "startBatteryLevel",
           cp.end_battery_level AS "endBatteryLevel",
           cp.duration_min AS "durationMin",
@@ -600,6 +607,13 @@ export class TeslaMateReadService {
         INNER JOIN cars c ON c.id = cp.car_id
         LEFT JOIN addresses a ON a.id = cp.address_id
         LEFT JOIN positions p ON p.id = cp.position_id
+        LEFT JOIN LATERAL (
+          SELECT ch.charge_energy_added
+          FROM charges ch
+          WHERE ch.charging_process_id = cp.id
+          ORDER BY ch.date DESC
+          LIMIT 1
+        ) lc ON TRUE
         WHERE c.vin = $1 AND cp.id = $2::int
         LIMIT 1
       `,
@@ -623,12 +637,19 @@ export class TeslaMateReadService {
     }>(
       `
         SELECT
-          COALESCE(SUM(cp.charge_energy_added), 0) AS energy_added_kwh,
+          COALESCE(SUM(COALESCE(cp.charge_energy_added, lc.charge_energy_added)), 0) AS energy_added_kwh,
           COALESCE(SUM(cp.cost), 0) AS estimated_cost,
           COALESCE(SUM(cp.duration_min), 0) AS duration_min,
           COUNT(*)::int AS total
         FROM charging_processes cp
         INNER JOIN cars c ON c.id = cp.car_id
+        LEFT JOIN LATERAL (
+          SELECT ch.charge_energy_added
+          FROM charges ch
+          WHERE ch.charging_process_id = cp.id
+          ORDER BY ch.date DESC
+          LIMIT 1
+        ) lc ON TRUE
         WHERE c.vin = $1
           AND cp.start_date >= $2
           AND cp.start_date < $3
@@ -672,11 +693,18 @@ export class TeslaMateReadService {
         ),
         charge_stats AS (
           SELECT
-            COALESCE(SUM(cp.charge_energy_added), 0) AS energy_added_kwh,
+            COALESCE(SUM(COALESCE(cp.charge_energy_added, lc.charge_energy_added)), 0) AS energy_added_kwh,
             COALESCE(SUM(cp.cost), 0) AS estimated_cost_eur,
             COUNT(*)::int AS charge_sessions_count
           FROM charging_processes cp
           INNER JOIN cars c ON c.id = cp.car_id
+          LEFT JOIN LATERAL (
+            SELECT ch.charge_energy_added
+            FROM charges ch
+            WHERE ch.charging_process_id = cp.id
+            ORDER BY ch.date DESC
+            LIMIT 1
+          ) lc ON TRUE
           WHERE c.vin = $1
             AND cp.start_date >= $2
         )
@@ -707,6 +735,60 @@ export class TeslaMateReadService {
       tripsCount: Number(row?.trips_count ?? 0),
       chargeSessionsCount: Number(row?.charge_sessions_count ?? 0),
     }
+  }
+
+  async getDailyEfficiency(vin: string, since: Date) {
+    if (this.failed) return null
+
+    const rows = await this.query<{
+      day: Date | string
+      distance_km: number | string | null
+      charged_kwh: number | string | null
+    }>(
+      `
+        WITH trip_daily AS (
+          SELECT
+            DATE_TRUNC('day', d.start_date) AS day,
+            COALESCE(SUM(d.distance), 0) AS distance_km
+          FROM drives d
+          INNER JOIN cars c ON c.id = d.car_id
+          WHERE c.vin = $1
+            AND d.start_date >= $2
+          GROUP BY 1
+        ),
+        charge_daily AS (
+          SELECT
+            DATE_TRUNC('day', cp.start_date) AS day,
+            COALESCE(SUM(COALESCE(cp.charge_energy_added, lc.charge_energy_added)), 0) AS charged_kwh
+          FROM charging_processes cp
+          INNER JOIN cars c ON c.id = cp.car_id
+          LEFT JOIN LATERAL (
+            SELECT ch.charge_energy_added
+            FROM charges ch
+            WHERE ch.charging_process_id = cp.id
+            ORDER BY ch.date DESC
+            LIMIT 1
+          ) lc ON TRUE
+          WHERE c.vin = $1
+            AND cp.start_date >= $2
+          GROUP BY 1
+        )
+        SELECT
+          COALESCE(td.day, cd.day) AS day,
+          COALESCE(td.distance_km, 0) AS distance_km,
+          COALESCE(cd.charged_kwh, 0) AS charged_kwh
+        FROM trip_daily td
+        FULL OUTER JOIN charge_daily cd ON cd.day = td.day
+        ORDER BY 1 ASC
+      `,
+      [vin, since],
+    )
+
+    return rows.map((row) => ({
+      day: toDate(row.day) ?? new Date(),
+      distance_km: toNumber(row.distance_km) ?? 0,
+      charged_kwh: toNumber(row.charged_kwh) ?? 0,
+    }))
   }
 
   private async getVehicleRow(vin: string) {
