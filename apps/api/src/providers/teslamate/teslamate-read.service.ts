@@ -190,7 +190,6 @@ export class TeslaMateReadService {
         max: 4,
       })
     : null
-    private failed = false
     private readonly odometerMultiplierCache = new Map<string, { value: number; at: number }>()
 
   isEnabled() {
@@ -203,7 +202,6 @@ export class TeslaMateReadService {
         const result = await this.pool.query<T>(text, values)
         return result.rows
       } catch (error) {
-        this.failed = true
         return [] as T[]
       }
   }
@@ -286,7 +284,6 @@ export class TeslaMateReadService {
   }
 
   async getCurrentVehicle(vehicle: VehicleIdentity, fallback?: FallbackSnapshot) {
-    if (this.failed) return null
     const row = await this.getVehicleRow(vehicle.vin)
     if (!row) return null
 
@@ -304,7 +301,6 @@ export class TeslaMateReadService {
   }
 
   async getVehicleState(vehicle: VehicleIdentity, fallback?: FallbackSnapshot) {
-    if (this.failed) return null
     const row = await this.getVehicleRow(vehicle.vin)
     if (!row) return null
 
@@ -313,7 +309,9 @@ export class TeslaMateReadService {
     const speedMultiplier = odometerMultiplier
     const teslamateOdometer = toNumber(row.odometer)
     const teslamateOdometerKm = teslamateOdometer != null ? teslamateOdometer * odometerMultiplier : null
-    const odometer = resolveOdometer(teslamateOdometerKm, toNumber(fallback?.odometer), toDate(row.captured_at))
+    const fallbackOdometer = toNumber(fallback?.odometer)
+    const fallbackOdometerKm = fallbackOdometer != null ? fallbackOdometer * odometerMultiplier : null
+    const odometer = resolveOdometer(teslamateOdometerKm, fallbackOdometerKm, toDate(row.captured_at))
 
     return {
       vehicleId: vehicle.id,
@@ -349,7 +347,6 @@ export class TeslaMateReadService {
   }
 
   async getVehicleLocation(vin: string) {
-    if (this.failed) return null
     const row = await this.getVehicleRow(vin)
     const latitude = toNumber(row?.latitude)
     const longitude = toNumber(row?.longitude)
@@ -365,7 +362,6 @@ export class TeslaMateReadService {
   }
 
   async getTrips(vin: string, opts: PaginationOpts) {
-    if (this.failed) return null
     const distanceMultiplier = await this.inferOdometerMultiplier(vin)
     const where = buildTripWhereClause(opts.from, opts.to)
     const countRows = await this.query<{ total: string | number }>(
@@ -427,7 +423,6 @@ export class TeslaMateReadService {
   }
 
   async getTripById(vin: string, id: string) {
-    if (this.failed) return null
     const distanceMultiplier = await this.inferOdometerMultiplier(vin)
     const rows = await this.query<Array<Record<string, unknown>>[number]>(
       `
@@ -472,7 +467,6 @@ export class TeslaMateReadService {
   }
 
   async getTripPath(vin: string, id: string) {
-    if (this.failed) return []
     const odometerMultiplier = await this.inferOdometerMultiplier(vin)
     const speedMultiplier = odometerMultiplier
     const rows = await this.query<Array<Record<string, unknown>>[number]>(
@@ -583,7 +577,6 @@ export class TeslaMateReadService {
   }
 
   async getCharges(vin: string, opts: PaginationOpts) {
-    if (this.failed) return null
     const where = buildChargeWhereClause(opts.from, opts.to)
     const countRows = await this.query<{ total: string | number }>(
       `
@@ -656,7 +649,6 @@ export class TeslaMateReadService {
   }
 
   async getChargeById(vin: string, id: string) {
-    if (this.failed) return null
     const rows = await this.query<Array<Record<string, unknown>>[number]>(
       `
         SELECT
@@ -711,7 +703,6 @@ export class TeslaMateReadService {
   }
 
   async getMonthlyChargeSummary(vin: string, year: number, month: number) {
-    if (this.failed) return null
     const from = new Date(year, month - 1, 1)
     const to = new Date(year, month, 1)
 
@@ -757,7 +748,6 @@ export class TeslaMateReadService {
   }
 
   async getSummary(vin: string, since: Date, days: number) {
-    if (this.failed) return null
     const distanceMultiplier = await this.inferOdometerMultiplier(vin)
     const rows = await this.query<{
       distance_km: number | string | null
@@ -825,7 +815,6 @@ export class TeslaMateReadService {
   }
 
   async getDailyEfficiency(vin: string, since: Date) {
-    if (this.failed) return null
     const distanceMultiplier = await this.inferOdometerMultiplier(vin)
 
     const rows = await this.query<{
