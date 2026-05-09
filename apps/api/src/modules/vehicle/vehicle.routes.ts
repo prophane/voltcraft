@@ -64,6 +64,36 @@ export async function vehicleRoutes(app: FastifyInstance) {
     }
   }
 
+  const emptyCachedState = (vehicleId: string) => ({
+    vehicleId,
+    capturedAt: new Date(),
+    odometer: null as number | null,
+    batteryLevel: 0,
+    batteryRange: 0,
+    chargeLimitSoc: null as number | null,
+    chargeState: 'Unknown',
+    isCharging: false,
+    isPluggedIn: false,
+    chargeRate: 0,
+    timeToFullCharge: 0,
+    climateOn: false,
+    insideTemp: null as number | null,
+    outsideTemp: null as number | null,
+    isSeatHeaterOn: false,
+    cabinOverheatProtectionMode: 'off' as const,
+    isLocked: true,
+    isTrunkOpen: false,
+    isFrunkOpen: false,
+    isDriving: false,
+    speed: null as number | null,
+    power: null as number | null,
+    latitude: null as number | null,
+    longitude: null as number | null,
+    heading: null as number | null,
+    atHome: false,
+    isCached: true,
+  })
+
   const snapshotToCurrent = (
     vehicle: Awaited<ReturnType<typeof repo.findActive>>,
     snapshot: Awaited<ReturnType<typeof repo.getLatestSnapshot>>,
@@ -117,6 +147,17 @@ export async function vehicleRoutes(app: FastifyInstance) {
       if (current) return ok(current)
       const cachedCurrent = snapshotToCurrent(vehicle, fallback)
       if (cachedCurrent) return ok(cachedCurrent)
+      return ok({
+        id: vehicle.id,
+        vin: vehicle.vin,
+        displayName: vehicle.displayName,
+        model: vehicle.model,
+        year: vehicle.year,
+        color: vehicle.color,
+        state: 'offline',
+        lastSeenAt: null,
+        isCached: true,
+      })
     }
     const vehicle = await withVehicleAutoBootstrap(app, () => service.getCurrentVehicle(session.userId))
     return ok(vehicle)
@@ -133,6 +174,7 @@ export async function vehicleRoutes(app: FastifyInstance) {
       if (state) return ok(state)
       const cachedState = snapshotToState(vehicle.id, fallback)
       if (cachedState) return ok(cachedState)
+      return ok(emptyCachedState(vehicle.id))
     }
 
     try {
