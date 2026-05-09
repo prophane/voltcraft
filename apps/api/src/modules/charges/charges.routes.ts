@@ -9,7 +9,10 @@ import { AppError } from '../../common/errors/app-error.js'
 import { NotFoundError } from '../../common/errors/app-error.js'
 import { ok, paginated } from '../../common/http/response.js'
 import { withVehicleAutoBootstrap } from '../vehicle/vehicle-auto-bootstrap.js'
-import { TeslaMateReadService } from '../../providers/teslamate/teslamate-read.service.js'
+import {
+  TeslaMateReadService,
+  formatTeslaMateUnavailableMessage,
+} from '../../providers/teslamate/teslamate-read.service.js'
 
 const paginationSchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -53,8 +56,7 @@ export async function chargesRoutes(app: FastifyInstance) {
         })
         return paginated(teslamateCharges.sessions, teslamateCharges.total, query.page, query.pageSize)
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        throw new AppError('TESLAMATE_UNAVAILABLE', `TeslaMate charges query failed: ${message}`, 503)
+        throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('charges query', error), 503)
       }
     }
     const { sessions, total } = await chargesRepo.findMany(vehicle.id, {
@@ -80,8 +82,7 @@ export async function chargesRoutes(app: FastifyInstance) {
         const summary = await teslamate.getMonthlyChargeSummary(vehicle.vin, year, month)
         return ok(summary)
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        throw new AppError('TESLAMATE_UNAVAILABLE', `TeslaMate monthly charge summary failed: ${message}`, 503)
+        throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('monthly charge summary', error), 503)
       }
     }
     const summary = await chargesRepo.getMonthlySummary(vehicle.id, year, month)
@@ -98,8 +99,7 @@ export async function chargesRoutes(app: FastifyInstance) {
         const session_ = await teslamate.getChargeById(vehicle.vin, id)
         if (session_) return ok(session_)
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        throw new AppError('TESLAMATE_UNAVAILABLE', `TeslaMate charge detail query failed: ${message}`, 503)
+        throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('charge detail query', error), 503)
       }
     }
     const session_ = await chargesRepo.findById(id, vehicle.id)

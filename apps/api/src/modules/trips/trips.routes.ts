@@ -9,7 +9,10 @@ import { AppError } from '../../common/errors/app-error.js'
 import { NotFoundError } from '../../common/errors/app-error.js'
 import { ok, paginated } from '../../common/http/response.js'
 import { withVehicleAutoBootstrap } from '../vehicle/vehicle-auto-bootstrap.js'
-import { TeslaMateReadService } from '../../providers/teslamate/teslamate-read.service.js'
+import {
+  TeslaMateReadService,
+  formatTeslaMateUnavailableMessage,
+} from '../../providers/teslamate/teslamate-read.service.js'
 
 const paginationSchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -49,8 +52,7 @@ export async function tripsRoutes(app: FastifyInstance) {
         })
         return paginated(teslamateTrips.trips, teslamateTrips.total, query.page, query.pageSize)
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        throw new AppError('TESLAMATE_UNAVAILABLE', `TeslaMate trips query failed: ${message}`, 503)
+        throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('trips query', error), 503)
       }
     }
     const { trips, total } = await tripsRepo.findMany(vehicle.id, {
@@ -73,8 +75,7 @@ export async function tripsRoutes(app: FastifyInstance) {
         const trip = await teslamate.getTripById(vehicle.vin, id)
         if (trip) return ok(trip)
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        throw new AppError('TESLAMATE_UNAVAILABLE', `TeslaMate trip detail query failed: ${message}`, 503)
+        throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('trip detail query', error), 503)
       }
     }
     const trip = await tripsRepo.findById(id, vehicle.id)
@@ -96,8 +97,7 @@ export async function tripsRoutes(app: FastifyInstance) {
           return ok(points)
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        throw new AppError('TESLAMATE_UNAVAILABLE', `TeslaMate trip path query failed: ${message}`, 503)
+        throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('trip path query', error), 503)
       }
     }
 

@@ -178,6 +178,23 @@ function buildChargeWhereClause(from?: Date, to?: Date) {
   }
 }
 
+function isTeslaMateAuthError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /password authentication failed for user|28P01/i.test(message)
+}
+
+export function formatTeslaMateUnavailableMessage(action: string, error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (isTeslaMateAuthError(error)) {
+    return [
+      `TeslaMate ${action} failed: ${message}`,
+      'TeslaMate DB authentication failed. If the teslamate-db volume already exists, changing .env does not update the internal PostgreSQL password; align TESLAMATE_DB_PASSWORD with the existing volume or recreate the volume.',
+    ].join(' ')
+  }
+
+  return `TeslaMate ${action} failed: ${message}`
+}
+
 export class TeslaMateReadService {
   private readonly enabled = Boolean(env.TESLAMATE_DB_PASSWORD)
   private readonly pool = this.enabled

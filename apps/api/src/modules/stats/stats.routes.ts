@@ -10,7 +10,10 @@ import { NotFoundError } from '../../common/errors/app-error.js'
 import { calcAvgConsumption } from './calculators/summary.calculator.js'
 import { ok } from '../../common/http/response.js'
 import { withVehicleAutoBootstrap } from '../vehicle/vehicle-auto-bootstrap.js'
-import { TeslaMateReadService } from '../../providers/teslamate/teslamate-read.service.js'
+import {
+  TeslaMateReadService,
+  formatTeslaMateUnavailableMessage,
+} from '../../providers/teslamate/teslamate-read.service.js'
 
 const periodSchema = z.object({
   days: z.coerce.number().min(1).max(365).default(30),
@@ -49,8 +52,7 @@ export async function statsRoutes(app: FastifyInstance) {
         const summary = await teslamate.getSummary(vehicle.vin, since, days)
         return ok(summary)
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        throw new AppError('TESLAMATE_UNAVAILABLE', `TeslaMate summary query failed: ${message}`, 503)
+        throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('summary query', error), 503)
       }
     }
 
