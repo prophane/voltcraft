@@ -45,9 +45,13 @@ export async function statsRoutes(app: FastifyInstance) {
     const vehicle = await getVehicleForRead(session.userId)
 
     if (teslamate.isEnabled()) {
-      const summary = await teslamate.getSummary(vehicle.vin, since, days)
-      if (summary) return ok(summary)
-      throw new AppError('TESLAMATE_UNAVAILABLE', 'TeslaMate summary query failed', 503)
+      try {
+        const summary = await teslamate.getSummary(vehicle.vin, since, days)
+        return ok(summary)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        throw new AppError('TESLAMATE_UNAVAILABLE', `TeslaMate summary query failed: ${message}`, 503)
+      }
     }
 
     const [distanceKm, energyAddedKwh, energyUsedKwh, cost, tripsCount, chargesCount] = await Promise.all([

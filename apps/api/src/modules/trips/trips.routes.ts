@@ -40,16 +40,18 @@ export async function tripsRoutes(app: FastifyInstance) {
     const query = paginationSchema.parse(req.query)
     const vehicle = await getVehicleForRead(session.userId)
     if (teslamate.isEnabled()) {
-      const teslamateTrips = await teslamate.getTrips(vehicle.vin, {
-        page: query.page,
-        pageSize: query.pageSize,
-        from: query.from ? new Date(query.from) : undefined,
-        to: query.to ? new Date(query.to) : undefined,
-      })
-      if (teslamateTrips) {
+      try {
+        const teslamateTrips = await teslamate.getTrips(vehicle.vin, {
+          page: query.page,
+          pageSize: query.pageSize,
+          from: query.from ? new Date(query.from) : undefined,
+          to: query.to ? new Date(query.to) : undefined,
+        })
         return paginated(teslamateTrips.trips, teslamateTrips.total, query.page, query.pageSize)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        throw new AppError('TESLAMATE_UNAVAILABLE', `TeslaMate trips query failed: ${message}`, 503)
       }
-      throw new AppError('TESLAMATE_UNAVAILABLE', 'TeslaMate trips query failed', 503)
     }
     const { trips, total } = await tripsRepo.findMany(vehicle.id, {
       page: query.page,
@@ -67,8 +69,13 @@ export async function tripsRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string }
     const vehicle = await getVehicleForRead(session.userId)
     if (teslamate.isEnabled()) {
-      const trip = await teslamate.getTripById(vehicle.vin, id)
-      if (trip) return ok(trip)
+      try {
+        const trip = await teslamate.getTripById(vehicle.vin, id)
+        if (trip) return ok(trip)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        throw new AppError('TESLAMATE_UNAVAILABLE', `TeslaMate trip detail query failed: ${message}`, 503)
+      }
     }
     const trip = await tripsRepo.findById(id, vehicle.id)
     if (!trip) throw new NotFoundError('Trip')
@@ -82,10 +89,15 @@ export async function tripsRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string }
     const vehicle = await getVehicleForRead(session.userId)
     if (teslamate.isEnabled()) {
-      const trip = await teslamate.getTripById(vehicle.vin, id)
-      if (trip) {
-        const points = await teslamate.getTripPath(vehicle.vin, id)
-        return ok(points)
+      try {
+        const trip = await teslamate.getTripById(vehicle.vin, id)
+        if (trip) {
+          const points = await teslamate.getTripPath(vehicle.vin, id)
+          return ok(points)
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        throw new AppError('TESLAMATE_UNAVAILABLE', `TeslaMate trip path query failed: ${message}`, 503)
       }
     }
 

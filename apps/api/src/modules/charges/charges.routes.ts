@@ -44,16 +44,18 @@ export async function chargesRoutes(app: FastifyInstance) {
     const query = paginationSchema.parse(req.query)
     const vehicle = await getVehicleForRead(session.userId)
     if (teslamate.isEnabled()) {
-      const teslamateCharges = await teslamate.getCharges(vehicle.vin, {
-        page: query.page,
-        pageSize: query.pageSize,
-        from: query.from ? new Date(query.from) : undefined,
-        to: query.to ? new Date(query.to) : undefined,
-      })
-      if (teslamateCharges) {
+      try {
+        const teslamateCharges = await teslamate.getCharges(vehicle.vin, {
+          page: query.page,
+          pageSize: query.pageSize,
+          from: query.from ? new Date(query.from) : undefined,
+          to: query.to ? new Date(query.to) : undefined,
+        })
         return paginated(teslamateCharges.sessions, teslamateCharges.total, query.page, query.pageSize)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        throw new AppError('TESLAMATE_UNAVAILABLE', `TeslaMate charges query failed: ${message}`, 503)
       }
-      throw new AppError('TESLAMATE_UNAVAILABLE', 'TeslaMate charges query failed', 503)
     }
     const { sessions, total } = await chargesRepo.findMany(vehicle.id, {
       page: query.page,
@@ -74,8 +76,13 @@ export async function chargesRoutes(app: FastifyInstance) {
     })
     const vehicle = await getVehicleForRead(sess.userId)
     if (teslamate.isEnabled()) {
-      const summary = await teslamate.getMonthlyChargeSummary(vehicle.vin, year, month)
-      if (summary) return ok(summary)
+      try {
+        const summary = await teslamate.getMonthlyChargeSummary(vehicle.vin, year, month)
+        return ok(summary)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        throw new AppError('TESLAMATE_UNAVAILABLE', `TeslaMate monthly charge summary failed: ${message}`, 503)
+      }
     }
     const summary = await chargesRepo.getMonthlySummary(vehicle.id, year, month)
     return ok(summary)
@@ -87,8 +94,13 @@ export async function chargesRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string }
     const vehicle = await getVehicleForRead(session.userId)
     if (teslamate.isEnabled()) {
-      const session_ = await teslamate.getChargeById(vehicle.vin, id)
-      if (session_) return ok(session_)
+      try {
+        const session_ = await teslamate.getChargeById(vehicle.vin, id)
+        if (session_) return ok(session_)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        throw new AppError('TESLAMATE_UNAVAILABLE', `TeslaMate charge detail query failed: ${message}`, 503)
+      }
     }
     const session_ = await chargesRepo.findById(id, vehicle.id)
     if (!session_) throw new NotFoundError('Charge session')

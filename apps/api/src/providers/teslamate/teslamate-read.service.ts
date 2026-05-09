@@ -210,8 +210,14 @@ export class TeslaMateReadService {
 
   private async queryOrThrow<T>(text: string, values: unknown[]) {
     if (!this.pool) return [] as T[]
-    const result = await this.pool.query<T>(text, values)
-    return result.rows
+    try {
+      const result = await this.pool.query<T>(text, values)
+      return result.rows
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error(`[TeslaMateReadService] queryOrThrow failed: ${message}`)
+      throw error
+    }
   }
 
   private async inferOdometerMultiplier(vin: string): Promise<number> {
@@ -372,8 +378,7 @@ export class TeslaMateReadService {
   async getTrips(vin: string, opts: PaginationOpts) {
     const distanceMultiplier = await this.inferOdometerMultiplier(vin)
     const where = buildTripWhereClause(opts.from, opts.to)
-    try {
-      const countRows = await this.queryOrThrow<{ total: string | number }>(
+    const countRows = await this.queryOrThrow<{ total: string | number }>(
       `
         SELECT COUNT(*)::int AS total
         FROM drives d
@@ -383,7 +388,7 @@ export class TeslaMateReadService {
       [vin, ...where.params],
     )
 
-      const rows = await this.queryOrThrow<Array<Record<string, unknown>>[number]>(
+    const rows = await this.queryOrThrow<Array<Record<string, unknown>>[number]>(
       `
         SELECT
           d.id::text AS id,
@@ -423,13 +428,9 @@ export class TeslaMateReadService {
       [vin, ...where.params, opts.pageSize, (opts.page - 1) * opts.pageSize],
     )
 
-      return {
-        trips: rows.map((row: MappedRecord) => this.normalizeTrip(row, distanceMultiplier)),
-        total: Number(countRows[0]?.total ?? 0),
-      }
-    } catch {
-      // Signal caller to fallback provider instead of treating DB error as empty dataset.
-      return null
+    return {
+      trips: rows.map((row: MappedRecord) => this.normalizeTrip(row, distanceMultiplier)),
+      total: Number(countRows[0]?.total ?? 0),
     }
   }
 
@@ -593,8 +594,7 @@ export class TeslaMateReadService {
 
   async getCharges(vin: string, opts: PaginationOpts) {
     const where = buildChargeWhereClause(opts.from, opts.to)
-    try {
-      const countRows = await this.queryOrThrow<{ total: string | number }>(
+    const countRows = await this.queryOrThrow<{ total: string | number }>(
       `
         SELECT COUNT(*)::int AS total
         FROM charging_processes cp
@@ -604,7 +604,7 @@ export class TeslaMateReadService {
       [vin, ...where.params],
     )
 
-      const rows = await this.queryOrThrow<Array<Record<string, unknown>>[number]>(
+    const rows = await this.queryOrThrow<Array<Record<string, unknown>>[number]>(
       `
         SELECT
           cp.id::text AS id,
@@ -658,12 +658,9 @@ export class TeslaMateReadService {
       [vin, ...where.params, opts.pageSize, (opts.page - 1) * opts.pageSize],
     )
 
-      return {
-        sessions: rows.map((row: MappedRecord) => this.normalizeCharge(row)),
-        total: Number(countRows[0]?.total ?? 0),
-      }
-    } catch {
-      return null
+    return {
+      sessions: rows.map((row: MappedRecord) => this.normalizeCharge(row)),
+      total: Number(countRows[0]?.total ?? 0),
     }
   }
 
@@ -728,9 +725,7 @@ export class TeslaMateReadService {
   async getMonthlyChargeSummary(vin: string, year: number, month: number) {
     const from = new Date(year, month - 1, 1)
     const to = new Date(year, month, 1)
-
-    try {
-      const rows = await this.queryOrThrow<{
+    const rows = await this.queryOrThrow<{
       energy_added_kwh: number | string | null
       estimated_cost: number | string | null
       duration_min: number | string | null
@@ -758,26 +753,22 @@ export class TeslaMateReadService {
       [vin, from, to],
     )
 
-      const row = rows[0]
-      return {
-        _sum: {
-          energyAddedKwh: toNumber(row?.energy_added_kwh) ?? 0,
-          estimatedCost: toNumber(row?.estimated_cost) ?? 0,
-          durationMin: toNumber(row?.duration_min) ?? 0,
-        },
-        _count: {
-          id: Number(row?.total ?? 0),
-        },
-      }
-    } catch {
-      return null
+    const row = rows[0]
+    return {
+      _sum: {
+        energyAddedKwh: toNumber(row?.energy_added_kwh) ?? 0,
+        estimatedCost: toNumber(row?.estimated_cost) ?? 0,
+        durationMin: toNumber(row?.duration_min) ?? 0,
+      },
+      _count: {
+        id: Number(row?.total ?? 0),
+      },
     }
   }
 
   async getSummary(vin: string, since: Date, days: number) {
     const distanceMultiplier = await this.inferOdometerMultiplier(vin)
-    try {
-      const rows = await this.queryOrThrow<{
+    const rows = await this.queryOrThrow<{
         distance_km: number | string | null
         energy_added_kwh: number | string | null
         energy_used_kwh: number | string | null
@@ -826,22 +817,19 @@ export class TeslaMateReadService {
         [vin, since],
       )
 
-      const row = rows[0]
-      const distanceKm = (toNumber(row?.distance_km) ?? 0) * distanceMultiplier
-      const energyUsedKwh = toNumber(row?.energy_used_kwh) ?? 0
+    const row = rows[0]
+    const distanceKm = (toNumber(row?.distance_km) ?? 0) * distanceMultiplier
+    const energyUsedKwh = toNumber(row?.energy_used_kwh) ?? 0
 
-      return {
-        periodDays: days,
-        distanceKm: Math.round(distanceKm * 10) / 10,
-        energyAddedKwh: Math.round((toNumber(row?.energy_added_kwh) ?? 0) * 10) / 10,
-        energyUsedKwh: Math.round(energyUsedKwh * 10) / 10,
-        estimatedCostEur: Math.round((toNumber(row?.estimated_cost_eur) ?? 0) * 100) / 100,
-        avgConsumptionKwhPer100km: distanceKm > 0 ? Math.round((energyUsedKwh / distanceKm) * 100 * 10) / 10 : null,
-        tripsCount: Number(row?.trips_count ?? 0),
-        chargeSessionsCount: Number(row?.charge_sessions_count ?? 0),
-      }
-    } catch {
-      return null
+    return {
+      periodDays: days,
+      distanceKm: Math.round(distanceKm * 10) / 10,
+      energyAddedKwh: Math.round((toNumber(row?.energy_added_kwh) ?? 0) * 10) / 10,
+      energyUsedKwh: Math.round(energyUsedKwh * 10) / 10,
+      estimatedCostEur: Math.round((toNumber(row?.estimated_cost_eur) ?? 0) * 100) / 100,
+      avgConsumptionKwhPer100km: distanceKm > 0 ? Math.round((energyUsedKwh / distanceKm) * 100 * 10) / 10 : null,
+      tripsCount: Number(row?.trips_count ?? 0),
+      chargeSessionsCount: Number(row?.charge_sessions_count ?? 0),
     }
   }
 
