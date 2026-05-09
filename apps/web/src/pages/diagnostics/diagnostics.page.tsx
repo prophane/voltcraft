@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useVehicleComposedState } from '@/hooks/use-vehicle-composed-state'
 import {
   Activity,
   AlertTriangle,
@@ -459,19 +460,14 @@ export function DiagnosticsPage() {
         ? 'La charge visible diverge entre les derniers echantillons'
         : 'Les derniers signaux sont coherents'
 
-  const vehicleStatus = state?.isCharging
-    ? 'En charge'
-    : state?.isPluggedIn
-      ? 'Branche'
-      : state?.isDriving
-        ? 'En conduite'
-        : vehicle?.state === 'online'
-          ? 'En ligne'
-          : vehicle?.state === 'asleep'
-            ? 'En veille'
-            : vehicle?.state === 'offline'
-              ? 'Hors ligne'
-              : vehicle?.state ?? 'Inconnu'
+  const vehicleComposedState = useVehicleComposedState({
+    isDriving: state?.isDriving,
+    isCharging: state?.isCharging,
+    isPluggedIn: state?.isPluggedIn,
+    vehicleState: vehicle?.state,
+  })
+
+  const vehicleStatus = vehicleComposedState.label
 
   const lockTone = state?.isLocked === false ? 'text-warning border-warning/30 bg-warning/10' : 'text-success border-success/30 bg-success/10'
 

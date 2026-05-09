@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { vehicleApi, statsApi, settingsApi, tripsApi } from '@/features/vehicle/api'
+import { useVehicleComposedState } from '@/hooks/use-vehicle-composed-state'
 import { Card } from '@/components/ui/card'
 import { Lock, Unlock, MapPin, Plus, Minus } from 'lucide-react'
 import { cn, formatDate } from '@/lib/utils'
@@ -263,17 +264,14 @@ export function DashboardPage() {
       ? 'Verrouille'
       : 'Deverrouille'
 
-  const statusDetail = useMemo(() => {
-    if (state?.isCharging) return 'Charging'
-    if (state?.isPluggedIn) return 'Plugged'
-    if (!hasTelemetry) return 'No data yet'
-    if (vehicle?.state === 'online') return 'Online'
-    if (vehicle?.state === 'asleep') return 'Asleep'
-    if (vehicle?.state === 'offline') return 'Offline'
-    if (vehicle?.state === 'charging') return 'Charging'
-    if (vehicle?.state === 'driving') return 'Driving'
-    return vehicle?.state ?? 'Unknown'
-  }, [hasTelemetry, state?.isCharging, state?.isPluggedIn, vehicle?.state])
+  const vehicleComposedState = useVehicleComposedState({
+    isDriving: state?.isDriving,
+    isCharging: state?.isCharging,
+    isPluggedIn: state?.isPluggedIn,
+    vehicleState: vehicle?.state,
+  })
+
+  const statusDetail = vehicleComposedState.label
 
   const mapEmbedUrl = useMemo(() => {
     if (latitude == null || longitude == null) return null
