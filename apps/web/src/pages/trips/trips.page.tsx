@@ -259,67 +259,6 @@ async function reverseGeocode(lat: number, lon: number) {
   return body.display_name ?? null
 }
 
-function MiniTripTrace({ seed }: { seed: string }) {
-  let hash = 0
-  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) | 0
-  const h = Math.abs(hash)
-
-  const y1 = 36 + (h % 10)
-  const y2 = 28 + ((h >> 3) % 14)
-  const y3 = 34 + ((h >> 6) % 12)
-  const y4 = 30 + ((h >> 9) % 16)
-  const y5 = 40 + ((h >> 12) % 10)
-  const path = `M 12 ${y1} C 28 ${y2}, 42 ${y3}, 58 ${y2} S 90 ${y4}, 112 ${y5}`
-
-  return (
-    <div className="rounded-lg border border-border-subtle bg-bg-overlay/70 h-24 px-2 py-2">
-      <svg width="100%" height="100%" viewBox="0 0 124 60" preserveAspectRatio="none">
-        <path d={path} fill="none" stroke="#E8112D" strokeWidth="2.5" strokeLinecap="round" />
-        <circle cx="12" cy={y1} r="3" fill="#E8112D" />
-        <circle cx="112" cy={y5} r="3" fill="#E8112D" />
-      </svg>
-    </div>
-  )
-}
-
-function DetailedTripTrace({ points }: { points: TripPathPoint[] }) {
-  const normalized = useMemo(() => {
-    const valid = points.filter((p) => typeof p.latitude === 'number' && typeof p.longitude === 'number') as Array<{ latitude: number; longitude: number }>
-    if (valid.length < 2) return ''
-
-    const lats = valid.map((p) => p.latitude)
-    const lons = valid.map((p) => p.longitude)
-    const minLat = Math.min(...lats)
-    const maxLat = Math.max(...lats)
-    const minLon = Math.min(...lons)
-    const maxLon = Math.max(...lons)
-    const latSpan = Math.max(0.0001, maxLat - minLat)
-    const lonSpan = Math.max(0.0001, maxLon - minLon)
-
-    const path = valid
-      .map((p, index) => {
-        const x = 8 + ((p.longitude - minLon) / lonSpan) * 108
-        const y = 52 - ((p.latitude - minLat) / latSpan) * 44
-        return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`
-      })
-      .join(' ')
-
-    return path
-  }, [points])
-
-  if (!normalized) {
-    return <p className="text-xs text-text-muted">Trace indisponible pour ce trajet.</p>
-  }
-
-  return (
-    <div className="rounded-xl border border-border-subtle bg-bg-overlay/70 p-3">
-      <svg width="100%" height="160" viewBox="0 0 124 60" preserveAspectRatio="none">
-        <path d={normalized} fill="none" stroke="#E8112D" strokeWidth="2.4" strokeLinecap="round" />
-      </svg>
-    </div>
-  )
-}
-
 export function TripsPage() {
   const [tab, setTab] = useState<TripTab>('all')
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
@@ -514,7 +453,9 @@ export function TripsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <MiniTripTrace seed={trip.id} />
+                  <div className="rounded-lg border border-border-subtle bg-bg-overlay/50 h-24 px-3 py-2 flex items-center justify-center text-xs text-text-muted">
+                    Itinéraire disponible dans le détail de la carte
+                  </div>
                   <div className="flex items-center justify-end gap-4 text-xs text-text-muted">
                     <span className="inline-flex items-center gap-1"><Clock size={11} /> {trip.durationMin ? formatDuration(Number(trip.durationMin)) : '—'}</span>
                     <span className="inline-flex items-center gap-1"><Zap size={11} /> {estimatedEnergy != null ? `${Number(estimatedEnergy).toFixed(1)} kWh` : '—'}</span>
@@ -614,15 +555,6 @@ export function TripsPage() {
                       </div>
                     </div>
                   )}
-
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-text-muted mb-2">Trace du trajet</p>
-                    {hasPathError ? (
-                      <p className="text-xs text-warning">Trace indisponible pour ce trajet.</p>
-                    ) : (
-                      <DetailedTripTrace points={selectedPath} />
-                    )}
-                  </div>
 
                   {detailRoutePoints.length > 0 && (
                     <div className="space-y-2">
