@@ -697,7 +697,13 @@ export class TeslaMateReadService {
           cp.start_rated_range_km,
           cp.end_rated_range_km,
           cp.position_id,
-          COALESCE(a.display_name, a.name) AS address,
+          CASE
+            WHEN g.name IS NOT NULL THEN g.name
+            WHEN a.name IS NOT NULL AND a.road IS NOT NULL THEN a.name || ', ' || a.road || ', ' || COALESCE(a.city, a.county)
+            WHEN a.house_number IS NOT NULL AND a.road IS NOT NULL THEN a.house_number || ' ' || a.road || ', ' || COALESCE(a.city, a.county)
+            WHEN a.road IS NOT NULL THEN a.road || ', ' || COALESCE(a.city, a.county)
+            ELSE COALESCE(a.name, a.display_name)
+          END AS address,
           p.latitude::float8 AS latitude,
           p.longitude::float8 AS longitude,
           cp_agg.max_charger_power_kw AS "maxChargeKw",
@@ -706,6 +712,7 @@ export class TeslaMateReadService {
         FROM charging_processes cp
         INNER JOIN cars c ON c.id = cp.car_id
         LEFT JOIN addresses a ON a.id = cp.address_id
+        LEFT JOIN geofences g ON g.id = cp.geofence_id
         LEFT JOIN positions p ON p.id = cp.position_id
         LEFT JOIN LATERAL (
           SELECT ch.charge_energy_added
@@ -752,10 +759,13 @@ export class TeslaMateReadService {
           cp.end_date AS "endedAt",
           COALESCE(cp.charge_energy_added, lc.charge_energy_added) AS "energyAddedKwh",
           cp.start_battery_level AS "startBatteryLevel",
-          cp.end_battery_level AS "endBatteryLevel",
-          cp.duration_min AS "durationMin",
-          NULL::float8 AS "estimatedCost",
-          COALESCE(a.display_name, a.name) AS address,
+          CASE
+            WHEN g.name IS NOT NULL THEN g.name
+            WHEN a.name IS NOT NULL AND a.road IS NOT NULL THEN a.name || ', ' || a.road || ', ' || COALESCE(a.city, a.county)
+            WHEN a.house_number IS NOT NULL AND a.road IS NOT NULL THEN a.house_number || ' ' || a.road || ', ' || COALESCE(a.city, a.county)
+            WHEN a.road IS NOT NULL THEN a.road || ', ' || COALESCE(a.city, a.county)
+            ELSE COALESCE(a.name, a.display_name)
+          END AS address,
           p.latitude::float8 AS latitude,
           p.longitude::float8 AS longitude,
           cp_agg.max_charger_power_kw AS "maxChargeKw",
@@ -764,6 +774,7 @@ export class TeslaMateReadService {
         FROM charging_processes cp
         INNER JOIN cars c ON c.id = cp.car_id
         LEFT JOIN addresses a ON a.id = cp.address_id
+        LEFT JOIN geofences g ON g.id = cp.geofence_id
         LEFT JOIN positions p ON p.id = cp.position_id
         LEFT JOIN LATERAL (
           SELECT ch.charge_energy_added
