@@ -472,29 +472,99 @@ export class TeslaMateReadService {
     const speedMultiplier = odometerMultiplier
     const rows = await this.query<Array<Record<string, unknown>>[number]>(
       `
+        WITH target_drive AS (
+          SELECT
+            d.id,
+            d.car_id,
+            d.start_date,
+            COALESCE(
+              d.end_date,
+              d.start_date + (COALESCE(d.duration_min, 0) * INTERVAL '1 minute')
+            ) AS end_date,
+            d.start_position_id,
+            d.end_position_id
+          FROM drives d
+          INNER JOIN cars c ON c.id = d.car_id
+          WHERE c.vin = $1
+            AND d.id = $2::int
+          LIMIT 1
+        ),
+        range_positions AS (
+          SELECT
+            p.date AS "capturedAt",
+            p.latitude::float8 AS latitude,
+            p.longitude::float8 AS longitude,
+            p.speed AS speed,
+            p.power AS power,
+            p.odometer AS odometer,
+            p.battery_level AS "batteryLevel"
+          FROM positions p
+          INNER JOIN target_drive td ON td.car_id = p.car_id
+          WHERE p.latitude IS NOT NULL
+            AND p.longitude IS NOT NULL
+            AND p.date >= (td.start_date - INTERVAL '45 seconds')
+            AND p.date <= (td.end_date + INTERVAL '45 seconds')
+        ),
+        edge_positions AS (
+          SELECT
+            p.date AS "capturedAt",
+            p.latitude::float8 AS latitude,
+            p.longitude::float8 AS longitude,
+            p.speed AS speed,
+            p.power AS power,
+            p.odometer AS odometer,
+            p.battery_level AS "batteryLevel"
+          FROM target_drive td
+          INNER JOIN positions p ON p.id = td.start_position_id
+
+          UNION ALL
+
+          SELECT
+            p.date AS "capturedAt",
+            p.latitude::float8 AS latitude,
+            p.longitude::float8 AS longitude,
+            p.speed AS speed,
+            p.power AS power,
+            p.odometer AS odometer,
+            p.battery_level AS "batteryLevel"
+          FROM target_drive td
+          INNER JOIN positions p ON p.id = td.end_position_id
+        ),
+        merged AS (
+          SELECT * FROM range_positions
+          UNION ALL
+          SELECT * FROM edge_positions
+        )
         SELECT
-          p.date AS "capturedAt",
-          p.latitude::float8 AS latitude,
-          p.longitude::float8 AS longitude,
+          m."capturedAt",
+          m.latitude,
+          m.longitude,
           NULL::int AS heading,
-          p.speed AS speed,
-          p.power AS power,
-          p.odometer AS odometer,
-          p.battery_level AS "batteryLevel",
+          m.speed,
+          m.power,
+          m.odometer,
+          m."batteryLevel",
           TRUE AS "isDriving"
-        FROM positions p
-        INNER JOIN drives d ON d.id = p.drive_id
-        INNER JOIN cars c ON c.id = d.car_id
-        WHERE c.vin = $1
-          AND d.id = $2::int
-          AND p.latitude IS NOT NULL
-          AND p.longitude IS NOT NULL
-        ORDER BY p.date ASC
+        FROM merged m
+        ORDER BY m."capturedAt" ASC
       `,
       [vin, id],
     )
 
-    return rows.map((row: MappedRecord) => ({
+    const deduped: Array<Record<string, unknown>> = []
+    let lastKey: string | null = null
+    for (const row of rows) {
+      const lat = toNumber(row.latitude)
+      const lon = toNumber(row.longitude)
+      const at = toDate(row.capturedAt)?.getTime() ?? 0
+      if (lat == null || lon == null) continue
+      const key = `${lat.toFixed(6)}:${lon.toFixed(6)}:${at}`
+      if (key === lastKey) continue
+      deduped.push(row)
+      lastKey = key
+    }
+
+    return deduped.map((row: MappedRecord) => ({
       capturedAt: toDate(row.capturedAt) ?? new Date(),
       latitude: toNumber(row.latitude),
       longitude: toNumber(row.longitude),
