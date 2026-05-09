@@ -4,6 +4,7 @@ import { env } from '../../config/env.js'
 type FallbackSnapshot = {
   capturedAt?: Date | null
   vehicleState?: string | null
+  odometer?: number | null
   batteryLevel?: number | null
   batteryRange?: number | null
   chargeLimitSoc?: number | null
@@ -160,7 +161,7 @@ export class TeslaMateReadService {
     private failed = false
 
   isEnabled() {
-      return this.enabled && !this.failed
+      return this.enabled
   }
 
   private async query<T>(text: string, values: unknown[]) {
@@ -202,6 +203,7 @@ export class TeslaMateReadService {
     return {
       vehicleId: vehicle.id,
       capturedAt: toDate(row.captured_at) ?? fallback?.capturedAt ?? new Date(),
+      odometer: toNumber(row.odometer) ?? fallback?.odometer ?? null,
       batteryLevel: row.battery_level ?? fallback?.batteryLevel ?? 0,
       batteryRange: toNumber(row.battery_range_km) ?? fallback?.batteryRange ?? 0,
       chargeLimitSoc: fallback?.chargeLimitSoc ?? null,

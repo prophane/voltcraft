@@ -36,6 +36,7 @@ export async function vehicleRoutes(app: FastifyInstance) {
     return {
       vehicleId,
       capturedAt: snapshot.capturedAt,
+      odometer: snapshot.odometer,
       batteryLevel: snapshot.batteryLevel,
       batteryRange: snapshot.batteryRange,
       chargeLimitSoc: snapshot.chargeLimitSoc,
@@ -63,6 +64,34 @@ export async function vehicleRoutes(app: FastifyInstance) {
     }
   }
 
+  const snapshotToCurrent = (
+    vehicle: Awaited<ReturnType<typeof repo.findActive>>,
+    snapshot: Awaited<ReturnType<typeof repo.getLatestSnapshot>>,
+  ) => {
+    if (!vehicle) return null
+    const state = !snapshot
+      ? 'offline'
+      : snapshot.isCharging
+        ? 'charging'
+        : snapshot.isDriving
+          ? 'driving'
+          : Date.now() - snapshot.capturedAt.getTime() > 20 * 60_000
+            ? 'offline'
+            : 'online'
+
+    return {
+      id: vehicle.id,
+      vin: vehicle.vin,
+      displayName: vehicle.displayName,
+      model: vehicle.model,
+      year: vehicle.year,
+      color: vehicle.color,
+      state,
+      lastSeenAt: snapshot?.capturedAt ?? null,
+      isCached: true,
+    }
+  }
+
   const getVehicleForRead = async (userId: string) => {
     if (teslamate.isEnabled()) {
       const vehicle = await repo.findActive(userId)
@@ -86,6 +115,8 @@ export async function vehicleRoutes(app: FastifyInstance) {
       const fallback = await repo.getLatestSnapshot(vehicle.id)
       const current = await teslamate.getCurrentVehicle(vehicle, fallback ?? undefined)
       if (current) return ok(current)
+      const cachedCurrent = snapshotToCurrent(vehicle, fallback)
+      if (cachedCurrent) return ok(cachedCurrent)
     }
     const vehicle = await withVehicleAutoBootstrap(app, () => service.getCurrentVehicle(session.userId))
     return ok(vehicle)
@@ -128,6 +159,9 @@ export async function vehicleRoutes(app: FastifyInstance) {
       const vehicle = await getVehicleForRead(session.userId)
       const location = await teslamate.getVehicleLocation(vehicle.vin)
       if (location) return ok(location)
+      const fallbackLocation = await repo.getLatestLocationSnapshot(vehicle.id)
+      if (fallbackLocation) return ok({ ...fallbackLocation, isCached: true })
+      return ok(null)
     }
     const location = await withVehicleAutoBootstrap(app, () => service.getVehicleLocation(session.userId))
     return ok(location)
@@ -138,7 +172,7 @@ export async function vehicleRoutes(app: FastifyInstance) {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
     const query = historyQuerySchema.parse(req.query)
-    const vehicle = await withVehicleAutoBootstrap(app, () => repo.findActive(session.userId))
+    const vehicle = await getVehicleForRead(session.userId)
     if (!vehicle) return paginated([], 0, query.page, query.pageSize)
 
     const { snapshots, total } = await repo.getHistory(vehicle.id, {

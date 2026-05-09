@@ -140,7 +140,6 @@ export function DashboardPage() {
   const extendedState = state as (typeof state & {
     chargeLimitSoc?: number | null
     odometer?: number | null
-    version?: string | null
   }) | undefined
 
   const summaryData = summary as Record<string, unknown> | undefined
@@ -223,7 +222,6 @@ export function DashboardPage() {
             <InfoRow label="Outside temperature" value={outsideTemp != null ? `${outsideTemp.toFixed(1)} °C` : '—'} />
             <InfoRow label="Inside temperature" value={insideTemp != null ? `${insideTemp.toFixed(1)} °C` : '—'} />
             <InfoRow label="Mileage" value={odometer != null ? `${Math.round(odometer)} km` : '—'} />
-            <InfoRow label="Version" value={extendedState?.version ?? '—'} />
             <InfoRow label="Lock status" value={lockStatus} />
           </div>
 

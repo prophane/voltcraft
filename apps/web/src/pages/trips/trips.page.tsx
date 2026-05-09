@@ -75,7 +75,7 @@ export function TripsPage() {
     queryFn: () => tripsApi.list(),
   })
 
-  const trips = ((data as { data: Record<string, unknown>[] } | undefined)?.data ?? []) as TripRecord[]
+  const trips = (Array.isArray(data) ? data : []) as TripRecord[]
 
   const filteredTrips = useMemo(() => {
     if (tab === 'all') return trips

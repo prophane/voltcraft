@@ -11,7 +11,7 @@ export function ChargesPage() {
     queryFn: () => chargesApi.list(),
   })
 
-  const sessions = (data as { data: Record<string, unknown>[] } | undefined)?.data ?? []
+  const sessions = Array.isArray(data) ? data : []
 
   return (
     <div className="space-y-6">
