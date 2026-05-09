@@ -398,7 +398,9 @@ export class TeslaMateReadService {
           ep.latitude::float8 AS "endLatitude",
           ep.longitude::float8 AS "endLongitude",
           sp.battery_level AS "startBatteryLevel",
-          ep.battery_level AS "endBatteryLevel"
+          ep.battery_level AS "endBatteryLevel",
+          speed_agg.avg_speed AS "avgSpeedKmh",
+          speed_agg.max_speed AS "maxSpeedKmh"
         FROM drives d
         INNER JOIN cars c ON c.id = d.car_id
         LEFT JOIN positions sp ON sp.id = d.start_position_id
@@ -407,6 +409,19 @@ export class TeslaMateReadService {
         LEFT JOIN addresses ea ON ea.id = d.end_address_id
         LEFT JOIN addresses spa ON spa.id = sp.address_id
         LEFT JOIN addresses epa ON epa.id = ep.address_id
+        LEFT JOIN LATERAL (
+          SELECT
+            AVG(p.speed)::float8 AS avg_speed,
+            MAX(p.speed)::float8 AS max_speed
+          FROM positions p
+          WHERE p.car_id = d.car_id
+            AND p.speed IS NOT NULL
+            AND p.date >= (d.start_date - INTERVAL '45 seconds')
+            AND p.date <= (COALESCE(
+              d.end_date,
+              d.start_date + (COALESCE(d.duration_min, 0) * INTERVAL '1 minute')
+            ) + INTERVAL '45 seconds')
+        ) speed_agg ON TRUE
         WHERE c.vin = $1
           AND COALESCE(d.distance, 0) > 0.1${where.sql}
         ORDER BY d.start_date DESC
@@ -447,7 +462,9 @@ export class TeslaMateReadService {
           ep.latitude::float8 AS "endLatitude",
           ep.longitude::float8 AS "endLongitude",
           sp.battery_level AS "startBatteryLevel",
-          ep.battery_level AS "endBatteryLevel"
+          ep.battery_level AS "endBatteryLevel",
+          speed_agg.avg_speed AS "avgSpeedKmh",
+          speed_agg.max_speed AS "maxSpeedKmh"
         FROM drives d
         INNER JOIN cars c ON c.id = d.car_id
         LEFT JOIN positions sp ON sp.id = d.start_position_id
@@ -456,6 +473,19 @@ export class TeslaMateReadService {
         LEFT JOIN addresses ea ON ea.id = d.end_address_id
         LEFT JOIN addresses spa ON spa.id = sp.address_id
         LEFT JOIN addresses epa ON epa.id = ep.address_id
+        LEFT JOIN LATERAL (
+          SELECT
+            AVG(p.speed)::float8 AS avg_speed,
+            MAX(p.speed)::float8 AS max_speed
+          FROM positions p
+          WHERE p.car_id = d.car_id
+            AND p.speed IS NOT NULL
+            AND p.date >= (d.start_date - INTERVAL '45 seconds')
+            AND p.date <= (COALESCE(
+              d.end_date,
+              d.start_date + (COALESCE(d.duration_min, 0) * INTERVAL '1 minute')
+            ) + INTERVAL '45 seconds')
+        ) speed_agg ON TRUE
         WHERE c.vin = $1 AND d.id = $2::int
         LIMIT 1
       `,
@@ -973,6 +1003,8 @@ export class TeslaMateReadService {
       startLongitude: toNumber(row.startLongitude),
       endLatitude: toNumber(row.endLatitude),
       endLongitude: toNumber(row.endLongitude),
+      avgSpeedKmh: toNumber(row.avgSpeedKmh) != null ? (toNumber(row.avgSpeedKmh) as number) * distanceMultiplier : null,
+      maxSpeedKmh: toNumber(row.maxSpeedKmh) != null ? (toNumber(row.maxSpeedKmh) as number) * distanceMultiplier : null,
       startBatteryLevel: toNumber(row.startBatteryLevel),
       endBatteryLevel: toNumber(row.endBatteryLevel),
       notes: null,

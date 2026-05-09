@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { statsApi, tripsApi } from '@/features/vehicle/api'
 import { MapContainer, Polyline, TileLayer, CircleMarker } from 'react-leaflet'
+import { useLocation } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
 import { CardSkeleton } from '@/components/ui/skeleton'
 import { formatDate, formatKm, formatDuration } from '@/lib/utils'
@@ -22,6 +23,8 @@ type TripRecord = {
   startLongitude?: number | null
   endLatitude?: number | null
   endLongitude?: number | null
+  avgSpeedKmh?: number | null
+  maxSpeedKmh?: number | null
   startBatteryLevel?: number | null
   endBatteryLevel?: number | null
 }
@@ -108,9 +111,35 @@ function normalizeTrip(raw: unknown): TripRecord | null {
     startLongitude: parseNumber(row.startLongitude ?? row.start_longitude),
     endLatitude: parseNumber(row.endLatitude ?? row.end_latitude),
     endLongitude: parseNumber(row.endLongitude ?? row.end_longitude),
+    avgSpeedKmh: parseNumber(row.avgSpeedKmh ?? row.avg_speed_kmh),
+    maxSpeedKmh: parseNumber(row.maxSpeedKmh ?? row.max_speed_kmh),
     startBatteryLevel: parseNumber(row.startBatteryLevel ?? row.start_battery_level),
     endBatteryLevel: parseNumber(row.endBatteryLevel ?? row.end_battery_level),
   }
+}
+
+async function fetchRoadRoute(
+  start: { lat: number; lon: number },
+  end: { lat: number; lon: number },
+  waypoint?: { lat: number; lon: number } | null,
+): Promise<Array<[number, number]>> {
+  const coords = waypoint
+    ? `${start.lon},${start.lat};${waypoint.lon},${waypoint.lat};${end.lon},${end.lat}`
+    : `${start.lon},${start.lat};${end.lon},${end.lat}`
+  const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`
+  const res = await fetch(url, { headers: { Accept: 'application/json' } })
+  if (!res.ok) return []
+
+  const body = (await res.json()) as {
+    routes?: Array<{ geometry?: { coordinates?: number[][] } }>
+  }
+  const coordinates = body.routes?.[0]?.geometry?.coordinates
+  if (!Array.isArray(coordinates)) return []
+
+  return coordinates
+    .filter((c) => Array.isArray(c) && c.length >= 2)
+    .map((c) => [Number(c[1]), Number(c[0])] as [number, number])
+    .filter(([lat, lon]) => Number.isFinite(lat) && Number.isFinite(lon))
 }
 
 function normalizeTrips(raw: unknown): TripRecord[] {
@@ -260,10 +289,16 @@ async function reverseGeocode(lat: number, lon: number) {
 }
 
 export function TripsPage() {
+  const location = useLocation()
   const [tab, setTab] = useState<TripTab>('all')
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
 
-  const { data, isLoading } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError: hasTripsError,
+    refetch: refetchTrips,
+  } = useQuery({
     queryKey: ['trips'],
     queryFn: () => tripsApi.list(),
     refetchOnMount: 'always',
@@ -288,6 +323,72 @@ export function TripsPage() {
   const trips = useMemo(() => normalizeTrips(data).filter(isMeaningfulTrip), [data])
   const selectedTrip = useMemo(() => normalizeTrip(selectedTripData), [selectedTripData])
   const selectedPath = useMemo(() => normalizePath(selectedPathData), [selectedPathData])
+
+  const selectedStartCoords = selectedTrip?.startLatitude != null && selectedTrip?.startLongitude != null
+    ? { lat: selectedTrip.startLatitude, lon: selectedTrip.startLongitude }
+    : null
+  const selectedEndCoords = selectedTrip?.endLatitude != null && selectedTrip?.endLongitude != null
+    ? { lat: selectedTrip.endLatitude, lon: selectedTrip.endLongitude }
+    : null
+  const selectedTelemetryRoutePoints = useMemo(
+    () => normalizeRoutePoints(selectedStartCoords, selectedEndCoords, selectedPath),
+    [selectedStartCoords, selectedEndCoords, selectedPath],
+  )
+  const selectedMidpoint =
+    selectedPath.length >= 3
+      ? {
+          lat: selectedPath[Math.floor(selectedPath.length / 2)]?.latitude ?? null,
+          lon: selectedPath[Math.floor(selectedPath.length / 2)]?.longitude ?? null,
+        }
+      : null
+
+  const { data: selectedRoadRouteData } = useQuery({
+    queryKey: [
+      'trips',
+      selectedTripId,
+      'road-route',
+      selectedStartCoords?.lat,
+      selectedStartCoords?.lon,
+      selectedEndCoords?.lat,
+      selectedEndCoords?.lon,
+      selectedMidpoint?.lat,
+      selectedMidpoint?.lon,
+      selectedTelemetryRoutePoints.length,
+    ],
+    queryFn: () => fetchRoadRoute(
+      selectedStartCoords as { lat: number; lon: number },
+      selectedEndCoords as { lat: number; lon: number },
+      selectedMidpoint?.lat != null && selectedMidpoint?.lon != null
+        ? { lat: selectedMidpoint.lat, lon: selectedMidpoint.lon }
+        : null,
+    ),
+    enabled:
+      !!selectedTripId
+      && !!selectedStartCoords
+      && !!selectedEndCoords
+      && selectedTelemetryRoutePoints.length > 0
+      && selectedTelemetryRoutePoints.length < 8,
+    staleTime: 10 * 60_000,
+  })
+
+  const selectedDisplayedRoutePoints =
+    Array.isArray(selectedRoadRouteData) && selectedRoadRouteData.length >= 2
+      ? selectedRoadRouteData
+      : selectedTelemetryRoutePoints
+
+  useEffect(() => {
+    void refetchTrips()
+  }, [location.key, refetchTrips])
+
+  useEffect(() => {
+    if (!isLoading && !hasTripsError && normalizeTrips(data).length === 0) {
+      const timer = setTimeout(() => {
+        void refetchTrips()
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+    return undefined
+  }, [data, hasTripsError, isLoading, refetchTrips])
 
   const { data: summary30 } = useQuery({
     queryKey: ['stats', 'summary', 30],
@@ -415,11 +516,13 @@ export function TripsPage() {
             const detailEndCoords = detailTrip.endLatitude != null && detailTrip.endLongitude != null
               ? { lat: detailTrip.endLatitude, lon: detailTrip.endLongitude }
               : null
-            const detailRoutePoints = isSelected ? normalizeRoutePoints(detailStartCoords, detailEndCoords, selectedPath) : []
+            const detailRoutePoints = isSelected ? selectedDisplayedRoutePoints : []
             const pathInsights = isSelected ? buildPathInsights(selectedPath) : null
             const avgSpeedFromTrip = (detailTrip.distanceKm ?? 0) > 0 && (detailTrip.durationMin ?? 0) > 0
               ? (detailTrip.distanceKm as number) / ((detailTrip.durationMin as number) / 60)
               : null
+            const avgSpeedDisplay = detailTrip.avgSpeedKmh ?? avgSpeedFromTrip ?? pathInsights?.avgSpeed ?? null
+            const maxSpeedDisplay = detailTrip.maxSpeedKmh ?? pathInsights?.maxSpeed ?? null
 
             return (
             <Card
@@ -533,12 +636,12 @@ export function TripsPage() {
                         <DetailMetric
                           icon={Gauge}
                           label="Vitesse moy"
-                          value={avgSpeedFromTrip != null ? `${Math.round(avgSpeedFromTrip)} km/h` : pathInsights.avgSpeed != null ? `${Math.round(pathInsights.avgSpeed)} km/h` : '—'}
+                          value={avgSpeedDisplay != null ? `${Math.round(avgSpeedDisplay)} km/h` : '—'}
                         />
                         <DetailMetric
                           icon={Gauge}
                           label="Vitesse max"
-                          value={pathInsights.maxSpeed != null ? `${Math.round(pathInsights.maxSpeed)} km/h` : '—'}
+                          value={maxSpeedDisplay != null ? `${Math.round(maxSpeedDisplay)} km/h` : '—'}
                         />
                         <DetailMetric
                           icon={Zap}
