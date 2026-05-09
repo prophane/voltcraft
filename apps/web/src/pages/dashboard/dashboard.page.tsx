@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { vehicleApi, statsApi } from '@/features/vehicle/api'
 import { Card } from '@/components/ui/card'
-import { Lock, Unlock, MapPin } from 'lucide-react'
+import { Lock, Unlock, MapPin, Plus, Minus } from 'lucide-react'
 import { cn, formatDate } from '@/lib/utils'
 
 interface ReverseGeocodeResponse {
@@ -62,7 +62,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 export function DashboardPage() {
-  const [mapZoom, setMapZoom] = useState<'street' | 'district' | 'city'>('district')
+  const [mapZoomLevel, setMapZoomLevel] = useState(14)
 
   const { data: vehicle } = useQuery({
     queryKey: ['vehicle', 'current'],
@@ -172,19 +172,26 @@ export function DashboardPage() {
   }, [hasTelemetry, vehicle?.state])
 
   const mapEmbedUrl = useMemo(() => {
-    if (!location) return null
-    const lon = location.longitude
-    const lat = location.latitude
-    const delta = mapZoom === 'street' ? 0.0025 : mapZoom === 'district' ? 0.008 : 0.02
+    if (latitude == null || longitude == null) return null
+    const lon = longitude
+    const lat = latitude
+    const safeZoom = Math.max(11, Math.min(17, mapZoomLevel))
+    const delta = 0.2 / (2 ** (safeZoom - 10))
     const left = lon - delta
     const right = lon + delta
     const top = lat + delta
     const bottom = lat - delta
     return `https://www.openstreetmap.org/export/embed.html?bbox=${left},${bottom},${right},${top}&layer=mapnik&marker=${lat},${lon}`
-  }, [location, mapZoom])
+  }, [latitude, longitude, mapZoomLevel])
+
+  const mapPreset = useMemo(() => {
+    if (mapZoomLevel >= 16) return 'street'
+    if (mapZoomLevel <= 12) return 'city'
+    return 'district'
+  }, [mapZoomLevel])
 
   return (
-    <div className="max-w-md lg:max-w-6xl mx-auto space-y-5">
+    <div className="max-w-md lg:max-w-[1220px] mx-auto space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-semibold tracking-tight text-text-primary">Dashboard</h1>
@@ -192,85 +199,106 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <Card className="surface-premium p-4 md:p-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-3xl font-medium text-text-primary">{friendlyName}</h2>
-            <p className="text-base text-text-secondary mt-1">
-              {statusLabel} <span className={cn('inline-block w-2 h-2 rounded-full ml-1', hasTelemetry ? 'bg-success' : 'bg-warning')} />
-            </p>
-            <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-border-subtle bg-bg-overlay/70 px-3 py-1.5 text-sm text-text-secondary">
-              {state?.isLocked ? <Lock size={14} className="text-success" /> : <Unlock size={14} className="text-warning" />}
-              <span>{lockStatus}</span>
+      <div className="grid lg:grid-cols-[420px_minmax(0,1fr)] gap-5 items-start">
+        <Card className="surface-premium p-4 md:p-6">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-3xl font-medium text-text-primary">{friendlyName}</h2>
+              <p className="text-base text-text-secondary mt-1">
+                {statusLabel} <span className={cn('inline-block w-2 h-2 rounded-full ml-1', hasTelemetry ? 'bg-success' : 'bg-warning')} />
+              </p>
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-border-subtle bg-bg-overlay/70 px-3 py-1.5 text-sm text-text-secondary">
+                {state?.isLocked ? <Lock size={14} className="text-success" /> : <Unlock size={14} className="text-warning" />}
+                <span>{lockStatus}</span>
+              </div>
             </div>
           </div>
-        </div>
 
+          <ArcGauge level={batteryLevel} rangeKm={batteryRange} hasData={hasTelemetry} />
 
+          <p className="text-center text-sm text-text-muted -mt-2">
+            <MapPin size={12} className="inline mr-1" />
+            {vehicle?.lastSeenAt ? `Parked · ${formatDate(vehicle.lastSeenAt)}` : 'Waiting for first telemetry'}
+          </p>
 
-        <ArcGauge level={batteryLevel} rangeKm={batteryRange} hasData={hasTelemetry} />
-
-        <p className="text-center text-sm text-text-muted -mt-2">
-          <MapPin size={12} className="inline mr-1" />
-          {vehicle?.lastSeenAt ? `Parked · ${formatDate(vehicle.lastSeenAt)}` : 'Waiting for first telemetry'}
-        </p>
-
-        <div className="mt-5 rounded-2xl border border-border-subtle bg-bg-overlay/70 p-4">
-          <div className="grid gap-1 mb-4">
-            <InfoRow label="Vehicle status" value={statusDetail} />
-            <InfoRow label="Range" value={batteryRange != null ? `${Math.round(batteryRange)} km` : '—'} />
-            <InfoRow label="Charge limit" value={extendedState?.chargeLimitSoc != null ? `${extendedState.chargeLimitSoc}%` : '—'} />
-            <InfoRow label="State of charge" value={batteryLevel != null ? `${Math.round(batteryLevel)}%` : '—'} />
-            <InfoRow label="Outside temperature" value={outsideTemp != null ? `${outsideTemp.toFixed(1)} °C` : '—'} />
-            <InfoRow label="Inside temperature" value={insideTemp != null ? `${insideTemp.toFixed(1)} °C` : '—'} />
-            <InfoRow label="Mileage" value={odometer != null ? `${Math.round(odometer)} km` : '—'} />
-            <InfoRow label="Lock status" value={lockStatus} />
+          <div className="mt-5 rounded-2xl border border-border-subtle bg-bg-overlay/70 p-4">
+            <div className="grid gap-1">
+              <InfoRow label="Vehicle status" value={statusDetail} />
+              <InfoRow label="Range" value={batteryRange != null ? `${Math.round(batteryRange)} km` : '—'} />
+              <InfoRow label="Charge limit" value={extendedState?.chargeLimitSoc != null ? `${extendedState.chargeLimitSoc}%` : '—'} />
+              <InfoRow label="State of charge" value={batteryLevel != null ? `${Math.round(batteryLevel)}%` : '—'} />
+              <InfoRow label="Outside temperature" value={outsideTemp != null ? `${outsideTemp.toFixed(1)} °C` : '—'} />
+              <InfoRow label="Inside temperature" value={insideTemp != null ? `${insideTemp.toFixed(1)} °C` : '—'} />
+              <InfoRow label="Mileage" value={odometer != null ? `${Math.round(odometer)} km` : '—'} />
+            </div>
           </div>
+        </Card>
 
-          <div>
-            <p className="text-sm text-text-primary">{location ? 'Dernière position connue' : 'Position indisponible'}</p>
-            <p className="text-xs text-text-muted mt-0.5">
-              {latitude != null && longitude != null && location
-                ? `${latitude.toFixed(5)}, ${longitude.toFixed(5)} · ${formatDate(location.capturedAt)}`
-                : 'Aucune donnée GPS enregistrée'}
-            </p>
-            {location && (
-              <p className="text-xs text-text-secondary mt-1">
-                {locationAddress ?? 'Adresse en cours de resolution...'}
+        <Card className="surface-premium p-4 md:p-6">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-sm text-text-primary">{location ? 'Dernière position connue' : 'Position indisponible'}</p>
+              <p className="text-xs text-text-muted mt-0.5">
+                {latitude != null && longitude != null && location
+                  ? `${latitude.toFixed(5)}, ${longitude.toFixed(5)} · ${formatDate(location.capturedAt)}`
+                  : 'Aucune donnée GPS enregistrée'}
               </p>
-            )}
+              {location && (
+                <p className="text-xs text-text-secondary mt-1 max-w-3xl">
+                  {locationAddress ?? 'Adresse en cours de resolution...'}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMapZoomLevel((z) => Math.max(11, z - 1))}
+                className="px-2 py-1 rounded-md border border-border-subtle text-text-secondary hover:text-text-primary"
+              >
+                <Minus size={14} />
+              </button>
+              <span className="text-xs text-text-muted min-w-14 text-center">Zoom {mapZoomLevel}</span>
+              <button
+                type="button"
+                onClick={() => setMapZoomLevel((z) => Math.min(17, z + 1))}
+                className="px-2 py-1 rounded-md border border-border-subtle text-text-secondary hover:text-text-primary"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
           </div>
 
-          {location && latitude != null && longitude != null && mapEmbedUrl ? (
+          <div className="mt-3 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setMapZoomLevel(16)}
+              className={cn('px-2.5 py-1 rounded-md border text-xs transition-colors', mapPreset === 'street' ? 'border-accent-500/40 bg-accent-500/10 text-accent-400' : 'border-border-subtle text-text-secondary hover:text-text-primary')}
+            >
+              Rue
+            </button>
+            <button
+              type="button"
+              onClick={() => setMapZoomLevel(14)}
+              className={cn('px-2.5 py-1 rounded-md border text-xs transition-colors', mapPreset === 'district' ? 'border-accent-500/40 bg-accent-500/10 text-accent-400' : 'border-border-subtle text-text-secondary hover:text-text-primary')}
+            >
+              Quartier
+            </button>
+            <button
+              type="button"
+              onClick={() => setMapZoomLevel(12)}
+              className={cn('px-2.5 py-1 rounded-md border text-xs transition-colors', mapPreset === 'city' ? 'border-accent-500/40 bg-accent-500/10 text-accent-400' : 'border-border-subtle text-text-secondary hover:text-text-primary')}
+            >
+              Ville
+            </button>
+          </div>
+
+          {mapEmbedUrl ? (
             <div className="mt-3 space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-text-muted">Zoom carte</p>
-                <div className="flex items-center gap-1.5">
-                  {([
-                    { key: 'street', label: 'Rue' },
-                    { key: 'district', label: 'Quartier' },
-                    { key: 'city', label: 'Ville' },
-                  ] as const).map((item) => (
-                    <button
-                      key={item.key}
-                      type="button"
-                      onClick={() => setMapZoom(item.key)}
-                      className={cn(
-                        'px-2.5 py-1 rounded-md border text-xs transition-colors',
-                        mapZoom === item.key
-                          ? 'border-accent-500/40 bg-accent-500/10 text-accent-400'
-                          : 'border-border-subtle text-text-secondary hover:text-text-primary',
-                      )}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
               <iframe
                 title="Carte position véhicule"
                 src={mapEmbedUrl}
-                className="w-full h-48 lg:h-64 rounded-lg border border-border-subtle"
+                className="w-full h-64 lg:h-[460px] rounded-lg border border-border-subtle"
                 loading="lazy"
                 referrerPolicy="no-referrer-when-downgrade"
               />
@@ -286,14 +314,14 @@ export function DashboardPage() {
               </div>
             </div>
           ) : (
-            <div className="mt-2 flex justify-end">
-              <MapPin size={18} className="text-text-muted flex-shrink-0" />
+            <div className="mt-4 rounded-lg border border-border-subtle bg-bg-overlay/50 h-40 flex items-center justify-center text-sm text-text-muted">
+              Position carte indisponible
             </div>
           )}
-        </div>
-      </Card>
+        </Card>
+      </div>
 
-      <Card className="surface-premium p-4 md:p-5 lg:max-w-sm">
+      <Card className="surface-premium p-4 md:p-5">
         <h3 className="text-lg font-medium text-text-primary">30 derniers jours</h3>
         <div className="grid grid-cols-2 gap-4 mt-4">
           <div>
