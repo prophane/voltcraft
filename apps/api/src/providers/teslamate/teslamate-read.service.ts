@@ -126,8 +126,15 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 function toVehicleState(row: TeslaMateVehicleRow, fallback?: FallbackSnapshot) {
   const stale = isStaleTelemetry(row.captured_at ?? fallback?.capturedAt)
   const chargePower = toNumber(row.charger_power)
-  const isCharging = row.open_charge_id != null && chargePower != null
-    ? chargePower > 0
+  const chargerCurrent = toNumber(row.charger_actual_current)
+  const isCharging = row.open_charge_id != null
+    ? (
+      chargePower != null
+        ? chargePower > 0
+        : chargerCurrent != null
+          ? chargerCurrent > 0
+          : false
+    )
     : fallback?.isCharging === true
 
   if (isCharging) return 'charging'
@@ -367,14 +374,14 @@ export class TeslaMateReadService {
 
     const chargePower = toNumber(row.charger_power)
     const chargerCurrent = toNumber(row.charger_actual_current)
-    const isPluggedIn = row.open_charge_id != null || fallback?.isPluggedIn === true
+    const isPluggedIn = row.open_charge_id != null
     const isCharging = row.open_charge_id != null
       ? (
         chargePower != null
           ? chargePower > 0
           : chargerCurrent != null
             ? chargerCurrent > 0
-            : fallback?.isCharging === true
+            : false
       )
       : fallback?.isCharging === true
     const chargeState = row.open_charge_id != null
