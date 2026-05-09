@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { vehicleApi, statsApi, settingsApi } from '@/features/vehicle/api'
+import { vehicleApi, statsApi, settingsApi, tripsApi } from '@/features/vehicle/api'
 import { Card } from '@/components/ui/card'
 import { Lock, Unlock, MapPin, Plus, Minus } from 'lucide-react'
 import { cn, formatDate } from '@/lib/utils'
@@ -13,6 +13,16 @@ interface HomeLocation {
   lat: number
   lon: number
   radiusM: number
+}
+
+interface LatestTrip {
+  id: string
+  startedAt: string
+  durationMin: number | null
+  distanceKm: number | null
+  avgConsumptionKwh100: number | null
+  startAddress: string | null
+  endAddress: string | null
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -28,6 +38,39 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
     Math.sin(dLat / 2) ** 2
     + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
   return 6371000 * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)))
+}
+
+function formatDurationMin(value: number | null) {
+  if (value == null || !Number.isFinite(value) || value < 1) return '—'
+  const minutes = Math.round(value)
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (hours <= 0) return `${minutes} min`
+  if (rest === 0) return `${hours} h`
+  return `${hours} h ${rest} min`
+}
+
+function parseLatestTrip(raw: unknown): LatestTrip | null {
+  if (Array.isArray(raw)) return parseLatestTrip(raw[0])
+  if (!raw || typeof raw !== 'object') return null
+
+  const obj = raw as Record<string, unknown>
+  const listCandidate = obj.items ?? obj.trips ?? obj.data
+  if (Array.isArray(listCandidate)) return parseLatestTrip(listCandidate[0])
+
+  const id = obj.id == null ? null : String(obj.id)
+  const startedAt = obj.startedAt == null ? null : String(obj.startedAt)
+  if (!id || !startedAt) return null
+
+  return {
+    id,
+    startedAt,
+    durationMin: toFiniteNumber(obj.durationMin ?? obj.duration_min),
+    distanceKm: toFiniteNumber(obj.distanceKm ?? obj.distance_km),
+    avgConsumptionKwh100: toFiniteNumber(obj.avgConsumptionKwh100 ?? obj.avg_consumption_kwh100),
+    startAddress: obj.startAddress == null ? null : String(obj.startAddress),
+    endAddress: obj.endAddress == null ? null : String(obj.endAddress),
+  }
 }
 
 function ArcGauge({ level, rangeKm, hasData }: { level: number | null; rangeKm: number | null; hasData: boolean }) {
@@ -94,9 +137,15 @@ export function DashboardPage() {
   })
 
   const { data: summary } = useQuery({
-    queryKey: ['stats', 'summary', 30],
-    queryFn: () => statsApi.summary(30),
+    queryKey: ['stats', 'summary', 7],
+    queryFn: () => statsApi.summary(7),
     staleTime: 300_000,
+  })
+
+  const { data: latestTripRaw } = useQuery({
+    queryKey: ['trips', 'latest'],
+    queryFn: () => tripsApi.list(1, 1),
+    staleTime: 120_000,
   })
 
   const { data: settingsData } = useQuery({
@@ -169,6 +218,8 @@ export function DashboardPage() {
   const summaryData = summary as Record<string, unknown> | undefined
   const distanceKm = toFiniteNumber(summaryData?.['distanceKm'])
   const energyUsedKwh = toFiniteNumber(summaryData?.['energyUsedKwh'])
+  const avgConsumption7d = toFiniteNumber(summaryData?.['avgConsumptionKwhPer100km'])
+  const tripsCount7d = toFiniteNumber(summaryData?.['tripsCount'])
   const batteryRange = toFiniteNumber(state?.batteryRange)
   const batteryLevel = toFiniteNumber(state?.batteryLevel)
   const outsideTemp = toFiniteNumber(state?.outsideTemp)
@@ -176,6 +227,10 @@ export function DashboardPage() {
   const odometer = toFiniteNumber(extendedState?.odometer)
   const latitude = toFiniteNumber(location?.latitude)
   const longitude = toFiniteNumber(location?.longitude)
+  const latestTrip = useMemo(() => parseLatestTrip(latestTripRaw), [latestTripRaw])
+  const latestTripWhKm = latestTrip?.avgConsumptionKwh100 != null
+    ? Math.round(latestTrip.avgConsumptionKwh100 * 10)
+    : null
 
   const homeLocation = useMemo<HomeLocation | null>(() => {
     const settings = (settingsData ?? {}) as Record<string, unknown>
@@ -362,19 +417,57 @@ export function DashboardPage() {
         </Card>
       </div>
 
-      <Card className="surface-premium p-4 md:p-5">
-        <h3 className="text-lg font-medium text-text-primary">30 derniers jours</h3>
-        <div className="grid grid-cols-2 gap-4 mt-4">
-          <div>
-            <p className="text-xs text-text-muted uppercase">Distance</p>
-            <p className="text-3xl font-semibold text-text-primary mt-1">{distanceKm != null ? `${Math.round(distanceKm)} km` : '—'}</p>
+      <div className="grid lg:grid-cols-2 gap-5">
+        <Card className="surface-premium p-4 md:p-5">
+          <h3 className="text-lg font-medium text-text-primary">Bilan 7 jours</h3>
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <div>
+              <p className="text-xs text-text-muted uppercase">Distance</p>
+              <p className="text-3xl font-semibold text-text-primary mt-1">{distanceKm != null ? `${Math.round(distanceKm)} km` : '—'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-text-muted uppercase">Énergie</p>
+              <p className="text-3xl font-semibold text-text-primary mt-1">{energyUsedKwh != null ? `${energyUsedKwh.toFixed(1)} kWh` : '—'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-text-muted uppercase">Conso moyenne</p>
+              <p className="text-xl font-semibold text-text-primary mt-1">{avgConsumption7d != null ? `${Math.round(avgConsumption7d * 10)} Wh/km` : '—'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-text-muted uppercase">Trajets</p>
+              <p className="text-xl font-semibold text-text-primary mt-1">{tripsCount7d != null ? `${Math.round(tripsCount7d)}` : '—'}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs text-text-muted uppercase">Énergie consommée</p>
-            <p className="text-3xl font-semibold text-text-primary mt-1">{energyUsedKwh != null ? `${energyUsedKwh.toFixed(1)} kWh` : '—'}</p>
-          </div>
-        </div>
-      </Card>
+        </Card>
+
+        <Card className="surface-premium p-4 md:p-5">
+          <h3 className="text-lg font-medium text-text-primary">Dernier trajet</h3>
+          {latestTrip ? (
+            <div className="mt-3 space-y-3">
+              <p className="text-sm text-text-secondary">
+                {(latestTrip.startAddress ?? 'Départ inconnu')} → {(latestTrip.endAddress ?? 'Arrivée inconnue')}
+              </p>
+              <p className="text-xs text-text-muted">{formatDate(latestTrip.startedAt)}</p>
+              <div className="grid grid-cols-3 gap-3 text-sm">
+                <div>
+                  <p className="text-[11px] text-text-muted uppercase">Distance</p>
+                  <p className="text-text-secondary">{latestTrip.distanceKm != null ? `${Math.round(latestTrip.distanceKm)} km` : '—'}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-text-muted uppercase">Durée</p>
+                  <p className="text-text-secondary">{formatDurationMin(latestTrip.durationMin)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-text-muted uppercase">Conso</p>
+                  <p className="text-text-secondary">{latestTripWhKm != null ? `${latestTripWhKm} Wh/km` : '—'}</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-text-muted">Aucun trajet récent disponible</p>
+          )}
+        </Card>
+      </div>
     </div>
   )
 }
