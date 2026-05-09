@@ -333,8 +333,9 @@ export class TeslaMateReadService {
       }
     }
 
-    // When ambiguous, prefer miles->km because TeslaMate often stores odometer/speed in miles from Tesla API.
-    const multiplier = mileVotes + kmVotes === 0 ? 1.609344 : mileVotes >= kmVotes ? 1.609344 : 1
+    // When ambiguous, keep km to avoid inflating distance/odometer values.
+    const hasStrongMilesSignal = mileVotes >= 3 && mileVotes > kmVotes
+    const multiplier = hasStrongMilesSignal ? 1.609344 : 1
     this.odometerMultiplierCache.set(vin, { value: multiplier, at: Date.now() })
     return multiplier
   }

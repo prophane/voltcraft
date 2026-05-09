@@ -49,7 +49,7 @@ const envSchema = z.object({
   TESLAMATE_FORCE_MILES_TO_KM: z
     .string()
     .transform((v) => v !== 'false')
-    .default('true'),
+    .default('false'),
 
   MQTT_ENABLED: z
     .string()

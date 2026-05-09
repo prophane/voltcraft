@@ -51,6 +51,7 @@ type TripPathInsights = {
 
 type TripTab = 'all' | 'work' | 'personal'
 type ResolvedTripAddresses = Record<string, { start: string | null; end: string | null }>
+type HomeLocation = { lat: number; lon: number; radiusM: number }
 
 function textContainsWorkHint(value?: string | null): boolean {
   if (!value) return false
@@ -271,8 +272,46 @@ function normalizeRoutePoints(start: { lat: number; lon: number } | null, end: {
   return []
 }
 
-function formatPointLabel(address?: string | null, lat?: number | null, lon?: number | null) {
-  if (address && address.trim().length > 0) return address
+function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const a =
+    Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+  return 6371000 * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)))
+}
+
+function compactAddress(address?: string | null) {
+  if (!address) return null
+  const parts = address
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean)
+
+  if (parts.length === 0) return null
+
+  const first = /^\d+$/.test(parts[0] ?? '') && parts[1]
+    ? `${parts[0]} ${parts[1]}`
+    : parts[0]
+
+  const postalIndex = parts.findIndex((p) => /^\d{5}$/.test(p))
+  const city = postalIndex > 0
+    ? parts[postalIndex - 1]
+    : parts.find((p) => /(^[A-Za-zÀ-ÿ'\- ]+$)/.test(p) && !/france|m[ée]tropolitaine|occitanie/i.test(p))
+
+  if (city && city !== first) return `${first}, ${city}`
+  return first
+}
+
+function formatPointLabel(address?: string | null, lat?: number | null, lon?: number | null, home?: HomeLocation | null) {
+  if (home && lat != null && lon != null) {
+    const dist = haversineMeters(lat, lon, home.lat, home.lon)
+    if (Number.isFinite(dist) && dist <= home.radiusM) return 'Maison'
+  }
+
+  const compact = compactAddress(address)
+  if (compact) return compact
   if (lat != null && lon != null) return `${lat.toFixed(5)}, ${lon.toFixed(5)}`
   return 'Point inconnu'
 }
@@ -345,6 +384,19 @@ export function TripsPage() {
     const raw = (settingsData as Record<string, unknown> | undefined)?.['minTripDistanceKm']
     const value = parseNumber(raw)
     return value != null && value >= 0 ? value : 0
+  }, [settingsData])
+
+  const homeLocation = useMemo(() => {
+    const settings = (settingsData ?? {}) as Record<string, unknown>
+    const lat = parseNumber(settings.homeLatitude)
+    const lon = parseNumber(settings.homeLongitude)
+    const radiusM = parseNumber(settings.homeRadiusM)
+    if (lat == null || lon == null) return null
+    return {
+      lat,
+      lon,
+      radiusM: radiusM != null && radiusM >= 50 ? radiusM : 180,
+    }
   }, [settingsData])
 
   const trips = useMemo(
@@ -562,11 +614,13 @@ export function TripsPage() {
               detailTrip.startAddress ?? (isSelected ? (startResolvedAddress ?? null) : null),
               detailTrip.startLatitude,
               detailTrip.startLongitude,
+              homeLocation,
             )
             const endLabel = formatPointLabel(
               detailTrip.endAddress ?? (isSelected ? (endResolvedAddress ?? null) : null),
               detailTrip.endLatitude,
               detailTrip.endLongitude,
+              homeLocation,
             )
             const estimatedEnergy = detailTrip.energyUsedKwh
               ?? (baselineConsumption != null && (detailTrip.distanceKm ?? 0) > 0
@@ -602,7 +656,7 @@ export function TripsPage() {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-text-primary">
-                        {formatPointLabel(listResolvedAddresses?.[tripId]?.start ?? trip.startAddress, trip.startLatitude, trip.startLongitude)} → {formatPointLabel(listResolvedAddresses?.[tripId]?.end ?? trip.endAddress, trip.endLatitude, trip.endLongitude)}
+                        {formatPointLabel(listResolvedAddresses?.[tripId]?.start ?? trip.startAddress, trip.startLatitude, trip.startLongitude, homeLocation)} → {formatPointLabel(listResolvedAddresses?.[tripId]?.end ?? trip.endAddress, trip.endLatitude, trip.endLongitude, homeLocation)}
                       </p>
                       <p className="text-xs text-text-muted mt-0.5">{formatDate(trip.startedAt)}</p>
                     </div>
@@ -625,9 +679,12 @@ export function TripsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <div className="rounded-lg border border-border-subtle bg-bg-overlay/50 h-24 px-3 py-2 flex items-center justify-center text-xs text-text-muted">
-                    Itinéraire disponible dans le détail de la carte
-                  </div>
+                  <TripRoutePreview
+                    start={detailStartCoords}
+                    end={detailEndCoords}
+                    startLabel={formatPointLabel(listResolvedAddresses?.[tripId]?.start ?? trip.startAddress, trip.startLatitude, trip.startLongitude, homeLocation)}
+                    endLabel={formatPointLabel(listResolvedAddresses?.[tripId]?.end ?? trip.endAddress, trip.endLatitude, trip.endLongitude, homeLocation)}
+                  />
                   <div className="flex items-center justify-end gap-4 text-xs text-text-muted">
                     <span className="inline-flex items-center gap-1"><Clock size={11} /> {trip.durationMin ? formatDuration(Number(trip.durationMin)) : '—'}</span>
                     <span className="inline-flex items-center gap-1"><Zap size={11} /> {estimatedEnergy != null ? `${Number(estimatedEnergy).toFixed(1)} kWh` : '—'}</span>
@@ -779,6 +836,41 @@ export function TripsPage() {
             )
           })}
         </div>
+      )}
+    </div>
+  )
+}
+
+function TripRoutePreview({
+  start,
+  end,
+  startLabel,
+  endLabel,
+}: {
+  start: { lat: number; lon: number } | null
+  end: { lat: number; lon: number } | null
+  startLabel: string
+  endLabel: string
+}) {
+  const hasCoords = !!start && !!end
+
+  return (
+    <div className="rounded-lg border border-border-subtle bg-bg-overlay/50 h-24 px-3 py-2">
+      {hasCoords ? (
+        <div className="h-full flex flex-col justify-between">
+          <div className="flex items-center justify-between text-[11px] text-text-muted">
+            <span className="truncate max-w-[42%]">{startLabel}</span>
+            <span className="truncate max-w-[42%] text-right">{endLabel}</span>
+          </div>
+          <svg viewBox="0 0 280 38" className="w-full h-10" role="img" aria-label="Aperçu itinéraire">
+            <path d="M 18 19 C 90 8, 190 30, 262 19" fill="none" stroke="#f97316" strokeWidth="4" strokeLinecap="round" />
+            <circle cx="18" cy="19" r="5" fill="#16a34a" />
+            <circle cx="262" cy="19" r="5" fill="#ef4444" />
+          </svg>
+          <p className="text-[11px] text-text-muted">Aperçu rapide de l'itinéraire</p>
+        </div>
+      ) : (
+        <div className="h-full flex items-center justify-center text-xs text-text-muted">Coordonnées manquantes pour l'aperçu</div>
       )}
     </div>
   )
