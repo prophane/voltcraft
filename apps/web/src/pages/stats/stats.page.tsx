@@ -12,6 +12,18 @@ export function StatsPage() {
     staleTime: 300_000,
   })
 
+  const { data: summary7 } = useQuery({
+    queryKey: ['stats', 'summary', 7],
+    queryFn: () => statsApi.summary(7),
+    staleTime: 300_000,
+  })
+
+  const { data: summary90 } = useQuery({
+    queryKey: ['stats', 'summary', 90],
+    queryFn: () => statsApi.summary(90),
+    staleTime: 300_000,
+  })
+
   const { data: battery } = useQuery({
     queryKey: ['stats', 'battery', 30],
     queryFn: () => statsApi.battery(30),
@@ -31,6 +43,8 @@ export function StatsPage() {
   })
 
   const s = summary as Record<string, number> | undefined
+  const s7 = summary7 as Record<string, number> | undefined
+  const s90 = summary90 as Record<string, number> | undefined
   const h = batteryHealth as Record<string, unknown> | undefined
   const batteryTrend = Array.isArray(battery) ? battery : []
   const dailyActivity = Array.isArray(efficiency) ? efficiency : []
@@ -41,16 +55,29 @@ export function StatsPage() {
   const hasBatteryTrend = batteryTrend.length > 0
   const hasDailyActivity = dailyActivity.length > 0
 
+  const distance30 = Number(s?.['distanceKm'] ?? 0)
+  const distance7 = Number(s7?.['distanceKm'] ?? 0)
+  const energyUsed30 = Number(s?.['energyUsedKwh'] ?? 0)
+  const energyAdded30 = Number(s?.['energyAddedKwh'] ?? 0)
+  const avgConso30 = Number(s?.['avgConsumptionKwhPer100km'] ?? 0)
+  const cost30 = Number(s?.['estimatedCostEur'] ?? 0)
+  const avgDailyKm30 = distance30 > 0 ? distance30 / 30 : 0
+  const avgDailyKm7 = distance7 > 0 ? distance7 / 7 : 0
+  const paceDeltaPct = avgDailyKm30 > 0 ? ((avgDailyKm7 - avgDailyKm30) / avgDailyKm30) * 100 : 0
+  const costPer100 = distance30 > 0 ? (cost30 / distance30) * 100 : 0
+  const energyBalance30 = energyAdded30 - energyUsed30
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <section className="rounded-2xl border border-border-subtle bg-gradient-to-br from-bg-surface via-bg-surface to-bg-overlay p-5 lg:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl lg:text-3xl font-semibold text-text-primary">Statistiques TeslaMate</h1>
-            <p className="mt-1 text-sm text-text-muted">Vision 30 jours sur l usage, la charge et l efficience.</p>
+            <p className="mt-1 text-sm text-text-muted">Version lisible desktop: ce qui evolue, ce que ca coute, et ce qui merite ton attention.</p>
           </div>
-          <div className="rounded-xl border border-border-subtle bg-bg-overlay/60 px-3 py-2 text-xs text-text-muted">
-            Fenetre active: 30 jours
+          <div className="rounded-xl border border-border-subtle bg-bg-overlay/60 px-3 py-2 text-xs text-text-muted space-y-1">
+            <p>Fenetre active: 30 jours</p>
+            <p>Reference: 7j et 90j</p>
           </div>
         </div>
 
@@ -59,6 +86,47 @@ export function StatsPage() {
             Les statistiques ne sont pas retroactives. Elles se remplissent apres les premiers trajets/recharges synchronises.
           </div>
         )}
+      </section>
+
+      <section className="grid xl:grid-cols-3 gap-4">
+        <Card className="p-5 lg:p-6 border-success/30 bg-success/10">
+          <p className="text-xs uppercase tracking-wide text-text-muted">Ce qu il faut retenir</p>
+          <h2 className="mt-2 text-xl font-semibold text-text-primary">Rythme de conduite</h2>
+          <p className="mt-2 text-sm text-text-secondary">
+            {avgDailyKm7 > 0
+              ? `${avgDailyKm7.toFixed(1)} km/j sur 7 jours contre ${avgDailyKm30.toFixed(1)} km/j sur 30 jours`
+              : 'Pas assez de donnees recentes pour evaluer le rythme sur 7 jours.'}
+          </p>
+          <p className="mt-2 text-sm text-text-primary font-medium">
+            {Math.abs(paceDeltaPct) < 2
+              ? 'Rythme stable'
+              : paceDeltaPct > 0
+                ? `Acceleration de +${paceDeltaPct.toFixed(0)}%`
+                : `Ralentissement de ${Math.abs(paceDeltaPct).toFixed(0)}%`}
+          </p>
+        </Card>
+
+        <Card className="p-5 lg:p-6 border-border-subtle bg-bg-overlay/60">
+          <p className="text-xs uppercase tracking-wide text-text-muted">Ce qu il faut retenir</p>
+          <h2 className="mt-2 text-xl font-semibold text-text-primary">Efficience et cout</h2>
+          <p className="mt-2 text-sm text-text-secondary">
+            Conso moyenne: {avgConso30 > 0 ? `${avgConso30.toFixed(1)} kWh/100` : 'indisponible'}
+          </p>
+          <p className="mt-2 text-sm text-text-secondary">
+            Cout estime: {cost30 > 0 ? `${cost30.toFixed(2)} EUR` : 'indisponible'} {costPer100 > 0 ? `(${costPer100.toFixed(2)} EUR/100 km)` : ''}
+          </p>
+        </Card>
+
+        <Card className="p-5 lg:p-6 border-warning/30 bg-warning/10">
+          <p className="text-xs uppercase tracking-wide text-text-muted">Ce qu il faut retenir</p>
+          <h2 className="mt-2 text-xl font-semibold text-text-primary">Energie nette</h2>
+          <p className="mt-2 text-sm text-text-secondary">
+            Ajoutee - consommee sur 30 jours: {energyBalance30 >= 0 ? '+' : ''}{energyBalance30.toFixed(1)} kWh
+          </p>
+          <p className="mt-2 text-sm text-text-secondary">
+            90 jours distance: {Math.round(Number(s90?.['distanceKm'] ?? 0))} km
+          </p>
+        </Card>
       </section>
 
       {isLoading ? (
@@ -78,7 +146,9 @@ export function StatsPage() {
 
       <div className="grid xl:grid-cols-3 gap-4 items-stretch">
         <Card className="xl:col-span-2">
-          <CardHeader><CardTitle>Evolution batterie</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Performance batterie (30 jours)</CardTitle>
+          </CardHeader>
           <div className="h-72 px-3 pb-4">
             {hasBatteryTrend ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -106,7 +176,9 @@ export function StatsPage() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Sante batterie</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Sante batterie (180 jours)</CardTitle>
+          </CardHeader>
           <div className="px-6 pb-6">
             {healthReady ? (
               <>
@@ -130,7 +202,9 @@ export function StatsPage() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle>Activite quotidienne (km / kWh)</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Activite quotidienne (distance vs charge)</CardTitle>
+        </CardHeader>
         <div className="h-72 px-3 pb-4">
           {hasDailyActivity ? (
             <ResponsiveContainer width="100%" height="100%">

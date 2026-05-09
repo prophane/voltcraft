@@ -18,7 +18,7 @@ import {
   Unlock,
   Zap,
 } from 'lucide-react'
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { diagnosticsApi, settingsApi, statsApi, vehicleApi, type VehicleHistorySnapshot } from '@/features/vehicle/api'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn, formatDate, formatKm, formatPercent } from '@/lib/utils'
@@ -215,12 +215,46 @@ export function DiagnosticsPage() {
   }, [historyRows])
 
   const driveTrend = useMemo(() => {
-    return historyRows.slice(0, 72).reverse().map((row) => ({
-      time: new Date(row.capturedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-      speed: row.speed ?? 0,
-      power: row.power ?? 0,
-    }))
+    const sorted = historyRows
+      .slice(0, 240)
+      .slice()
+      .reverse()
+
+    const activeSamples = sorted.filter((row) => {
+      const speed = Number(row.speed ?? 0)
+      const power = Number(row.power ?? 0)
+      return row.isDriving || speed > 1 || Math.abs(power) >= 5
+    })
+
+    const sampled = activeSamples.length > 120 ? activeSamples.filter((_, index) => index % 2 === 0) : activeSamples
+
+    return sampled.map((row) => {
+      const at = new Date(row.capturedAt)
+      const isToday = new Date().toDateString() === at.toDateString()
+      const time = isToday
+        ? at.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+        : at.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+
+      return {
+        time,
+        speed: Number(row.speed ?? 0),
+        power: Number(row.power ?? 0),
+      }
+    })
   }, [historyRows])
+
+  const drivePowerDomain = useMemo<[number, number]>(() => {
+    if (driveTrend.length === 0) return [-25, 25]
+    const maxAbs = Math.max(...driveTrend.map((row) => Math.abs(Number(row.power ?? 0))), 25)
+    const rounded = Math.ceil(maxAbs / 5) * 5
+    return [-rounded, rounded]
+  }, [driveTrend])
+
+  const driveSpeedMax = useMemo(() => {
+    if (driveTrend.length === 0) return 60
+    const maxSpeed = Math.max(...driveTrend.map((row) => Number(row.speed ?? 0)), 40)
+    return Math.ceil((maxSpeed * 1.15) / 10) * 10
+  }, [driveTrend])
 
   const thermalTrend = useMemo(() => {
     return historyRows
@@ -355,9 +389,10 @@ export function DiagnosticsPage() {
                 <LineChart data={driveTrend} margin={{ left: 8, right: 12, top: 8, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
                   <XAxis dataKey="time" stroke="#8D8D8D" tickLine={false} axisLine={false} />
-                  <YAxis yAxisId="left" stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} />
-                  <YAxis yAxisId="right" orientation="right" stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} />
+                  <YAxis yAxisId="left" domain={[0, driveSpeedMax]} stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} />
+                  <YAxis yAxisId="right" domain={drivePowerDomain} orientation="right" stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} />
                   <Tooltip contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 10, color: '#F5F5F5' }} />
+                  <ReferenceLine yAxisId="right" y={0} stroke="#444" strokeDasharray="4 4" />
                   <Line yAxisId="left" type="monotone" dataKey="speed" name="Vitesse km/h" stroke="#22c55e" strokeWidth={2} dot={false} />
                   <Line yAxisId="right" type="monotone" dataKey="power" name="Puissance kW" stroke="#f59e0b" strokeWidth={2} dot={false} />
                 </LineChart>
