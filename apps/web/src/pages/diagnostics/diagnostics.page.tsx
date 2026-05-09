@@ -25,6 +25,7 @@ import { cn, formatDate, formatKm, formatPercent } from '@/lib/utils'
 
 type TelemetrySource = 'TeslaMate' | 'Voltcraft' | 'Cache' | 'Unknown'
 type DiagnosticsViewMode = 'essential' | 'expert'
+type AlertSeverity = 'Critique' | 'A surveiller' | 'Info'
 
 function ageMinutes(iso?: string | null) {
   if (!iso) return null
@@ -186,6 +187,8 @@ export function DiagnosticsPage() {
   const lastStateAt = state?.capturedAt ?? vehicle?.lastSeenAt ?? latestHistory?.capturedAt ?? null
   const freshnessMinutes = ageMinutes(lastStateAt)
   const isFresh = freshnessMinutes != null && freshnessMinutes < 6
+  const snapshotGapMinutes = latestHistory && state ? Math.round(Math.abs(new Date(state.capturedAt).getTime() - new Date(latestHistory.capturedAt).getTime()) / 60_000) : null
+  const batteryDelta = latestHistory && state ? Math.abs((state.batteryLevel ?? 0) - (latestHistory.batteryLevel ?? 0)) : null
 
   const source: TelemetrySource = teslamateSettings?.configured
     ? 'TeslaMate'
@@ -282,6 +285,121 @@ export function DiagnosticsPage() {
   const idleData = Array.isArray(idles) ? idles : []
   const idleHours7d = idleData.reduce((sum, row) => sum + Number((row as { durationMin?: number }).durationMin ?? 0), 0) / 60
 
+  const healthScore = useMemo(() => {
+    let score = 100
+
+    if (teslamateSettings?.configured && teslaConnection?.connected === false) score -= 20
+
+    if (freshnessMinutes == null) score -= 15
+    else if (freshnessMinutes > 20) score -= 30
+    else if (freshnessMinutes > 8) score -= 15
+
+    if (batteryDelta != null) {
+      if (batteryDelta > 5) score -= 20
+      else if (batteryDelta > 2) score -= 10
+    }
+
+    if (state?.isPluggedIn && !state?.isCharging) score -= 5
+
+    if (idleHours7d > 12) score -= 10
+    else if (idleHours7d > 8) score -= 5
+
+    return Math.max(0, Math.min(100, Math.round(score)))
+  }, [batteryDelta, freshnessMinutes, idleHours7d, state?.isCharging, state?.isPluggedIn, teslaConnection?.connected, teslamateSettings?.configured])
+
+  const prioritizedAlerts = useMemo(() => {
+    const alerts: Array<{ severity: AlertSeverity; title: string; detail: string }> = []
+
+    if (teslamateSettings?.configured && teslaConnection?.connected === false) {
+      alerts.push({
+        severity: 'Critique',
+        title: 'Connecteur TeslaMate indisponible',
+        detail: 'Les lectures peuvent etre degradees tant que la connexion API n est pas retablie.',
+      })
+    }
+
+    if (freshnessMinutes != null && freshnessMinutes > 20) {
+      alerts.push({
+        severity: 'Critique',
+        title: 'Telemetrie trop ancienne',
+        detail: `${freshnessMinutes} min sans mise a jour exploitable.`,
+      })
+    } else if (freshnessMinutes != null && freshnessMinutes > 8) {
+      alerts.push({
+        severity: 'A surveiller',
+        title: 'Fraicheur moyenne',
+        detail: `${freshnessMinutes} min depuis la derniere lecture.`,
+      })
+    }
+
+    if (batteryDelta != null && batteryDelta > 5) {
+      alerts.push({
+        severity: 'Critique',
+        title: 'Divergence de batterie',
+        detail: `Ecart de ${batteryDelta.toFixed(1)} points entre snapshots.`,
+      })
+    } else if (batteryDelta != null && batteryDelta > 2) {
+      alerts.push({
+        severity: 'A surveiller',
+        title: 'Ecart de batterie notable',
+        detail: `Ecart de ${batteryDelta.toFixed(1)} points a verifier.`,
+      })
+    }
+
+    if (state?.isPluggedIn && !state?.isCharging) {
+      alerts.push({
+        severity: 'A surveiller',
+        title: 'Vehicule branche sans charge',
+        detail: 'Verifier la programmation, la limite de charge ou le courant disponible.',
+      })
+    }
+
+    if (idleHours7d >= 8) {
+      alerts.push({
+        severity: 'Info',
+        title: 'Temps d arret eleve',
+        detail: `${idleHours7d.toFixed(1)} h d idle sur 7 jours.`,
+      })
+    }
+
+    if (alerts.length === 0) {
+      alerts.push({
+        severity: 'Info',
+        title: 'Aucune alerte active',
+        detail: 'Les indicateurs principaux sont actuellement coherents.',
+      })
+    }
+
+    const rank: Record<AlertSeverity, number> = {
+      Critique: 0,
+      'A surveiller': 1,
+      Info: 2,
+    }
+
+    return alerts.sort((a, b) => rank[a.severity] - rank[b.severity]).slice(0, 5)
+  }, [batteryDelta, freshnessMinutes, idleHours7d, state?.isCharging, state?.isPluggedIn, teslaConnection?.connected, teslamateSettings?.configured])
+
+  const insightHistory7d = useMemo(() => {
+    return efficiencyData.slice(-7).map((row) => {
+      const kwh100 = row.distance_km > 0 ? (row.charged_kwh / row.distance_km) * 100 : null
+      const status = kwh100 == null
+        ? 'Faible usage'
+        : kwh100 > 23
+          ? 'A surveiller'
+          : 'Normal'
+
+      const note = kwh100 == null
+        ? 'Pas assez de distance pour evaluer la conso.'
+        : `${kwh100.toFixed(1)} kWh/100 km`
+
+      return {
+        day: row.day,
+        status,
+        note,
+      }
+    }).reverse()
+  }, [efficiencyData])
+
   const stateMix = useMemo(() => {
     const sample = historyRows.slice(0, 120)
     const moving = sample.filter((row) => row.isDriving).length
@@ -294,8 +412,6 @@ export function DiagnosticsPage() {
     ]
   }, [historyRows])
 
-  const snapshotGapMinutes = latestHistory && state ? Math.round(Math.abs(new Date(state.capturedAt).getTime() - new Date(latestHistory.capturedAt).getTime()) / 60_000) : null
-  const batteryDelta = latestHistory && state ? Math.abs((state.batteryLevel ?? 0) - (latestHistory.batteryLevel ?? 0)) : null
   const comparisonVerdict = !state || !latestHistory
     ? 'Pas assez de donnees pour comparer'
     : snapshotGapMinutes != null && snapshotGapMinutes > 10
@@ -462,6 +578,85 @@ export function DiagnosticsPage() {
           {insights.map((insight) => (
             <div key={insight} className="rounded-xl border border-border-subtle bg-bg-overlay/50 px-3 py-2">
               {insight}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <div className="grid xl:grid-cols-3 gap-4">
+        <Card className="p-5 lg:p-6">
+          <CardHeader>
+            <div>
+              <CardTitle>Score santé</CardTitle>
+              <h2 className="mt-2 text-xl font-semibold text-text-primary">Confiance globale</h2>
+            </div>
+          </CardHeader>
+          <div className="space-y-3">
+            <p className="text-4xl font-semibold text-text-primary">{healthScore}/100</p>
+            <div className="h-2 rounded-full bg-bg-overlay/70 overflow-hidden">
+              <div
+                className={cn(
+                  'h-full rounded-full',
+                  healthScore >= 80 ? 'bg-success' : healthScore >= 60 ? 'bg-warning' : 'bg-error',
+                )}
+                style={{ width: `${healthScore}%` }}
+              />
+            </div>
+            <p className="text-sm text-text-secondary">
+              {healthScore >= 80
+                ? 'Etat global stable.'
+                : healthScore >= 60
+                  ? 'Etat acceptable mais a surveiller.'
+                  : 'Etat degrade: intervention recommandee.'}
+            </p>
+          </div>
+        </Card>
+
+        <Card className="xl:col-span-2 p-5 lg:p-6">
+          <CardHeader>
+            <div>
+              <CardTitle>Alertes priorisées</CardTitle>
+              <h2 className="mt-2 text-xl font-semibold text-text-primary">Critique, surveillance, info</h2>
+            </div>
+          </CardHeader>
+          <div className="grid gap-2">
+            {prioritizedAlerts.map((alert) => (
+              <div key={`${alert.severity}-${alert.title}`} className="rounded-xl border border-border-subtle bg-bg-overlay/50 px-3 py-2">
+                <p className="text-sm font-medium text-text-primary">
+                  <span
+                    className={cn(
+                      'mr-2 inline-block rounded px-2 py-0.5 text-[11px]',
+                      alert.severity === 'Critique'
+                        ? 'bg-error/20 text-error'
+                        : alert.severity === 'A surveiller'
+                          ? 'bg-warning/20 text-warning'
+                          : 'bg-success/20 text-success',
+                    )}
+                  >
+                    {alert.severity}
+                  </span>
+                  {alert.title}
+                </p>
+                <p className="mt-1 text-xs text-text-muted">{alert.detail}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      <Card className="p-5 lg:p-6">
+        <CardHeader>
+          <div>
+            <CardTitle>Historique insights 7 jours</CardTitle>
+            <h2 className="mt-2 text-xl font-semibold text-text-primary">Evolution recente</h2>
+          </div>
+        </CardHeader>
+        <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-3">
+          {insightHistory7d.map((item) => (
+            <div key={`${item.day}-${item.status}`} className="rounded-xl border border-border-subtle bg-bg-overlay/50 p-3">
+              <p className="text-xs text-text-muted">{item.day}</p>
+              <p className="mt-1 text-sm font-medium text-text-primary">{item.status}</p>
+              <p className="mt-1 text-xs text-text-secondary">{item.note}</p>
             </div>
           ))}
         </div>
