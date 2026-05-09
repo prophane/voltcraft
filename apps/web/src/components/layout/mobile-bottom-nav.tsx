@@ -4,18 +4,34 @@ import { Ellipsis, LogOut, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/features/auth/store'
 import { api } from '@/lib/api-client'
-import { MENU_ICON_REGISTRY } from './nav-config'
-import { useNavPreferences } from '@/features/preferences/nav-preferences'
+import { MENU_ICON_REGISTRY, NAV_ITEMS } from './nav-config'
+import { useNavPreferences, type ResolvedNavItem } from '@/features/preferences/nav-preferences'
+
+function isResolvedNavItem(item: ResolvedNavItem | undefined): item is ResolvedNavItem {
+  return item != null
+}
 
 export function MobileBottomNav() {
   const location = useLocation()
   const logout = useAuthStore((s) => s.logout)
-  const { visibleItems } = useNavPreferences()
+  const { visibleItems, resolvedItems } = useNavPreferences()
   const [moreOpen, setMoreOpen] = useState(false)
   const navBottomOffset = 'calc(env(safe-area-inset-bottom, 0px) + 0.5rem)'
   const sheetBottomOffset = 'calc(env(safe-area-inset-bottom, 0px) + 4.75rem)'
 
-  const primaryItems = visibleItems.filter((item) => item.mobilePrimary).slice(0, 4)
+  const preferredPrimaryItems = visibleItems.filter((item) => item.mobilePrimary).slice(0, 4)
+  const resolvedByKey = new Map(resolvedItems.map((item) => [item.key, item]))
+  const fallbackPrimaryItems = NAV_ITEMS
+    .filter((item) => item.mobilePrimary)
+    .slice(0, 4)
+    .map((item) => resolvedByKey.get(item.key))
+    .filter(isResolvedNavItem)
+
+  // Keep the mobile bar stable even if preferences hide too many primary entries.
+  const primaryItems = preferredPrimaryItems.length >= 2
+    ? preferredPrimaryItems
+    : fallbackPrimaryItems
+
   const moreItems = visibleItems.filter((item) => !primaryItems.some((primary) => primary.key === item.key))
 
   const isMoreActive = moreItems.some((item) => location.pathname === item.to)
