@@ -206,6 +206,33 @@ function buildPathInsights(points: TripPathPoint[]): TripPathInsights | null {
   }
 }
 
+function buildTripRouteEmbedUrl(
+  start: { lat: number; lon: number } | null,
+  end: { lat: number; lon: number } | null,
+  path: TripPathPoint[],
+) {
+  if (!start || !end) return null
+
+  const valid = path.filter(
+    (p) => typeof p.latitude === 'number' && typeof p.longitude === 'number',
+  ) as Array<{ latitude: number; longitude: number }>
+
+  let waypoints = ''
+  if (valid.length > 2) {
+    const maxWaypoints = 8
+    const step = Math.max(1, Math.floor(valid.length / maxWaypoints))
+    const sampled = valid
+      .filter((_, index) => index > 0 && index < valid.length - 1 && index % step === 0)
+      .slice(0, maxWaypoints)
+
+    if (sampled.length > 0) {
+      waypoints = `&waypoints=${encodeURIComponent(sampled.map((p) => `${p.latitude},${p.longitude}`).join('|'))}`
+    }
+  }
+
+  return `https://www.google.com/maps?output=embed&saddr=${start.lat},${start.lon}&daddr=${end.lat},${end.lon}${waypoints}`
+}
+
 function formatPointLabel(address?: string | null, lat?: number | null, lon?: number | null) {
   if (address && address.trim().length > 0) return address
   if (lat != null && lon != null) return `${lat.toFixed(5)}, ${lon.toFixed(5)}`
@@ -449,24 +476,9 @@ export function TripsPage() {
             const detailEndCoords = detailTrip.endLatitude != null && detailTrip.endLongitude != null
               ? { lat: detailTrip.endLatitude, lon: detailTrip.endLongitude }
               : null
-            const detailMapUrl = (() => {
-              const points = [detailStartCoords, detailEndCoords].filter(Boolean) as Array<{ lat: number; lon: number }>
-              if (points.length === 0) return null
-              const lats = points.map((p) => p.lat)
-              const lons = points.map((p) => p.lon)
-              const minLat = Math.min(...lats)
-              const maxLat = Math.max(...lats)
-              const minLon = Math.min(...lons)
-              const maxLon = Math.max(...lons)
-              const padLat = Math.max(0.005, (maxLat - minLat) * 0.4)
-              const padLon = Math.max(0.005, (maxLon - minLon) * 0.4)
-              const left = minLon - padLon
-              const right = maxLon + padLon
-              const top = maxLat + padLat
-              const bottom = minLat - padLat
-              const marker = detailEndCoords ?? detailStartCoords
-              return `https://www.openstreetmap.org/export/embed.html?bbox=${left},${bottom},${right},${top}&layer=mapnik&marker=${marker?.lat},${marker?.lon}`
-            })()
+            const detailMapUrl = isSelected
+              ? buildTripRouteEmbedUrl(detailStartCoords, detailEndCoords, selectedPath)
+              : null
             const pathInsights = isSelected ? buildPathInsights(selectedPath) : null
 
             return (
