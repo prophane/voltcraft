@@ -43,6 +43,12 @@ export function SettingsPage() {
 
   const [priceKwh, setPriceKwh] = useState<string>('')
   const [minTripDistanceKm, setMinTripDistanceKm] = useState<string>('')
+  const [diagFreshnessWarnMin, setDiagFreshnessWarnMin] = useState<string>('')
+  const [diagFreshnessCriticalMin, setDiagFreshnessCriticalMin] = useState<string>('')
+  const [diagBatteryDeltaWarnPct, setDiagBatteryDeltaWarnPct] = useState<string>('')
+  const [diagBatteryDeltaCriticalPct, setDiagBatteryDeltaCriticalPct] = useState<string>('')
+  const [diagIdleWarnHours7d, setDiagIdleWarnHours7d] = useState<string>('')
+  const [diagIdleCriticalHours7d, setDiagIdleCriticalHours7d] = useState<string>('')
   const [menuDraft, setMenuDraft] = useState<NavPreferences>(() => getNavPreferences())
   const [menuSavedAt, setMenuSavedAt] = useState<string | null>(null)
   const [teslamateForm, setTeslamateForm] = useState<TeslamateSettingsInput>({
@@ -95,6 +101,16 @@ export function SettingsPage() {
       grafanaPort: ts.grafanaPort,
     }))
   }, [teslamateStatus])
+
+  useEffect(() => {
+    if (!s) return
+    setDiagFreshnessWarnMin(String(s['diagnosticsFreshnessWarnMin'] ?? 8))
+    setDiagFreshnessCriticalMin(String(s['diagnosticsFreshnessCriticalMin'] ?? 20))
+    setDiagBatteryDeltaWarnPct(String(s['diagnosticsBatteryDeltaWarnPct'] ?? 2))
+    setDiagBatteryDeltaCriticalPct(String(s['diagnosticsBatteryDeltaCriticalPct'] ?? 5))
+    setDiagIdleWarnHours7d(String(s['diagnosticsIdleWarnHours7d'] ?? 8))
+    setDiagIdleCriticalHours7d(String(s['diagnosticsIdleCriticalHours7d'] ?? 12))
+  }, [s])
 
   useEffect(() => {
     setMenuDraft(getNavPreferences())
@@ -236,6 +252,106 @@ export function SettingsPage() {
                 disabled={!minTripDistanceKm}
               >
                 Sauvegarder
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border-subtle bg-bg-overlay/40 p-3 space-y-3">
+            <p className="text-sm font-medium text-text-primary">Seuils diagnostics</p>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="stat-label block mb-1">Fraicheur warning (min)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="180"
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={diagFreshnessWarnMin}
+                  onChange={(e) => setDiagFreshnessWarnMin(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="stat-label block mb-1">Fraicheur critique (min)</label>
+                <input
+                  type="number"
+                  min="2"
+                  max="360"
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={diagFreshnessCriticalMin}
+                  onChange={(e) => setDiagFreshnessCriticalMin(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="stat-label block mb-1">Ecart batterie warning (pts)</label>
+                <input
+                  type="number"
+                  min="0.1"
+                  max="20"
+                  step="0.1"
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={diagBatteryDeltaWarnPct}
+                  onChange={(e) => setDiagBatteryDeltaWarnPct(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="stat-label block mb-1">Ecart batterie critique (pts)</label>
+                <input
+                  type="number"
+                  min="0.2"
+                  max="30"
+                  step="0.1"
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={diagBatteryDeltaCriticalPct}
+                  onChange={(e) => setDiagBatteryDeltaCriticalPct(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="stat-label block mb-1">Idle warning (h/7j)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="168"
+                  step="0.1"
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={diagIdleWarnHours7d}
+                  onChange={(e) => setDiagIdleWarnHours7d(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="stat-label block mb-1">Idle critique (h/7j)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="168"
+                  step="0.1"
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={diagIdleCriticalHours7d}
+                  onChange={(e) => setDiagIdleCriticalHours7d(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                loading={updateMutation.isPending}
+                onClick={() => updateMutation.mutate({
+                  diagnosticsFreshnessWarnMin: Number(diagFreshnessWarnMin),
+                  diagnosticsFreshnessCriticalMin: Number(diagFreshnessCriticalMin),
+                  diagnosticsBatteryDeltaWarnPct: Number(diagBatteryDeltaWarnPct),
+                  diagnosticsBatteryDeltaCriticalPct: Number(diagBatteryDeltaCriticalPct),
+                  diagnosticsIdleWarnHours7d: Number(diagIdleWarnHours7d),
+                  diagnosticsIdleCriticalHours7d: Number(diagIdleCriticalHours7d),
+                })}
+              >
+                Sauvegarder les seuils diagnostics
               </Button>
             </div>
           </div>

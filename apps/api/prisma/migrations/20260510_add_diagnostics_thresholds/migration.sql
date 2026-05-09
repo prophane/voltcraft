@@ -1,0 +1,7 @@
+ALTER TABLE "user_settings"
+ADD COLUMN "diagnosticsFreshnessWarnMin" INTEGER NOT NULL DEFAULT 8,
+ADD COLUMN "diagnosticsFreshnessCriticalMin" INTEGER NOT NULL DEFAULT 20,
+ADD COLUMN "diagnosticsBatteryDeltaWarnPct" DOUBLE PRECISION NOT NULL DEFAULT 2,
+ADD COLUMN "diagnosticsBatteryDeltaCriticalPct" DOUBLE PRECISION NOT NULL DEFAULT 5,
+ADD COLUMN "diagnosticsIdleWarnHours7d" DOUBLE PRECISION NOT NULL DEFAULT 8,
+ADD COLUMN "diagnosticsIdleCriticalHours7d" DOUBLE PRECISION NOT NULL DEFAULT 12;

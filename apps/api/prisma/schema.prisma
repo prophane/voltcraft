@@ -385,6 +385,14 @@ model UserSettings {
   // Trips
   minTripDistanceKm Float @default(0)
 
+  // Diagnostics thresholds
+  diagnosticsFreshnessWarnMin     Int    @default(8)
+  diagnosticsFreshnessCriticalMin Int    @default(20)
+  diagnosticsBatteryDeltaWarnPct  Float  @default(2)
+  diagnosticsBatteryDeltaCriticalPct Float @default(5)
+  diagnosticsIdleWarnHours7d      Float  @default(8)
+  diagnosticsIdleCriticalHours7d  Float  @default(12)
+
   // Home geofence
   homeLatitude  Float?
   homeLongitude Float?

@@ -165,6 +165,12 @@ export function DiagnosticsPage() {
     staleTime: 60_000,
   })
 
+  const { data: userSettingsRaw } = useQuery({
+    queryKey: ['settings'],
+    queryFn: settingsApi.get,
+    staleTime: 60_000,
+  })
+
   const batteryHealthSummary = batteryHealth as {
     ready?: boolean
     samplesCount?: number
@@ -180,6 +186,14 @@ export function DiagnosticsPage() {
     tripsCount?: number
     chargeSessionsCount?: number
   } | undefined
+
+  const userSettings = userSettingsRaw as Record<string, unknown> | undefined
+  const freshnessWarnMin = Math.max(1, Number(userSettings?.diagnosticsFreshnessWarnMin ?? 8))
+  const freshnessCriticalMin = Math.max(freshnessWarnMin + 1, Number(userSettings?.diagnosticsFreshnessCriticalMin ?? 20))
+  const batteryDeltaWarnPct = Math.max(0.1, Number(userSettings?.diagnosticsBatteryDeltaWarnPct ?? 2))
+  const batteryDeltaCriticalPct = Math.max(batteryDeltaWarnPct + 0.1, Number(userSettings?.diagnosticsBatteryDeltaCriticalPct ?? 5))
+  const idleWarnHours7d = Math.max(0, Number(userSettings?.diagnosticsIdleWarnHours7d ?? 8))
+  const idleCriticalHours7d = Math.max(idleWarnHours7d + 0.1, Number(userSettings?.diagnosticsIdleCriticalHours7d ?? 12))
 
   const historyRows = Array.isArray(history) ? (history as VehicleHistorySnapshot[]) : []
   const latestHistory = historyRows[0]
@@ -285,27 +299,46 @@ export function DiagnosticsPage() {
   const idleData = Array.isArray(idles) ? idles : []
   const idleHours7d = idleData.reduce((sum, row) => sum + Number((row as { durationMin?: number }).durationMin ?? 0), 0) / 60
 
-  const healthScore = useMemo(() => {
-    let score = 100
+  const scoreBreakdown = useMemo(() => {
+    const factors: Array<{ label: string; points: number; reason: string }> = []
 
-    if (teslamateSettings?.configured && teslaConnection?.connected === false) score -= 20
-
-    if (freshnessMinutes == null) score -= 15
-    else if (freshnessMinutes > 20) score -= 30
-    else if (freshnessMinutes > 8) score -= 15
-
-    if (batteryDelta != null) {
-      if (batteryDelta > 5) score -= 20
-      else if (batteryDelta > 2) score -= 10
+    if (teslamateSettings?.configured && teslaConnection?.connected === false) {
+      factors.push({ label: 'Connectivite TeslaMate', points: -20, reason: 'Connexion indisponible' })
     }
 
-    if (state?.isPluggedIn && !state?.isCharging) score -= 5
+    if (freshnessMinutes == null) {
+      factors.push({ label: 'Fraicheur telemetrie', points: -15, reason: 'Lecture indisponible' })
+    } else if (freshnessMinutes > freshnessCriticalMin) {
+      factors.push({ label: 'Fraicheur telemetrie', points: -30, reason: `${freshnessMinutes} min > seuil critique ${freshnessCriticalMin}` })
+    } else if (freshnessMinutes > freshnessWarnMin) {
+      factors.push({ label: 'Fraicheur telemetrie', points: -15, reason: `${freshnessMinutes} min > seuil warning ${freshnessWarnMin}` })
+    }
 
-    if (idleHours7d > 12) score -= 10
-    else if (idleHours7d > 8) score -= 5
+    if (batteryDelta != null) {
+      if (batteryDelta > batteryDeltaCriticalPct) {
+        factors.push({ label: 'Ecart batterie', points: -20, reason: `${batteryDelta.toFixed(1)} pts > seuil critique ${batteryDeltaCriticalPct}` })
+      } else if (batteryDelta > batteryDeltaWarnPct) {
+        factors.push({ label: 'Ecart batterie', points: -10, reason: `${batteryDelta.toFixed(1)} pts > seuil warning ${batteryDeltaWarnPct}` })
+      }
+    }
 
-    return Math.max(0, Math.min(100, Math.round(score)))
-  }, [batteryDelta, freshnessMinutes, idleHours7d, state?.isCharging, state?.isPluggedIn, teslaConnection?.connected, teslamateSettings?.configured])
+    if (state?.isPluggedIn && !state?.isCharging) {
+      factors.push({ label: 'Etat de charge', points: -5, reason: 'Branche sans charge active' })
+    }
+
+    if (idleHours7d > idleCriticalHours7d) {
+      factors.push({ label: 'Idle 7 jours', points: -10, reason: `${idleHours7d.toFixed(1)} h > seuil critique ${idleCriticalHours7d}` })
+    } else if (idleHours7d > idleWarnHours7d) {
+      factors.push({ label: 'Idle 7 jours', points: -5, reason: `${idleHours7d.toFixed(1)} h > seuil warning ${idleWarnHours7d}` })
+    }
+
+    return factors
+  }, [batteryDelta, batteryDeltaCriticalPct, batteryDeltaWarnPct, freshnessCriticalMin, freshnessMinutes, freshnessWarnMin, idleCriticalHours7d, idleHours7d, idleWarnHours7d, state?.isCharging, state?.isPluggedIn, teslaConnection?.connected, teslamateSettings?.configured])
+
+  const healthScore = useMemo(() => {
+    const malus = scoreBreakdown.reduce((sum, factor) => sum + Math.abs(Math.min(0, factor.points)), 0)
+    return Math.max(0, Math.min(100, Math.round(100 - malus)))
+  }, [scoreBreakdown])
 
   const prioritizedAlerts = useMemo(() => {
     const alerts: Array<{ severity: AlertSeverity; title: string; detail: string }> = []
@@ -318,13 +351,13 @@ export function DiagnosticsPage() {
       })
     }
 
-    if (freshnessMinutes != null && freshnessMinutes > 20) {
+    if (freshnessMinutes != null && freshnessMinutes > freshnessCriticalMin) {
       alerts.push({
         severity: 'Critique',
         title: 'Telemetrie trop ancienne',
         detail: `${freshnessMinutes} min sans mise a jour exploitable.`,
       })
-    } else if (freshnessMinutes != null && freshnessMinutes > 8) {
+    } else if (freshnessMinutes != null && freshnessMinutes > freshnessWarnMin) {
       alerts.push({
         severity: 'A surveiller',
         title: 'Fraicheur moyenne',
@@ -332,13 +365,13 @@ export function DiagnosticsPage() {
       })
     }
 
-    if (batteryDelta != null && batteryDelta > 5) {
+    if (batteryDelta != null && batteryDelta > batteryDeltaCriticalPct) {
       alerts.push({
         severity: 'Critique',
         title: 'Divergence de batterie',
         detail: `Ecart de ${batteryDelta.toFixed(1)} points entre snapshots.`,
       })
-    } else if (batteryDelta != null && batteryDelta > 2) {
+    } else if (batteryDelta != null && batteryDelta > batteryDeltaWarnPct) {
       alerts.push({
         severity: 'A surveiller',
         title: 'Ecart de batterie notable',
@@ -354,7 +387,7 @@ export function DiagnosticsPage() {
       })
     }
 
-    if (idleHours7d >= 8) {
+    if (idleHours7d >= idleWarnHours7d) {
       alerts.push({
         severity: 'Info',
         title: 'Temps d arret eleve',
@@ -377,7 +410,7 @@ export function DiagnosticsPage() {
     }
 
     return alerts.sort((a, b) => rank[a.severity] - rank[b.severity]).slice(0, 5)
-  }, [batteryDelta, freshnessMinutes, idleHours7d, state?.isCharging, state?.isPluggedIn, teslaConnection?.connected, teslamateSettings?.configured])
+  }, [batteryDelta, batteryDeltaCriticalPct, batteryDeltaWarnPct, freshnessCriticalMin, freshnessMinutes, freshnessWarnMin, idleHours7d, idleWarnHours7d, state?.isCharging, state?.isPluggedIn, teslaConnection?.connected, teslamateSettings?.configured])
 
   const insightHistory7d = useMemo(() => {
     return efficiencyData.slice(-7).map((row) => {
@@ -456,11 +489,11 @@ export function DiagnosticsPage() {
       result.push(`Consommation observee 30 jours: ${kwhPer100.toFixed(1)} kWh/100 km.`)
     }
 
-    if (batteryDelta != null && batteryDelta > 2) {
+    if (batteryDelta != null && batteryDelta > batteryDeltaWarnPct) {
       result.push(`Ecart de batterie detecte (${batteryDelta.toFixed(1)} pts) entre lecture courante et historique.`)
     }
 
-    if (idleHours7d >= 8) {
+    if (idleHours7d >= idleWarnHours7d) {
       result.push(`Temps d arret eleve (${idleHours7d.toFixed(1)} h sur 7 jours): surveiller les consommations parasites.`)
     }
 
@@ -469,7 +502,50 @@ export function DiagnosticsPage() {
     }
 
     return result.slice(0, 4)
-  }, [batteryDelta, freshnessMinutes, idleHours7d, state?.isCharging, state?.isPluggedIn, summaryData?.distanceKm, summaryData?.energyUsedKwh])
+  }, [batteryDelta, batteryDeltaWarnPct, freshnessMinutes, idleHours7d, idleWarnHours7d, state?.isCharging, state?.isPluggedIn, summaryData?.distanceKm, summaryData?.energyUsedKwh])
+
+  const exportDiagnosticsCsv = () => {
+    const rows: Array<[string, string]> = [
+      ['GeneratedAt', new Date().toISOString()],
+      ['Vehicle', vehicle?.displayName ?? ''],
+      ['VIN', vehicle?.vin ?? ''],
+      ['VehicleStatus', vehicleStatus],
+      ['HealthScore', String(healthScore)],
+      ['FreshnessMinutes', freshnessMinutes == null ? '' : String(freshnessMinutes)],
+      ['BatteryDeltaPoints', batteryDelta == null ? '' : batteryDelta.toFixed(2)],
+      ['IdleHours7d', idleHours7d.toFixed(2)],
+      ['ThresholdFreshnessWarnMin', String(freshnessWarnMin)],
+      ['ThresholdFreshnessCriticalMin', String(freshnessCriticalMin)],
+      ['ThresholdBatteryDeltaWarnPts', String(batteryDeltaWarnPct)],
+      ['ThresholdBatteryDeltaCriticalPts', String(batteryDeltaCriticalPct)],
+      ['ThresholdIdleWarnHours7d', String(idleWarnHours7d)],
+      ['ThresholdIdleCriticalHours7d', String(idleCriticalHours7d)],
+    ]
+
+    scoreBreakdown.forEach((factor, index) => {
+      rows.push([`ScoreFactor${index + 1}`, `${factor.label} (${factor.points}) - ${factor.reason}`])
+    })
+
+    prioritizedAlerts.forEach((alert, index) => {
+      rows.push([`Alert${index + 1}`, `[${alert.severity}] ${alert.title} - ${alert.detail}`])
+    })
+
+    insights.forEach((insight, index) => {
+      rows.push([`Insight${index + 1}`, insight])
+    })
+
+    const escape = (value: string) => `"${value.replace(/"/g, '""')}"`
+    const csv = ['Metric,Value', ...rows.map(([k, v]) => `${escape(k)},${escape(v)}`)].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `diagnostics-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -528,6 +604,16 @@ export function DiagnosticsPage() {
                 )}
               >
                 Expert
+              </button>
+            </div>
+
+            <div>
+              <button
+                type="button"
+                onClick={exportDiagnosticsCsv}
+                className="text-xs rounded-lg border border-border-subtle bg-bg-overlay/60 px-3 py-1.5 text-text-secondary hover:text-text-primary"
+              >
+                Export diagnostic CSV
               </button>
             </div>
           </div>
@@ -609,6 +695,16 @@ export function DiagnosticsPage() {
                   ? 'Etat acceptable mais a surveiller.'
                   : 'Etat degrade: intervention recommandee.'}
             </p>
+
+            <div className="space-y-1">
+              {scoreBreakdown.length > 0 ? scoreBreakdown.map((factor) => (
+                <p key={`${factor.label}-${factor.reason}`} className="text-xs text-text-muted">
+                  {factor.label}: {factor.points} ({factor.reason})
+                </p>
+              )) : (
+                <p className="text-xs text-text-muted">Aucun malus actif.</p>
+              )}
+            </div>
           </div>
         </Card>
 
