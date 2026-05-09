@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Activity,
@@ -24,6 +24,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn, formatDate, formatKm, formatPercent } from '@/lib/utils'
 
 type TelemetrySource = 'TeslaMate' | 'Voltcraft' | 'Cache' | 'Unknown'
+type DiagnosticsViewMode = 'essential' | 'expert'
 
 function ageMinutes(iso?: string | null) {
   if (!iso) return null
@@ -41,9 +42,9 @@ function formatAge(iso?: string | null) {
 }
 
 function sourceLabel(source: TelemetrySource, cached: boolean) {
-  if (source === 'TeslaMate') return cached ? 'TeslaMate cache' : 'TeslaMate direct'
-  if (source === 'Voltcraft') return cached ? 'Voltcraft cache' : 'Voltcraft direct'
-  if (source === 'Cache') return 'Cache locale'
+  if (source === 'TeslaMate') return cached ? 'TeslaMate (cache)' : 'TeslaMate (direct)'
+  if (source === 'Voltcraft') return cached ? 'Voltcraft (cache)' : 'Voltcraft (direct)'
+  if (source === 'Cache') return 'Cache local'
   return 'Source inconnue'
 }
 
@@ -99,6 +100,8 @@ function EmptyState({ message }: { message: string }) {
 }
 
 export function DiagnosticsPage() {
+  const [viewMode, setViewMode] = useState<DiagnosticsViewMode>('essential')
+
   const { data: vehicle } = useQuery({
     queryKey: ['vehicle', 'current'],
     queryFn: vehicleApi.getCurrent,
@@ -301,8 +304,56 @@ export function DiagnosticsPage() {
         ? 'La charge visible diverge entre les derniers echantillons'
         : 'Les derniers signaux sont coherents'
 
-  const vehicleStatus = vehicle?.state ?? (state?.isCharging ? 'charging' : state?.isDriving ? 'driving' : 'unknown')
+  const vehicleStatus = state?.isCharging
+    ? 'En charge'
+    : state?.isPluggedIn
+      ? 'Branche'
+      : state?.isDriving
+        ? 'En conduite'
+        : vehicle?.state === 'online'
+          ? 'En ligne'
+          : vehicle?.state === 'asleep'
+            ? 'En veille'
+            : vehicle?.state === 'offline'
+              ? 'Hors ligne'
+              : vehicle?.state ?? 'Inconnu'
+
   const lockTone = state?.isLocked === false ? 'text-warning border-warning/30 bg-warning/10' : 'text-success border-success/30 bg-success/10'
+
+  const insights = useMemo(() => {
+    const result: string[] = []
+
+    if (freshnessMinutes != null) {
+      if (freshnessMinutes <= 5) {
+        result.push('Telemetrie fraiche: les donnees sont exploitables en temps reel.')
+      } else {
+        result.push(`Telemetrie en retard (${freshnessMinutes} min): verifier la connectivite ou relancer une sync.`)
+      }
+    }
+
+    if (state?.isPluggedIn && !state?.isCharging) {
+      result.push('Vehicule branche sans charge active: verifier limite de charge, amperage ou programmation.')
+    }
+
+    if (summaryData?.distanceKm != null && summaryData?.energyUsedKwh != null && summaryData.distanceKm > 0) {
+      const kwhPer100 = (summaryData.energyUsedKwh / summaryData.distanceKm) * 100
+      result.push(`Consommation observee 30 jours: ${kwhPer100.toFixed(1)} kWh/100 km.`)
+    }
+
+    if (batteryDelta != null && batteryDelta > 2) {
+      result.push(`Ecart de batterie detecte (${batteryDelta.toFixed(1)} pts) entre lecture courante et historique.`)
+    }
+
+    if (idleHours7d >= 8) {
+      result.push(`Temps d arret eleve (${idleHours7d.toFixed(1)} h sur 7 jours): surveiller les consommations parasites.`)
+    }
+
+    if (result.length === 0) {
+      result.push('Aucun signal faible majeur detecte sur les derniers echantillons.')
+    }
+
+    return result.slice(0, 4)
+  }, [batteryDelta, freshnessMinutes, idleHours7d, state?.isCharging, state?.isPluggedIn, summaryData?.distanceKm, summaryData?.energyUsedKwh])
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -327,7 +378,7 @@ export function DiagnosticsPage() {
             <div>
               <h1 className="text-3xl lg:text-4xl font-semibold tracking-tight text-text-primary">Infos avancées véhicule</h1>
               <p className="mt-2 text-sm lg:text-base text-text-muted max-w-3xl">
-                Vue de santé temps réel avec origine des signaux, fraîcheur de chaque donnée et comparaison explicite entre la lecture backend Voltcraft et les éléments issus de TeslaMate.
+                Vue lisible de la sante du vehicule: signaux essentiels en premier, analyses expertes a la demande.
               </p>
             </div>
 
@@ -339,6 +390,29 @@ export function DiagnosticsPage() {
               <span>{vehicleStatus}</span>
               <span>•</span>
               <span>{vehicle?.lastSeenAt ? `Vu le ${formatDate(vehicle.lastSeenAt)}` : 'Jamais vu'}</span>
+            </div>
+
+            <div className="inline-flex rounded-xl border border-border-subtle bg-bg-overlay/60 p-1">
+              <button
+                type="button"
+                onClick={() => setViewMode('essential')}
+                className={cn(
+                  'px-3 py-1.5 text-xs rounded-lg transition-colors',
+                  viewMode === 'essential' ? 'bg-accent-500/20 text-text-primary' : 'text-text-secondary hover:text-text-primary',
+                )}
+              >
+                Essentiel
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('expert')}
+                className={cn(
+                  'px-3 py-1.5 text-xs rounded-lg transition-colors',
+                  viewMode === 'expert' ? 'bg-accent-500/20 text-text-primary' : 'text-text-secondary hover:text-text-primary',
+                )}
+              >
+                Expert
+              </button>
             </div>
           </div>
 
@@ -377,7 +451,24 @@ export function DiagnosticsPage() {
         />
       </section>
 
+      <Card className="p-5 lg:p-6">
+        <CardHeader>
+          <div>
+            <CardTitle>Insights automatiques</CardTitle>
+            <h2 className="mt-2 text-xl font-semibold text-text-primary">Ce qui merite ton attention</h2>
+          </div>
+        </CardHeader>
+        <div className="grid gap-2 text-sm text-text-secondary">
+          {insights.map((insight) => (
+            <div key={insight} className="rounded-xl border border-border-subtle bg-bg-overlay/50 px-3 py-2">
+              {insight}
+            </div>
+          ))}
+        </div>
+      </Card>
+
       <div className="grid xl:grid-cols-3 gap-4 items-stretch">
+        {viewMode === 'expert' && (
         <Card className="xl:col-span-2 p-0 overflow-hidden">
           <div className="p-5 lg:p-6 border-b border-border-subtle">
             <CardTitle>Deep Dive conduite</CardTitle>
@@ -402,6 +493,7 @@ export function DiagnosticsPage() {
             )}
           </div>
         </Card>
+        )}
 
         <Card className="p-5 lg:p-6">
           <CardHeader>
@@ -434,6 +526,7 @@ export function DiagnosticsPage() {
         </Card>
       </div>
 
+      {viewMode === 'expert' && (
       <div className="grid xl:grid-cols-3 gap-4 items-stretch">
         <Card className="xl:col-span-2 p-0 overflow-hidden">
           <div className="p-5 lg:p-6 border-b border-border-subtle">
@@ -486,7 +579,9 @@ export function DiagnosticsPage() {
           </div>
         </Card>
       </div>
+      )}
 
+      {viewMode === 'expert' && (
       <Card className="p-0 overflow-hidden">
         <div className="p-5 lg:p-6 border-b border-border-subtle">
           <CardTitle>Activité quotidienne</CardTitle>
@@ -509,7 +604,9 @@ export function DiagnosticsPage() {
           )}
         </div>
       </Card>
+      )}
 
+      {viewMode === 'expert' && (
       <div className="grid xl:grid-cols-3 gap-4 items-start">
         <Card className="xl:col-span-2 p-0 overflow-hidden">
           <div className="p-5 lg:p-6 border-b border-border-subtle bg-bg-overlay/30">
@@ -565,7 +662,7 @@ export function DiagnosticsPage() {
                   Dernier état utile
                 </div>
                 <p className="mt-2 text-lg font-semibold text-text-primary">
-                  {vehicleStatus === 'unknown' ? 'Etat inconnu' : vehicleStatus}
+                  {vehicleStatus === 'Inconnu' ? 'Etat inconnu' : vehicleStatus}
                 </p>
                 <p className="mt-1 text-sm text-text-secondary">
                   {state?.isLocked === false ? 'Vehicule deverrouille' : 'Vehicule verrouille'}
@@ -635,6 +732,7 @@ export function DiagnosticsPage() {
           </div>
         </Card>
       </div>
+      )}
 
       <div className="grid xl:grid-cols-3 gap-4">
         <Card className="xl:col-span-2 p-0 overflow-hidden">
@@ -741,6 +839,7 @@ export function DiagnosticsPage() {
           </div>
         </Card>
 
+        {viewMode === 'expert' && (
         <Card className="p-5 lg:p-6">
           <CardHeader>
             <div>
@@ -770,6 +869,7 @@ export function DiagnosticsPage() {
             )}
           </div>
         </Card>
+        )}
       </div>
 
       <div className="grid md:grid-cols-3 gap-4">
