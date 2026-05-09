@@ -206,6 +206,12 @@ export class TeslaMateReadService {
       }
   }
 
+  private async queryOrThrow<T>(text: string, values: unknown[]) {
+    if (!this.pool) return [] as T[]
+    const result = await this.pool.query<T>(text, values)
+    return result.rows
+  }
+
   private async inferOdometerMultiplier(vin: string): Promise<number> {
     if (env.TESLAMATE_FORCE_MILES_TO_KM) {
       this.odometerMultiplierCache.set(vin, { value: 1.609344, at: Date.now() })
@@ -364,7 +370,8 @@ export class TeslaMateReadService {
   async getTrips(vin: string, opts: PaginationOpts) {
     const distanceMultiplier = await this.inferOdometerMultiplier(vin)
     const where = buildTripWhereClause(opts.from, opts.to)
-    const countRows = await this.query<{ total: string | number }>(
+    try {
+      const countRows = await this.queryOrThrow<{ total: string | number }>(
       `
         SELECT COUNT(*)::int AS total
         FROM drives d
@@ -375,7 +382,7 @@ export class TeslaMateReadService {
       [vin, ...where.params],
     )
 
-    const rows = await this.query<Array<Record<string, unknown>>[number]>(
+      const rows = await this.queryOrThrow<Array<Record<string, unknown>>[number]>(
       `
         SELECT
           d.id::text AS id,
@@ -416,15 +423,20 @@ export class TeslaMateReadService {
       [vin, ...where.params, opts.pageSize, (opts.page - 1) * opts.pageSize],
     )
 
-    return {
-      trips: rows.map((row: MappedRecord) => this.normalizeTrip(row, distanceMultiplier)),
-      total: Number(countRows[0]?.total ?? 0),
+      return {
+        trips: rows.map((row: MappedRecord) => this.normalizeTrip(row, distanceMultiplier)),
+        total: Number(countRows[0]?.total ?? 0),
+      }
+    } catch {
+      // Signal caller to fallback provider instead of treating DB error as empty dataset.
+      return null
     }
   }
 
   async getTripById(vin: string, id: string) {
     const distanceMultiplier = await this.inferOdometerMultiplier(vin)
-    const rows = await this.query<Array<Record<string, unknown>>[number]>(
+    try {
+      const rows = await this.queryOrThrow<Array<Record<string, unknown>>[number]>(
       `
         SELECT
           d.id::text AS id,
@@ -462,8 +474,11 @@ export class TeslaMateReadService {
       [vin, id],
     )
 
-    const row = rows[0]
-    return row ? this.normalizeTrip(row, distanceMultiplier) : null
+      const row = rows[0]
+      return row ? this.normalizeTrip(row, distanceMultiplier) : null
+    } catch {
+      return null
+    }
   }
 
   async getTripPath(vin: string, id: string) {
