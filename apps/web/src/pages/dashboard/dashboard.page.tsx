@@ -109,8 +109,8 @@ function ArcGauge({ level, rangeKm, hasData }: { level: number | null; rangeKm: 
           {hasData ? Math.round(level ?? 0) : '—'}
           <span className="text-2xl align-top">{hasData ? '%' : ''}</span>
         </p>
-        <p className="text-2xl text-text-secondary mt-1">{hasData ? `${formatNumberWithSpaces(rangeKm ?? 0)} km` : 'No data'}</p>
-        <p className="text-sm text-text-muted mt-1">Battery</p>
+        <p className="text-2xl text-text-secondary mt-1">{hasData ? `${formatNumberWithSpaces(rangeKm ?? 0)} km` : 'Aucune donnee'}</p>
+        <p className="text-sm text-text-muted mt-1">Batterie</p>
       </div>
     </div>
   )
@@ -205,16 +205,25 @@ export function DashboardPage() {
 
   const friendlyName = useMemo(() => {
     const name = vehicle?.displayName?.trim()
-    if (!name) return 'Tesla Vehicle'
+    if (!name) return 'Vehicule Tesla'
     const looksLikeVin = name.length >= 17 && !name.includes(' ')
     return looksLikeVin ? `Tesla ${name.slice(-6)}` : name
   }, [vehicle?.displayName])
 
   const statusLabel = useMemo(() => {
-    if (state?.isCharging) return 'Charging'
-    if (state?.isPluggedIn) return 'Plugged'
-    if (!vehicle?.state) return hasTelemetry ? 'Online' : 'No data yet'
-    return vehicle.state === 'online' ? 'Online' : vehicle.state
+    if (state?.isCharging) return 'En charge'
+    if (state?.isPluggedIn) return 'Branche'
+    if (!vehicle?.state) return hasTelemetry ? 'En ligne' : 'Aucune donnee pour le moment'
+
+    const stateLabels: Record<string, string> = {
+      online: 'En ligne',
+      offline: 'Hors ligne',
+      asleep: 'En veille',
+      charging: 'En charge',
+      driving: 'En conduite',
+    }
+
+    return stateLabels[vehicle.state] ?? vehicle.state
   }, [hasTelemetry, state?.isCharging, state?.isPluggedIn, vehicle?.state])
 
   const extendedState = state as (typeof state & {
@@ -259,10 +268,10 @@ export function DashboardPage() {
   }, [homeLocation, latitude, longitude])
 
   const lockStatus = state?.isLocked == null
-    ? 'Etat serrure inconnu'
+    ? 'Etat de serrure inconnu'
     : state.isLocked
-      ? 'Verrouille'
-      : 'Deverrouille'
+      ? 'Verrouillee'
+      : 'Deverrouillee'
 
   const vehicleComposedState = useVehicleComposedState({
     isDriving: state?.isDriving,
@@ -296,7 +305,7 @@ export function DashboardPage() {
     <div className="max-w-md lg:max-w-[1220px] mx-auto space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-semibold tracking-tight text-text-primary">Dashboard</h1>
+          <h1 className="text-4xl font-semibold tracking-tight text-text-primary">Tableau de bord</h1>
           <p className="text-sm text-text-muted mt-1">{state ? (state.isCached ? 'Donnees cache' : 'Donnees fraiches') : 'Synchronisation requise'}</p>
         </div>
       </div>
@@ -320,18 +329,18 @@ export function DashboardPage() {
 
           <p className="text-center text-sm text-text-muted -mt-2">
             <MapPin size={12} className="inline mr-1" />
-            {vehicle?.lastSeenAt ? `Parked · ${formatDate(vehicle.lastSeenAt)}` : 'Waiting for first telemetry'}
+            {vehicle?.lastSeenAt ? `Stationne · ${formatDate(vehicle.lastSeenAt)}` : 'En attente de la premiere telemetrie'}
           </p>
 
           <div className="mt-5 rounded-2xl border border-border-subtle bg-bg-overlay/70 p-4">
             <div className="grid gap-1">
-              <InfoRow label="Vehicle status" value={statusDetail} />
-              <InfoRow label="Range" value={batteryRange != null ? `${formatNumberWithSpaces(batteryRange)} km` : '—'} />
-              <InfoRow label="Charge limit" value={extendedState?.chargeLimitSoc != null ? `${extendedState.chargeLimitSoc}%` : '—'} />
-              <InfoRow label="State of charge" value={batteryLevel != null ? `${Math.round(batteryLevel)}%` : '—'} />
-              <InfoRow label="Outside temperature" value={outsideTemp != null ? `${outsideTemp.toFixed(1)} °C` : '—'} />
-              <InfoRow label="Inside temperature" value={insideTemp != null ? `${insideTemp.toFixed(1)} °C` : '—'} />
-              <InfoRow label="Mileage" value={odometer != null ? `${formatNumberWithSpaces(odometer)} km` : '—'} />
+              <InfoRow label="Etat vehicule" value={statusDetail} />
+              <InfoRow label="Autonomie" value={batteryRange != null ? `${formatNumberWithSpaces(batteryRange)} km` : '—'} />
+              <InfoRow label="Limite de charge" value={extendedState?.chargeLimitSoc != null ? `${extendedState.chargeLimitSoc}%` : '—'} />
+              <InfoRow label="Niveau de charge" value={batteryLevel != null ? `${Math.round(batteryLevel)}%` : '—'} />
+              <InfoRow label="Temperature exterieure" value={outsideTemp != null ? `${outsideTemp.toFixed(1)} °C` : '—'} />
+              <InfoRow label="Temperature interieure" value={insideTemp != null ? `${insideTemp.toFixed(1)} °C` : '—'} />
+              <InfoRow label="Kilometrage" value={odometer != null ? `${formatNumberWithSpaces(odometer)} km` : '—'} />
             </div>
           </div>
         </Card>
