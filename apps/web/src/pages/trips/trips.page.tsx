@@ -322,8 +322,7 @@ function formatPointLabel(address?: string | null, lat?: number | null, lon?: nu
 function isMeaningfulTrip(trip: TripRecord, minDistanceKm: number) {
   if (minDistanceKm <= 0) return true
   const distance = trip.distanceKm ?? 0
-  const energy = trip.energyUsedKwh ?? 0
-  return distance >= minDistanceKm || energy > 0.1
+  return distance >= minDistanceKm
 }
 
 async function reverseGeocode(lat: number, lon: number) {
