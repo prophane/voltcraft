@@ -440,11 +440,17 @@ export class TeslaMateReadService {
           d.duration_min AS "durationMin",
           d.distance AS "distanceKm",
           CASE
-            WHEN c.efficiency IS NOT NULL AND d.distance IS NOT NULL THEN ROUND((d.distance * c.efficiency)::numeric, 2)
+            WHEN d.start_rated_range_km IS NOT NULL AND d.end_rated_range_km IS NOT NULL AND c.efficiency IS NOT NULL
+              THEN ROUND(((d.start_rated_range_km - d.end_rated_range_km) * c.efficiency)::numeric, 2)
+            WHEN c.efficiency IS NOT NULL AND d.distance IS NOT NULL
+              THEN ROUND((d.distance * c.efficiency)::numeric, 2)
             ELSE NULL
           END AS "energyUsedKwh",
           CASE
-            WHEN c.efficiency IS NOT NULL THEN ROUND((c.efficiency * 100)::numeric, 2)
+            WHEN d.start_rated_range_km IS NOT NULL AND d.end_rated_range_km IS NOT NULL AND d.distance > 0 AND c.efficiency IS NOT NULL
+              THEN ROUND(((d.start_rated_range_km - d.end_rated_range_km) * c.efficiency / d.distance * 100)::numeric, 1)
+            WHEN c.efficiency IS NOT NULL
+              THEN ROUND((c.efficiency * 100)::numeric, 1)
             ELSE NULL
           END AS "avgConsumptionKwh100",
           COALESCE(sa.display_name, sa.name) AS "startAddress",
@@ -487,11 +493,17 @@ export class TeslaMateReadService {
           d.duration_min AS "durationMin",
           d.distance AS "distanceKm",
           CASE
-            WHEN c.efficiency IS NOT NULL AND d.distance IS NOT NULL THEN ROUND((d.distance * c.efficiency)::numeric, 2)
+            WHEN d.start_rated_range_km IS NOT NULL AND d.end_rated_range_km IS NOT NULL AND c.efficiency IS NOT NULL
+              THEN ROUND(((d.start_rated_range_km - d.end_rated_range_km) * c.efficiency)::numeric, 2)
+            WHEN c.efficiency IS NOT NULL AND d.distance IS NOT NULL
+              THEN ROUND((d.distance * c.efficiency)::numeric, 2)
             ELSE NULL
           END AS "energyUsedKwh",
           CASE
-            WHEN c.efficiency IS NOT NULL THEN ROUND((c.efficiency * 100)::numeric, 2)
+            WHEN d.start_rated_range_km IS NOT NULL AND d.end_rated_range_km IS NOT NULL AND d.distance > 0 AND c.efficiency IS NOT NULL
+              THEN ROUND(((d.start_rated_range_km - d.end_rated_range_km) * c.efficiency / d.distance * 100)::numeric, 1)
+            WHEN c.efficiency IS NOT NULL
+              THEN ROUND((c.efficiency * 100)::numeric, 1)
             ELSE NULL
           END AS "avgConsumptionKwh100",
           COALESCE(sa.display_name, sa.name) AS "startAddress",
