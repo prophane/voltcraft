@@ -203,7 +203,7 @@ export class TeslaMateReadService {
     return {
       vehicleId: vehicle.id,
       capturedAt: toDate(row.captured_at) ?? fallback?.capturedAt ?? new Date(),
-      odometer: toNumber(row.odometer) ?? fallback?.odometer ?? null,
+      odometer: toNumber(row.odometer) ?? null,
       batteryLevel: row.battery_level ?? fallback?.batteryLevel ?? 0,
       batteryRange: toNumber(row.battery_range_km) ?? fallback?.batteryRange ?? 0,
       chargeLimitSoc: fallback?.chargeLimitSoc ?? null,
@@ -572,7 +572,7 @@ export class TeslaMateReadService {
           p.longitude,
           p.speed,
           p.power,
-          p.odometer,
+          COALESCE(p.odometer, po.odometer) AS odometer,
           p.battery_level,
           p.usable_battery_level,
           COALESCE(p.rated_battery_range_km, p.est_battery_range_km, p.ideal_battery_range_km) AS battery_range_km,
@@ -595,6 +595,14 @@ export class TeslaMateReadService {
           ORDER BY p.date DESC
           LIMIT 1
         ) p ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT p2.odometer
+          FROM positions p2
+          WHERE p2.car_id = c.id
+            AND p2.odometer IS NOT NULL
+          ORDER BY p2.date DESC
+          LIMIT 1
+        ) po ON TRUE
         LEFT JOIN LATERAL (
           SELECT *
           FROM states s

@@ -4,11 +4,12 @@ import { tripsApi } from '@/features/vehicle/api'
 import { Card } from '@/components/ui/card'
 import { CardSkeleton } from '@/components/ui/skeleton'
 import { formatDate, formatKm, formatDuration } from '@/lib/utils'
-import { Route, Clock, Zap } from 'lucide-react'
+import { Route, Clock, Zap, MapPin, BatteryCharging, Gauge, ChevronRight } from 'lucide-react'
 
 type TripRecord = {
   id: string
   startedAt: string
+  endedAt?: string | null
   startAddress?: string | null
   endAddress?: string | null
   distanceKm?: number | null
@@ -16,6 +17,19 @@ type TripRecord = {
   energyUsedKwh?: number | null
   avgConsumptionKwh100?: number | null
   notes?: string | null
+  startLatitude?: number | null
+  startLongitude?: number | null
+  endLatitude?: number | null
+  endLongitude?: number | null
+  startBatteryLevel?: number | null
+  endBatteryLevel?: number | null
+}
+
+type TripPathPoint = {
+  latitude?: number | null
+  longitude?: number | null
+  capturedAt?: string | null
+  speed?: number | null
 }
 
 type TripTab = 'all' | 'work' | 'personal'
@@ -67,15 +81,68 @@ function MiniTripTrace({ seed }: { seed: string }) {
   )
 }
 
+function DetailedTripTrace({ points }: { points: TripPathPoint[] }) {
+  const normalized = useMemo(() => {
+    const valid = points.filter((p) => typeof p.latitude === 'number' && typeof p.longitude === 'number') as Array<{ latitude: number; longitude: number }>
+    if (valid.length < 2) return ''
+
+    const lats = valid.map((p) => p.latitude)
+    const lons = valid.map((p) => p.longitude)
+    const minLat = Math.min(...lats)
+    const maxLat = Math.max(...lats)
+    const minLon = Math.min(...lons)
+    const maxLon = Math.max(...lons)
+    const latSpan = Math.max(0.0001, maxLat - minLat)
+    const lonSpan = Math.max(0.0001, maxLon - minLon)
+
+    const path = valid
+      .map((p, index) => {
+        const x = 8 + ((p.longitude - minLon) / lonSpan) * 108
+        const y = 52 - ((p.latitude - minLat) / latSpan) * 44
+        return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`
+      })
+      .join(' ')
+
+    return path
+  }, [points])
+
+  if (!normalized) {
+    return <p className="text-xs text-text-muted">Trace indisponible pour ce trajet.</p>
+  }
+
+  return (
+    <div className="rounded-xl border border-border-subtle bg-bg-overlay/70 p-3">
+      <svg width="100%" height="160" viewBox="0 0 124 60" preserveAspectRatio="none">
+        <path d={normalized} fill="none" stroke="#E8112D" strokeWidth="2.4" strokeLinecap="round" />
+      </svg>
+    </div>
+  )
+}
+
 export function TripsPage() {
   const [tab, setTab] = useState<TripTab>('all')
+  const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['trips'],
     queryFn: () => tripsApi.list(),
   })
 
+  const { data: selectedTripData, isFetching: isFetchingTrip } = useQuery({
+    queryKey: ['trips', selectedTripId],
+    queryFn: () => tripsApi.getById(selectedTripId as string),
+    enabled: !!selectedTripId,
+  })
+
+  const { data: selectedPathData, isFetching: isFetchingPath } = useQuery({
+    queryKey: ['trips', selectedTripId, 'path'],
+    queryFn: () => tripsApi.path(selectedTripId as string),
+    enabled: !!selectedTripId,
+  })
+
   const trips = (Array.isArray(data) ? data : []) as TripRecord[]
+  const selectedTrip = selectedTripData as TripRecord | undefined
+  const selectedPath = (Array.isArray(selectedPathData) ? selectedPathData : []) as TripPathPoint[]
 
   const filteredTrips = useMemo(() => {
     if (tab === 'all') return trips
@@ -145,8 +212,71 @@ export function TripsPage() {
         <Card className="text-center py-12 text-text-muted">Aucun trajet enregistré</Card>
       ) : (
         <div className="space-y-3">
+          {selectedTripId && (
+            <Card className="surface-premium p-4 md:p-5">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-text-muted">Détail trajet</p>
+                  <h2 className="text-lg font-semibold text-text-primary mt-1">
+                    {selectedTrip?.startAddress ?? 'Départ inconnu'} → {selectedTrip?.endAddress ?? 'Arrivée inconnue'}
+                  </h2>
+                  <p className="text-xs text-text-muted mt-1">
+                    {selectedTrip?.startedAt ? formatDate(selectedTrip.startedAt) : 'Date inconnue'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTripId(null)}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-border-subtle text-text-secondary hover:text-text-primary"
+                >
+                  Fermer
+                </button>
+              </div>
+
+              {(isFetchingTrip || isFetchingPath) && (
+                <p className="text-sm text-text-muted mt-3">Chargement des détails...</p>
+              )}
+
+              {!isFetchingTrip && selectedTrip && (
+                <>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+                    <DetailMetric icon={Route} label="Distance" value={formatKm(selectedTrip.distanceKm ?? 0)} />
+                    <DetailMetric icon={Clock} label="Durée" value={selectedTrip.durationMin ? formatDuration(Math.round(selectedTrip.durationMin)) : '—'} />
+                    <DetailMetric icon={Zap} label="Énergie" value={selectedTrip.energyUsedKwh ? `${Number(selectedTrip.energyUsedKwh).toFixed(1)} kWh` : '—'} />
+                    <DetailMetric icon={Gauge} label="Conso" value={consumptionWhKm(selectedTrip) ? `${Math.round(consumptionWhKm(selectedTrip) as number)} Wh/km` : '—'} />
+                    <DetailMetric icon={BatteryCharging} label="SOC départ" value={selectedTrip.startBatteryLevel != null ? `${Math.round(selectedTrip.startBatteryLevel)}%` : '—'} />
+                    <DetailMetric icon={BatteryCharging} label="SOC arrivée" value={selectedTrip.endBatteryLevel != null ? `${Math.round(selectedTrip.endBatteryLevel)}%` : '—'} />
+                    <DetailMetric
+                      icon={MapPin}
+                      label="Coord. départ"
+                      value={selectedTrip.startLatitude != null && selectedTrip.startLongitude != null
+                        ? `${selectedTrip.startLatitude.toFixed(5)}, ${selectedTrip.startLongitude.toFixed(5)}`
+                        : '—'}
+                    />
+                    <DetailMetric
+                      icon={MapPin}
+                      label="Coord. arrivée"
+                      value={selectedTrip.endLatitude != null && selectedTrip.endLongitude != null
+                        ? `${selectedTrip.endLatitude.toFixed(5)}, ${selectedTrip.endLongitude.toFixed(5)}`
+                        : '—'}
+                    />
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-xs uppercase tracking-wide text-text-muted mb-2">Trace du trajet</p>
+                    <DetailedTripTrace points={selectedPath} />
+                  </div>
+                </>
+              )}
+            </Card>
+          )}
+
           {filteredTrips.map((trip) => (
-            <Card key={trip['id'] as string} className="surface-premium hover:border-border transition-colors cursor-pointer">
+            <Card
+              key={trip['id'] as string}
+              className="surface-premium hover:border-border transition-colors cursor-pointer"
+              onClick={() => setSelectedTripId(String(trip.id))}
+            >
               <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr] gap-3 items-center">
                 <div className="space-y-2">
                   <div className="flex items-center gap-3">
@@ -182,6 +312,7 @@ export function TripsPage() {
                   <div className="flex items-center justify-end gap-4 text-xs text-text-muted">
                     <span className="inline-flex items-center gap-1"><Clock size={11} /> {trip.durationMin ? formatDuration(Number(trip.durationMin)) : '—'}</span>
                     <span className="inline-flex items-center gap-1"><Zap size={11} /> {trip.energyUsedKwh ? `${Number(trip.energyUsedKwh).toFixed(1)} kWh` : '—'}</span>
+                    <span className="inline-flex items-center gap-1 text-accent-400"><ChevronRight size={11} /> Détail</span>
                   </div>
                 </div>
               </div>
@@ -189,6 +320,26 @@ export function TripsPage() {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function DetailMetric({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof Route
+  label: string
+  value: string
+}) {
+  return (
+    <div className="rounded-lg border border-border-subtle bg-bg-overlay/60 p-3">
+      <div className="flex items-center gap-2 text-text-muted text-[11px] uppercase">
+        <Icon size={12} />
+        <span>{label}</span>
+      </div>
+      <p className="text-sm text-text-primary font-medium mt-2">{value}</p>
     </div>
   )
 }
