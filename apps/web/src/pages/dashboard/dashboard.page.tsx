@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { vehicleApi, statsApi } from '@/features/vehicle/api'
+import { vehicleApi, statsApi, settingsApi } from '@/features/vehicle/api'
 import { Card } from '@/components/ui/card'
 import { Lock, Unlock, MapPin, Plus, Minus } from 'lucide-react'
 import { cn, formatDate } from '@/lib/utils'
@@ -9,9 +9,25 @@ interface ReverseGeocodeResponse {
   display_name?: string
 }
 
+interface HomeLocation {
+  lat: number
+  lon: number
+  radiusM: number
+}
+
 function toFiniteNumber(value: unknown): number | null {
   const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const a =
+    Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+  return 6371000 * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)))
 }
 
 function ArcGauge({ level, rangeKm, hasData }: { level: number | null; rangeKm: number | null; hasData: boolean }) {
@@ -81,6 +97,12 @@ export function DashboardPage() {
     queryKey: ['stats', 'summary', 30],
     queryFn: () => statsApi.summary(30),
     staleTime: 300_000,
+  })
+
+  const { data: settingsData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => settingsApi.get(),
+    staleTime: 60_000,
   })
 
   const { data: location } = useQuery({
@@ -154,6 +176,25 @@ export function DashboardPage() {
   const odometer = toFiniteNumber(extendedState?.odometer)
   const latitude = toFiniteNumber(location?.latitude)
   const longitude = toFiniteNumber(location?.longitude)
+
+  const homeLocation = useMemo<HomeLocation | null>(() => {
+    const settings = (settingsData ?? {}) as Record<string, unknown>
+    const lat = toFiniteNumber(settings.homeLatitude)
+    const lon = toFiniteNumber(settings.homeLongitude)
+    const radiusM = toFiniteNumber(settings.homeRadiusM)
+    if (lat == null || lon == null) return null
+    return {
+      lat,
+      lon,
+      radiusM: radiusM != null && radiusM >= 50 ? radiusM : 180,
+    }
+  }, [settingsData])
+
+  const isAtHome = useMemo(() => {
+    if (homeLocation == null || latitude == null || longitude == null) return false
+    const dist = haversineMeters(latitude, longitude, homeLocation.lat, homeLocation.lon)
+    return Number.isFinite(dist) && dist <= homeLocation.radiusM
+  }, [homeLocation, latitude, longitude])
 
   const lockStatus = state?.isLocked == null
     ? 'Etat serrure inconnu'
@@ -245,7 +286,7 @@ export function DashboardPage() {
               </p>
               {location && (
                 <p className="text-xs text-text-secondary mt-1 max-w-3xl">
-                  {locationAddress ?? 'Adresse en cours de resolution...'}
+                  {isAtHome ? 'Maison' : (locationAddress ?? 'Adresse en cours de resolution...')}
                 </p>
               )}
             </div>
