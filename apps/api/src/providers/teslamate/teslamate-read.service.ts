@@ -92,10 +92,11 @@ function isStaleTelemetry(value: unknown, maxAgeMinutes = 20): boolean {
   return Date.now() - date.getTime() > maxAgeMinutes * 60_000
 }
 
-function isChargeSignalFresh(positionCapturedAt: unknown, chargeCapturedAt: unknown, maxSkewMinutes = 6): boolean {
+function isChargeSignalFresh(positionCapturedAt: unknown, chargeCapturedAt: unknown, maxSkewMinutes = 6, maxAgeMinutes = 8): boolean {
   const posAt = toDate(positionCapturedAt)
   const chargeAt = toDate(chargeCapturedAt)
   if (!posAt || !chargeAt) return false
+  if (isStaleTelemetry(chargeAt, maxAgeMinutes)) return false
   return chargeAt.getTime() >= posAt.getTime() - maxSkewMinutes * 60_000
 }
 
