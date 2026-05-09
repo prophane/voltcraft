@@ -201,7 +201,7 @@ export function SettingsPage() {
                 min="0"
                 max="200"
                 className="bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary w-32"
-                placeholder={s?.['minTripDistanceKm']?.toString() ?? '0.3'}
+                placeholder={s?.['minTripDistanceKm']?.toString() ?? '0.0'}
                 value={minTripDistanceKm}
                 onChange={(e) => setMinTripDistanceKm(e.target.value)}
               />

@@ -383,7 +383,7 @@ model UserSettings {
   currency    String @default("EUR")
 
   // Trips
-  minTripDistanceKm Float @default(0.3)
+  minTripDistanceKm Float @default(0)
 
   // Home geofence
   homeLatitude  Float?

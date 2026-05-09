@@ -376,8 +376,7 @@ export class TeslaMateReadService {
         SELECT COUNT(*)::int AS total
         FROM drives d
         INNER JOIN cars c ON c.id = d.car_id
-        WHERE c.vin = $1
-          AND COALESCE(d.distance, 0) > 0.1${where.sql}
+        WHERE c.vin = $1${where.sql}
       `,
       [vin, ...where.params],
     )
@@ -414,8 +413,7 @@ export class TeslaMateReadService {
         LEFT JOIN addresses ea ON ea.id = d.end_address_id
         LEFT JOIN addresses spa ON spa.id = sp.address_id
         LEFT JOIN addresses epa ON epa.id = ep.address_id
-        WHERE c.vin = $1
-          AND COALESCE(d.distance, 0) > 0.1${where.sql}
+        WHERE c.vin = $1${where.sql}
         ORDER BY d.start_date DESC
         LIMIT $${where.params.length + 2}
         OFFSET $${where.params.length + 3}
