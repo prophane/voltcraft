@@ -27,6 +27,14 @@ type ChargeSessionRecord = {
   longitude?: number | null
 }
 
+type GeofenceRecord = {
+  id: number
+  name: string
+  latitude: number
+  longitude: number
+  radius: number
+}
+
 function parseNumber(value: unknown): number | null {
   if (value == null) return null
   const parsed = typeof value === 'number' ? value : Number(value)
@@ -44,6 +52,44 @@ function cleanLocationName(address: string | null | undefined): string {
   const value = address.trim()
   if (!value || value.toLowerCase() === 'emplacement inconnu') return ''
   return value
+}
+
+function normalizeGeofence(raw: unknown): GeofenceRecord | null {
+  if (!raw || typeof raw !== 'object') return null
+  const row = raw as Record<string, unknown>
+  const id = parseNumber(row.id)
+  const latitude = parseNumber(row.latitude)
+  const longitude = parseNumber(row.longitude)
+  const radius = parseNumber(row.radius)
+  if (id == null || latitude == null || longitude == null || radius == null) return null
+
+  return {
+    id,
+    name: parseString(row.name) ?? 'Lieu sans nom',
+    latitude,
+    longitude,
+    radius,
+  }
+}
+
+function normalizeGeofences(raw: unknown): GeofenceRecord[] {
+  if (Array.isArray(raw)) return raw.map(normalizeGeofence).filter(Boolean) as GeofenceRecord[]
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>
+    const list = obj.geofences
+    if (Array.isArray(list)) return list.map(normalizeGeofence).filter(Boolean) as GeofenceRecord[]
+  }
+  return []
+}
+
+function haversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+  return 6371000 * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)))
 }
 
 function normalizeSession(raw: unknown): ChargeSessionRecord | null {
@@ -125,7 +171,13 @@ export function ChargesPage() {
     },
   })
 
+  const { data: geofencesData } = useQuery({
+    queryKey: ['geofences'],
+    queryFn: () => api.get('/settings/geofences'),
+  })
+
   const sessions = normalizeSessions(data)
+  const geofences = normalizeGeofences(geofencesData)
   const addressCounts = sessions.reduce((acc, session) => {
     const key = session.address ?? ''
     if (!key) return acc
@@ -155,6 +207,30 @@ export function ChargesPage() {
     const name = geofenceName.trim()
     if (!name) {
       setFeedbackMessage('Le nom du lieu est requis.')
+      return
+    }
+
+    let closestDuplicate: { geofence: GeofenceRecord; distance: number } | null = null
+    for (const geofence of geofences) {
+      const distance = haversineDistanceMeters(
+        session.latitude,
+        session.longitude,
+        geofence.latitude,
+        geofence.longitude,
+      )
+
+      // Consider as duplicate when coverage areas overlap.
+      if (distance <= geofence.radius + geofenceRadius) {
+        if (!closestDuplicate || distance < closestDuplicate.distance) {
+          closestDuplicate = { geofence, distance }
+        }
+      }
+    }
+
+    if (closestDuplicate) {
+      setFeedbackMessage(
+        `Doublon detecte: trop proche de "${closestDuplicate.geofence.name}" (${Math.round(closestDuplicate.distance)} m).`,
+      )
       return
     }
 
