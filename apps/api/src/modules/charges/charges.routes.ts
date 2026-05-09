@@ -62,20 +62,6 @@ export async function chargesRoutes(app: FastifyInstance) {
     return paginated(sessions, total, query.page, query.pageSize)
   })
 
-  app.get('/:id', { schema: { tags: ['charges'] } }, async (req) => {
-    const token = await requireAuth(req)
-    const session = await authService.validateSession(token)
-    const { id } = req.params as { id: string }
-    const vehicle = await getVehicleForRead(session.userId)
-    if (teslamate.isEnabled()) {
-      const session_ = await teslamate.getChargeById(vehicle.vin, id)
-      if (session_) return ok(session_)
-    }
-    const session_ = await chargesRepo.findById(id, vehicle.id)
-    if (!session_) throw new NotFoundError('Charge session')
-    return ok(session_)
-  })
-
   app.get('/summary/monthly', { schema: { tags: ['charges'] } }, async (req) => {
     const token = await requireAuth(req)
     const sess = await authService.validateSession(token)
@@ -91,5 +77,19 @@ export async function chargesRoutes(app: FastifyInstance) {
     }
     const summary = await chargesRepo.getMonthlySummary(vehicle.id, year, month)
     return ok(summary)
+  })
+
+  app.get('/:id', { schema: { tags: ['charges'] } }, async (req) => {
+    const token = await requireAuth(req)
+    const session = await authService.validateSession(token)
+    const { id } = req.params as { id: string }
+    const vehicle = await getVehicleForRead(session.userId)
+    if (teslamate.isEnabled()) {
+      const session_ = await teslamate.getChargeById(vehicle.vin, id)
+      if (session_) return ok(session_)
+    }
+    const session_ = await chargesRepo.findById(id, vehicle.id)
+    if (!session_) throw new NotFoundError('Charge session')
+    return ok(session_)
   })
 }

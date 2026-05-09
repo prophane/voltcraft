@@ -593,7 +593,8 @@ export class TeslaMateReadService {
 
   async getCharges(vin: string, opts: PaginationOpts) {
     const where = buildChargeWhereClause(opts.from, opts.to)
-    const countRows = await this.query<{ total: string | number }>(
+    try {
+      const countRows = await this.queryOrThrow<{ total: string | number }>(
       `
         SELECT COUNT(*)::int AS total
         FROM charging_processes cp
@@ -603,7 +604,7 @@ export class TeslaMateReadService {
       [vin, ...where.params],
     )
 
-    const rows = await this.query<Array<Record<string, unknown>>[number]>(
+      const rows = await this.queryOrThrow<Array<Record<string, unknown>>[number]>(
       `
         SELECT
           cp.id::text AS id,
@@ -657,14 +658,18 @@ export class TeslaMateReadService {
       [vin, ...where.params, opts.pageSize, (opts.page - 1) * opts.pageSize],
     )
 
-    return {
-      sessions: rows.map((row: MappedRecord) => this.normalizeCharge(row)),
-      total: Number(countRows[0]?.total ?? 0),
+      return {
+        sessions: rows.map((row: MappedRecord) => this.normalizeCharge(row)),
+        total: Number(countRows[0]?.total ?? 0),
+      }
+    } catch {
+      return null
     }
   }
 
   async getChargeById(vin: string, id: string) {
-    const rows = await this.query<Array<Record<string, unknown>>[number]>(
+    try {
+      const rows = await this.queryOrThrow<Array<Record<string, unknown>>[number]>(
       `
         SELECT
           cp.id::text AS id,
@@ -713,15 +718,19 @@ export class TeslaMateReadService {
       [vin, id],
     )
 
-    const row = rows[0]
-    return row ? this.normalizeCharge(row) : null
+      const row = rows[0]
+      return row ? this.normalizeCharge(row) : null
+    } catch {
+      return null
+    }
   }
 
   async getMonthlyChargeSummary(vin: string, year: number, month: number) {
     const from = new Date(year, month - 1, 1)
     const to = new Date(year, month, 1)
 
-    const rows = await this.query<{
+    try {
+      const rows = await this.queryOrThrow<{
       energy_added_kwh: number | string | null
       estimated_cost: number | string | null
       duration_min: number | string | null
@@ -749,16 +758,19 @@ export class TeslaMateReadService {
       [vin, from, to],
     )
 
-    const row = rows[0]
-    return {
-      _sum: {
-        energyAddedKwh: toNumber(row?.energy_added_kwh) ?? 0,
-        estimatedCost: toNumber(row?.estimated_cost) ?? 0,
-        durationMin: toNumber(row?.duration_min) ?? 0,
-      },
-      _count: {
-        id: Number(row?.total ?? 0),
-      },
+      const row = rows[0]
+      return {
+        _sum: {
+          energyAddedKwh: toNumber(row?.energy_added_kwh) ?? 0,
+          estimatedCost: toNumber(row?.estimated_cost) ?? 0,
+          durationMin: toNumber(row?.duration_min) ?? 0,
+        },
+        _count: {
+          id: Number(row?.total ?? 0),
+        },
+      }
+    } catch {
+      return null
     }
   }
 
