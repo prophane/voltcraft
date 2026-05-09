@@ -209,6 +209,11 @@ export class TeslaMateReadService {
   }
 
   private async inferOdometerMultiplier(vin: string): Promise<number> {
+    if (env.TESLAMATE_FORCE_MILES_TO_KM) {
+      this.odometerMultiplierCache.set(vin, { value: 1.609344, at: Date.now() })
+      return 1.609344
+    }
+
     const cached = this.odometerMultiplierCache.get(vin)
     if (cached && Date.now() - cached.at < 5 * 60_000) {
       return cached.value
