@@ -79,7 +79,7 @@ function chargeTypeLabel(type?: string | null) {
 }
 
 export function ChargesPage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['charges'],
     queryFn: () => chargesApi.list(),
     refetchOnMount: 'always',
@@ -105,7 +105,11 @@ export function ChargesPage() {
         <div className="h-px mt-4 accent-line opacity-70" />
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <Card className="text-center py-12 text-text-muted">
+          Impossible de charger les recharges TeslaMate{error instanceof Error ? `: ${error.message}` : ''}
+        </Card>
+      ) : isLoading ? (
         <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)}</div>
       ) : sessions.length === 0 ? (
         <Card className="text-center py-12 text-text-muted">Aucune session de recharge enregistrée</Card>

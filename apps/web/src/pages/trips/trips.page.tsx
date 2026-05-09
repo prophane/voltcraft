@@ -317,6 +317,7 @@ export function TripsPage() {
     data,
     isLoading,
     isError: hasTripsError,
+    error: tripsError,
     refetch: refetchTrips,
   } = useQuery({
     queryKey: ['trips'],
@@ -543,7 +544,11 @@ export function TripsPage() {
         </div>
       </div>
 
-      {isLoading ? (
+      {hasTripsError ? (
+        <Card className="text-center py-12 text-text-muted">
+          Impossible de charger les trajets TeslaMate{tripsError instanceof Error ? `: ${tripsError.message}` : ''}
+        </Card>
+      ) : isLoading ? (
         <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <CardSkeleton key={i} />)}</div>
       ) : filteredTrips.length === 0 ? (
         <Card className="text-center py-12 text-text-muted">Aucun trajet enregistré</Card>
