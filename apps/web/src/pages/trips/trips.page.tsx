@@ -44,6 +44,7 @@ type TripPathInsights = {
   odometerTo: number | null
   consumedKwh: number
   recoveredKwh: number
+  netKwh: number
   avgSpeed: number | null
   maxSpeed: number | null
   speedBins: SpeedBin[]
@@ -245,6 +246,7 @@ function buildPathInsights(points: TripPathPoint[]): TripPathInsights | null {
     odometerTo: lastOdo,
     consumedKwh,
     recoveredKwh,
+    netKwh: consumedKwh - recoveredKwh,
     avgSpeed,
     maxSpeed,
     speedBins,
@@ -638,6 +640,14 @@ export function TripsPage() {
               : null
             const detailRoutePoints = isSelected ? selectedDisplayedRoutePoints : []
             const pathInsights = isSelected ? buildPathInsights(selectedPath) : null
+            const pathDistanceKm = detailTrip.distanceKm != null && Number.isFinite(detailTrip.distanceKm)
+              ? detailTrip.distanceKm
+              : pathInsights?.odometerFrom != null && pathInsights?.odometerTo != null
+                ? Math.max(0, pathInsights.odometerTo - pathInsights.odometerFrom)
+                : null
+            const netConsumptionWhKm = pathInsights != null && pathDistanceKm != null && pathDistanceKm > 0
+              ? (pathInsights.netKwh / pathDistanceKm) * 1000
+              : null
             const avgSpeedFromTrip = (detailTrip.distanceKm ?? 0) > 0 && (detailTrip.durationMin ?? 0) > 0
               ? (detailTrip.distanceKm as number) / ((detailTrip.durationMin as number) / 60)
               : null
@@ -729,7 +739,15 @@ export function TripsPage() {
                     <DetailMetric icon={Route} label="Distance" value={formatKm(detailTrip.distanceKm ?? 0)} />
                     <DetailMetric icon={Clock} label="Durée" value={detailTrip.durationMin ? formatDuration(Math.round(detailTrip.durationMin)) : '—'} />
                     <DetailMetric icon={Zap} label="Énergie" value={estimatedEnergy != null ? `${Number(estimatedEnergy).toFixed(1)} kWh` : '—'} />
-                    <DetailMetric icon={Gauge} label="Conso" value={detailConsumption != null ? `${Math.round(detailConsumption)} Wh/km` : '—'} />
+                    <DetailMetric
+                      icon={Gauge}
+                      label="Conso nette"
+                      value={netConsumptionWhKm != null
+                        ? `${Math.round(netConsumptionWhKm)} Wh/km`
+                        : detailConsumption != null
+                          ? `${Math.round(detailConsumption)} Wh/km`
+                          : '—'}
+                    />
                     <DetailMetric icon={BatteryCharging} label="SOC départ" value={detailTrip.startBatteryLevel != null ? `${Math.round(detailTrip.startBatteryLevel)}%` : '—'} />
                     <DetailMetric icon={BatteryCharging} label="SOC arrivée" value={detailTrip.endBatteryLevel != null ? `${Math.round(detailTrip.endBatteryLevel)}%` : '—'} />
                     <DetailMetric
@@ -774,6 +792,11 @@ export function TripsPage() {
                           label="Récupération"
                           value={pathInsights.recoveredKwh > 0 ? `${pathInsights.recoveredKwh.toFixed(2)} kWh` : '—'}
                         />
+                        <DetailMetric
+                          icon={Zap}
+                          label="Énergie nette"
+                          value={pathInsights.netKwh > 0 ? `${pathInsights.netKwh.toFixed(2)} kWh` : '—'}
+                        />
                       </div>
 
                       <div className="rounded-xl border border-border-subtle bg-bg-overlay/55 p-3">
@@ -784,7 +807,11 @@ export function TripsPage() {
                           <p className="text-xs text-text-muted">Échantillons vitesse insuffisants pour histogramme fiable.</p>
                         )}
                         <p className="text-xs text-text-muted mt-2">
-                          Énergie nette consommée: {pathInsights.consumedKwh > 0 ? `${pathInsights.consumedKwh.toFixed(2)} kWh` : '—'}
+                          Énergie consommée: {pathInsights.consumedKwh > 0 ? `${pathInsights.consumedKwh.toFixed(2)} kWh` : '—'}
+                          {' '}
+                          • Récupérée: {pathInsights.recoveredKwh > 0 ? `${pathInsights.recoveredKwh.toFixed(2)} kWh` : '—'}
+                          {' '}
+                          • Nette: {pathInsights.netKwh > 0 ? `${pathInsights.netKwh.toFixed(2)} kWh` : '—'}
                         </p>
                       </div>
                     </div>
