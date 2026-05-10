@@ -724,7 +724,14 @@ export function TripsPage() {
                         <h2 className="text-lg font-semibold text-text-primary mt-1">{startLabel} → {endLabel}</h2>
                         <p className="text-xs text-text-muted mt-1">{detailTrip.startedAt ? formatDate(detailTrip.startedAt) : 'Date inconnue'}</p>
                       </div>
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTripId(null)}
+                          className="text-xs text-text-secondary hover:text-text-primary"
+                        >
+                          Masquer
+                        </button>
+                      </div>
 
                     {(isFetchingTrip || isFetchingPath) && (
                       <p className="text-sm text-text-muted">Chargement des détails...</p>
