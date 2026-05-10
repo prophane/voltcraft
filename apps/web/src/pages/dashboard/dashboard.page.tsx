@@ -4,6 +4,7 @@ import { vehicleApi, statsApi, settingsApi, tripsApi } from '@/features/vehicle/
 import { useVehicleComposedState } from '@/hooks/use-vehicle-composed-state'
 import { Card } from '@/components/ui/card'
 import { Lock, Unlock, MapPin, Plus, Minus } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { cn, formatDate } from '@/lib/utils'
 
 interface ReverseGeocodeResponse {
@@ -127,6 +128,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 export function DashboardPage() {
   const [mapZoomLevel, setMapZoomLevel] = useState(14)
+  const navigate = useNavigate()
 
   const { data: vehicle } = useQuery({
     queryKey: ['vehicle', 'current'],
@@ -458,7 +460,11 @@ export function DashboardPage() {
         <Card className="surface-premium p-4 md:p-5">
           <h3 className="text-lg font-medium text-text-primary">Dernier trajet</h3>
           {latestTrip ? (
-            <div className="mt-3 space-y-3">
+            <button
+              type="button"
+              onClick={() => navigate(`/trips?trip=${encodeURIComponent(latestTrip.id)}`)}
+              className="mt-3 w-full space-y-3 text-left rounded-xl transition-colors hover:bg-bg-overlay/40 focus:outline-none focus:ring-2 focus:ring-accent-500/40"
+            >
               <p className="text-sm text-text-secondary">
                 {(latestTrip.startAddress ?? 'Départ inconnu')} → {(latestTrip.endAddress ?? 'Arrivée inconnue')}
               </p>
@@ -477,7 +483,7 @@ export function DashboardPage() {
                   <p className="text-text-secondary">{latestTripWhKm != null ? `${latestTripWhKm} Wh/km` : '—'}</p>
                 </div>
               </div>
-            </div>
+            </button>
           ) : (
             <p className="mt-3 text-sm text-text-muted">Aucun trajet récent disponible</p>
           )}

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { settingsApi, statsApi, tripsApi } from '@/features/vehicle/api'
 import { MapContainer, Polyline, TileLayer, CircleMarker } from 'react-leaflet'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
 import { CardSkeleton } from '@/components/ui/skeleton'
 import { formatDate, formatKm, formatDuration } from '@/lib/utils'
@@ -347,6 +347,7 @@ async function reverseGeocode(lat: number, lon: number) {
 
 export function TripsPage() {
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState<TripTab>('all')
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
 
@@ -461,6 +462,30 @@ export function TripsPage() {
     Array.isArray(selectedRoadRouteData) && selectedRoadRouteData.length >= 2
       ? selectedRoadRouteData
       : selectedTelemetryRoutePoints
+
+  useEffect(() => {
+    const tripFromUrl = searchParams.get('trip')
+    if (tripFromUrl && tripFromUrl !== selectedTripId) {
+      setSelectedTripId(tripFromUrl)
+    }
+  }, [searchParams, selectedTripId])
+
+  useEffect(() => {
+    if (!selectedTripId) {
+      if (searchParams.has('trip')) {
+        const nextParams = new URLSearchParams(searchParams)
+        nextParams.delete('trip')
+        setSearchParams(nextParams, { replace: true })
+      }
+      return
+    }
+
+    if (searchParams.get('trip') !== selectedTripId) {
+      const nextParams = new URLSearchParams(searchParams)
+      nextParams.set('trip', selectedTripId)
+      setSearchParams(nextParams, { replace: true })
+    }
+  }, [searchParams, selectedTripId, setSearchParams])
 
   useEffect(() => {
     void refetchTrips()
