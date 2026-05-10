@@ -178,7 +178,16 @@ export function ChargesPage() {
 
   const sessions = normalizeSessions(data).filter((session) => {
     const energy = session.energyAddedKwh
-    return energy == null || energy > 0
+    const durationMin = session.durationMin
+    const displayedEnergy = energy == null ? null : Math.round(energy * 10) / 10
+
+    const isZeroKwhShortSession =
+      displayedEnergy != null
+      && displayedEnergy <= 0
+      && durationMin != null
+      && durationMin < 2
+
+    return !isZeroKwhShortSession
   })
   const geofences = normalizeGeofences(geofencesData)
   const addressCounts = sessions.reduce((acc, session) => {
