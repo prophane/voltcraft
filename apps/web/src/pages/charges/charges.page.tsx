@@ -181,13 +181,13 @@ export function ChargesPage() {
     const durationMin = session.durationMin
     const displayedEnergy = energy == null ? null : Math.round(energy * 10) / 10
 
-    const isZeroKwhShortSession =
+    const isTrivialShortSession =
       displayedEnergy != null
-      && displayedEnergy <= 0
+      && displayedEnergy <= 0.1
       && durationMin != null
-      && durationMin < 2
+      && durationMin <= 2
 
-    return !isZeroKwhShortSession
+    return !isTrivialShortSession
   })
   const geofences = normalizeGeofences(geofencesData)
   const addressCounts = sessions.reduce((acc, session) => {
