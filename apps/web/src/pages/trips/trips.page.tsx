@@ -673,6 +673,8 @@ export function TripsPage() {
             const netConsumptionWhKm = pathInsights != null && pathDistanceKm != null && pathDistanceKm > 0
               ? (pathInsights.netKwh / pathDistanceKm) * 1000
               : null
+            const netEnergyKwh = pathInsights?.netKwh ?? estimatedEnergy
+            const grossEnergyKwh = estimatedEnergy
             const avgSpeedFromTrip = (detailTrip.distanceKm ?? 0) > 0 && (detailTrip.durationMin ?? 0) > 0
               ? (detailTrip.distanceKm as number) / ((detailTrip.durationMin as number) / 60)
               : null
@@ -724,7 +726,7 @@ export function TripsPage() {
                   />
                   <div className="flex items-center justify-end gap-4 text-xs text-text-muted">
                     <span className="inline-flex items-center gap-1"><Clock size={11} /> {trip.durationMin ? formatDuration(Number(trip.durationMin)) : '—'}</span>
-                    <span className="inline-flex items-center gap-1"><Zap size={11} /> {estimatedEnergy != null ? `${Number(estimatedEnergy).toFixed(1)} kWh` : '—'}</span>
+                    <span className="inline-flex items-center gap-1"><Zap size={11} /> {netEnergyKwh != null ? `${Number(netEnergyKwh).toFixed(1)} kWh` : '—'}</span>
                     <button
                       type="button"
                       onClick={(event) => {
@@ -763,16 +765,17 @@ export function TripsPage() {
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                     <DetailMetric icon={Route} label="Distance" value={formatKm(detailTrip.distanceKm ?? 0)} />
                     <DetailMetric icon={Clock} label="Durée" value={detailTrip.durationMin ? formatDuration(Math.round(detailTrip.durationMin)) : '—'} />
-                    <DetailMetric icon={Zap} label="Énergie" value={estimatedEnergy != null ? `${Number(estimatedEnergy).toFixed(1)} kWh` : '—'} />
+                    <DetailMetric icon={Zap} label="Conso" value={netEnergyKwh != null ? `${Number(netEnergyKwh).toFixed(1)} kWh` : '—'} />
                     <DetailMetric
                       icon={Gauge}
-                      label="Conso nette"
+                      label="Conso"
                       value={netConsumptionWhKm != null
                         ? `${Math.round(netConsumptionWhKm)} Wh/km`
                         : detailConsumption != null
                           ? `${Math.round(detailConsumption)} Wh/km`
                           : '—'}
                     />
+                    <DetailMetric icon={Zap} label="Énergie brute" value={grossEnergyKwh != null ? `${Number(grossEnergyKwh).toFixed(1)} kWh` : '—'} />
                     <DetailMetric icon={BatteryCharging} label="SOC départ" value={detailTrip.startBatteryLevel != null ? `${Math.round(detailTrip.startBatteryLevel)}%` : '—'} />
                     <DetailMetric icon={BatteryCharging} label="SOC arrivée" value={detailTrip.endBatteryLevel != null ? `${Math.round(detailTrip.endBatteryLevel)}%` : '—'} />
                     <DetailMetric
