@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { settingsApi, statsApi, tripsApi } from '@/features/vehicle/api'
 import { MapContainer, Polyline, TileLayer, CircleMarker } from 'react-leaflet'
@@ -330,6 +330,7 @@ export function TripsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState<TripTab>('all')
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
+  const hasHydratedTripFromUrl = useRef(false)
 
   const { data: settingsData } = useQuery({
     queryKey: ['settings'],
@@ -444,11 +445,13 @@ export function TripsPage() {
       : selectedTelemetryRoutePoints
 
   useEffect(() => {
+    if (hasHydratedTripFromUrl.current) return
     const tripFromUrl = searchParams.get('trip')
-    if (tripFromUrl && tripFromUrl !== selectedTripId) {
+    if (tripFromUrl) {
       setSelectedTripId(tripFromUrl)
     }
-  }, [searchParams, selectedTripId])
+    hasHydratedTripFromUrl.current = true
+  }, [searchParams])
 
   useEffect(() => {
     if (!selectedTripId) {
