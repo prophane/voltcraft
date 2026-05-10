@@ -4,7 +4,7 @@ import { vehicleApi, statsApi, settingsApi, tripsApi } from '@/features/vehicle/
 import { useVehicleComposedState } from '@/hooks/use-vehicle-composed-state'
 import { Card } from '@/components/ui/card'
 import { Lock, Unlock, MapPin, Plus, Minus } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { cn, formatDate } from '@/lib/utils'
 
 interface ReverseGeocodeResponse {
@@ -25,6 +25,13 @@ interface LatestTrip {
   avgConsumptionKwh100: number | null
   startAddress: string | null
   endAddress: string | null
+}
+
+interface TripPathPoint {
+  capturedAt?: string | null
+  power?: number | null
+  odometer?: number | null
+  speed?: number | null
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -79,6 +86,61 @@ function parseLatestTrip(raw: unknown): LatestTrip | null {
   }
 }
 
+function normalizePath(raw: unknown): TripPathPoint[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null
+      const row = item as Record<string, unknown>
+      return {
+        capturedAt: typeof row.capturedAt === 'string' ? row.capturedAt : typeof row.captured_at === 'string' ? row.captured_at : null,
+        power: toFiniteNumber(row.power),
+        odometer: toFiniteNumber(row.odometer),
+        speed: toFiniteNumber(row.speed),
+      }
+    })
+    .filter(Boolean) as TripPathPoint[]
+}
+
+function computePathEnergy(points: TripPathPoint[]) {
+  const timePoints = points
+    .map((point) => ({
+      at: point.capturedAt ? new Date(point.capturedAt).getTime() : NaN,
+      power: point.power ?? null,
+      odometer: point.odometer ?? null,
+    }))
+    .filter((point) => Number.isFinite(point.at))
+    .sort((a, b) => a.at - b.at)
+
+  if (timePoints.length < 2) return null
+
+  let consumedKwh = 0
+  let recoveredKwh = 0
+
+  for (let i = 1; i < timePoints.length; i++) {
+    const prev = timePoints[i - 1]
+    const curr = timePoints[i]
+    if (!prev || !curr) continue
+
+    const dtHours = (curr.at - prev.at) / 3_600_000
+    if (dtHours <= 0 || dtHours > 0.5) continue
+
+    const avgPower = ((prev.power ?? 0) + (curr.power ?? 0)) / 2
+    if (avgPower >= 0) consumedKwh += avgPower * dtHours
+    else recoveredKwh += Math.abs(avgPower) * dtHours
+  }
+
+  const firstOdo = timePoints.find((point) => point.odometer != null)?.odometer ?? null
+  const lastOdo = [...timePoints].reverse().find((point) => point.odometer != null)?.odometer ?? null
+
+  return {
+    consumedKwh,
+    recoveredKwh,
+    netKwh: consumedKwh - recoveredKwh,
+    distanceKm: firstOdo != null && lastOdo != null ? Math.max(0, lastOdo - firstOdo) : null,
+  }
+}
+
 function ArcGauge({ level, rangeKm, hasData }: { level: number | null; rangeKm: number | null; hasData: boolean }) {
   const radius = 110
   const circumference = Math.PI * radius
@@ -128,7 +190,6 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 export function DashboardPage() {
   const [mapZoomLevel, setMapZoomLevel] = useState(14)
-  const navigate = useNavigate()
 
   const { data: vehicle } = useQuery({
     queryKey: ['vehicle', 'current'],
@@ -246,9 +307,21 @@ export function DashboardPage() {
   const latitude = toFiniteNumber(location?.latitude)
   const longitude = toFiniteNumber(location?.longitude)
   const latestTrip = useMemo(() => parseLatestTrip(latestTripRaw), [latestTripRaw])
-  const latestTripWhKm = latestTrip?.avgConsumptionKwh100 != null
-    ? Math.round(latestTrip.avgConsumptionKwh100 * 10)
-    : null
+
+  const { data: latestTripPathRaw } = useQuery({
+    queryKey: ['trips', latestTrip?.id, 'path'],
+    queryFn: () => tripsApi.path(latestTrip!.id),
+    enabled: !!latestTrip?.id,
+    staleTime: 120_000,
+  })
+
+  const latestTripPath = useMemo(() => normalizePath(latestTripPathRaw), [latestTripPathRaw])
+  const latestTripEnergy = useMemo(() => computePathEnergy(latestTripPath), [latestTripPath])
+  const latestTripNetEnergyKwh = latestTripEnergy?.netKwh ?? (
+    latestTrip?.avgConsumptionKwh100 != null && latestTrip.distanceKm != null
+      ? (latestTrip.avgConsumptionKwh100 * latestTrip.distanceKm) / 100
+      : null
+  )
 
   const homeLocation = useMemo<HomeLocation | null>(() => {
     const settings = (settingsData ?? {}) as Record<string, unknown>
@@ -460,10 +533,9 @@ export function DashboardPage() {
         <Card className="surface-premium p-4 md:p-5">
           <h3 className="text-lg font-medium text-text-primary">Dernier trajet</h3>
           {latestTrip ? (
-            <button
-              type="button"
-              onClick={() => navigate(`/trips?trip=${encodeURIComponent(latestTrip.id)}`)}
-              className="mt-3 w-full space-y-3 text-left rounded-xl transition-colors hover:bg-bg-overlay/40 focus:outline-none focus:ring-2 focus:ring-accent-500/40"
+            <Link
+              to={`/trips?trip=${encodeURIComponent(latestTrip.id)}`}
+              className="mt-3 block w-full space-y-3 text-left rounded-xl transition-colors hover:bg-bg-overlay/40 focus:outline-none focus:ring-2 focus:ring-accent-500/40"
             >
               <p className="text-sm text-text-secondary">
                 {(latestTrip.startAddress ?? 'Départ inconnu')} → {(latestTrip.endAddress ?? 'Arrivée inconnue')}
@@ -479,11 +551,11 @@ export function DashboardPage() {
                   <p className="text-text-secondary">{formatDurationMin(latestTrip.durationMin)}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-text-muted uppercase">Conso</p>
-                  <p className="text-text-secondary">{latestTripWhKm != null ? `${latestTripWhKm} Wh/km` : '—'}</p>
+                  <p className="text-[11px] text-text-muted uppercase">Conso nette</p>
+                  <p className="text-text-secondary">{latestTripNetEnergyKwh != null ? `${latestTripNetEnergyKwh.toFixed(1)} kWh` : '—'}</p>
                 </div>
               </div>
-            </button>
+            </Link>
           ) : (
             <p className="mt-3 text-sm text-text-muted">Aucun trajet récent disponible</p>
           )}
