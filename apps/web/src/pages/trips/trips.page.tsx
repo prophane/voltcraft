@@ -519,6 +519,50 @@ export function TripsPage() {
     return trips.filter((t) => !isWorkTrip(t))
   }, [tab, trips])
 
+  const activeTrip = useMemo(
+    () => filteredTrips.find((trip) => String(trip.id) === selectedTripId) ?? null,
+    [filteredTrips, selectedTripId],
+  )
+
+  const detailTrip = useMemo(
+    () => (selectedTrip?.id === selectedTripId ? selectedTrip : activeTrip),
+    [activeTrip, selectedTrip, selectedTripId],
+  )
+
+  const detailStartCoords = detailTrip?.startLatitude != null && detailTrip.startLongitude != null
+    ? { lat: detailTrip.startLatitude, lon: detailTrip.startLongitude }
+    : null
+  const detailEndCoords = detailTrip?.endLatitude != null && detailTrip.endLongitude != null
+    ? { lat: detailTrip.endLatitude, lon: detailTrip.endLongitude }
+    : null
+  const detailRoutePoints = selectedTripId ? selectedDisplayedRoutePoints : []
+  const pathInsights = selectedTripId ? buildPathInsights(selectedPath) : null
+  const startLabel = detailTrip
+    ? formatPointLabel(
+        detailTrip.startAddress ?? (selectedTripId ? (startResolvedAddress ?? null) : null),
+        detailTrip.startLatitude,
+        detailTrip.startLongitude,
+        homeLocation,
+      )
+    : ''
+  const endLabel = detailTrip
+    ? formatPointLabel(
+        detailTrip.endAddress ?? (selectedTripId ? (endResolvedAddress ?? null) : null),
+        detailTrip.endLatitude,
+        detailTrip.endLongitude,
+        homeLocation,
+      )
+    : ''
+  const detailEnergyKwh = detailTrip?.energyUsedKwh ?? null
+  const detailConsumptionWhKm = detailTrip?.avgConsumptionKwh100 != null
+    ? detailTrip.avgConsumptionKwh100 * 10
+    : null
+  const avgSpeedFromTrip = detailTrip != null && (detailTrip.distanceKm ?? 0) > 0 && (detailTrip.durationMin ?? 0) > 0
+    ? (detailTrip.distanceKm as number) / ((detailTrip.durationMin as number) / 60)
+    : null
+  const avgSpeedDisplay = avgSpeedFromTrip ?? pathInsights?.avgSpeed ?? null
+  const maxSpeedDisplay = pathInsights?.maxSpeed ?? null
+
   const { data: listResolvedAddresses } = useQuery({
     queryKey: [
       'trips',
@@ -618,38 +662,6 @@ export function TripsPage() {
           {filteredTrips.map((trip) => {
             const tripId = String(trip.id)
             const isSelected = selectedTripId === tripId
-            const detailTrip = isSelected && selectedTrip?.id === tripId ? selectedTrip : trip
-            const startLabel = formatPointLabel(
-              detailTrip.startAddress ?? (isSelected ? (startResolvedAddress ?? null) : null),
-              detailTrip.startLatitude,
-              detailTrip.startLongitude,
-              homeLocation,
-            )
-            const endLabel = formatPointLabel(
-              detailTrip.endAddress ?? (isSelected ? (endResolvedAddress ?? null) : null),
-              detailTrip.endLatitude,
-              detailTrip.endLongitude,
-              homeLocation,
-            )
-            const estimatedEnergy = detailTrip.energyUsedKwh ?? null
-            const detailConsumption = consumptionWhKm(detailTrip)
-            const detailStartCoords = detailTrip.startLatitude != null && detailTrip.startLongitude != null
-              ? { lat: detailTrip.startLatitude, lon: detailTrip.startLongitude }
-              : null
-            const detailEndCoords = detailTrip.endLatitude != null && detailTrip.endLongitude != null
-              ? { lat: detailTrip.endLatitude, lon: detailTrip.endLongitude }
-              : null
-            const detailRoutePoints = isSelected ? selectedDisplayedRoutePoints : []
-            const pathInsights = isSelected ? buildPathInsights(selectedPath) : null
-            const detailEnergyKwh = detailTrip.energyUsedKwh ?? null
-            const detailConsumptionWhKm = detailTrip.avgConsumptionKwh100 != null
-              ? detailTrip.avgConsumptionKwh100 * 10
-              : null
-            const avgSpeedFromTrip = (detailTrip.distanceKm ?? 0) > 0 && (detailTrip.durationMin ?? 0) > 0
-              ? (detailTrip.distanceKm as number) / ((detailTrip.durationMin as number) / 60)
-              : null
-            const avgSpeedDisplay = avgSpeedFromTrip ?? pathInsights?.avgSpeed ?? null
-            const maxSpeedDisplay = pathInsights?.maxSpeed ?? null
 
             return (
             <Card
@@ -696,7 +708,7 @@ export function TripsPage() {
                   />
                   <div className="flex items-center justify-end gap-4 text-xs text-text-muted">
                     <span className="inline-flex items-center gap-1"><Clock size={11} /> {trip.durationMin ? formatDuration(Number(trip.durationMin)) : '—'}</span>
-                    <span className="inline-flex items-center gap-1"><Zap size={11} /> {detailEnergyKwh != null ? `${Number(detailEnergyKwh).toFixed(1)} kWh` : '—'}</span>
+                    <span className="inline-flex items-center gap-1"><Zap size={11} /> {trip.energyUsedKwh != null ? `${trip.energyUsedKwh.toFixed(1)} kWh` : '—'}</span>
                     <button
                       type="button"
                       onClick={(event) => {
@@ -710,134 +722,136 @@ export function TripsPage() {
                   </div>
                 </div>
               </div>
-
-              {isSelected && (
-                <div
-                  className="mt-4 pt-4 border-t border-border-subtle space-y-4"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-text-muted">Détail trajet</p>
-                      <h2 className="text-lg font-semibold text-text-primary mt-1">{startLabel} → {endLabel}</h2>
-                      <p className="text-xs text-text-muted mt-1">{detailTrip.startedAt ? formatDate(detailTrip.startedAt) : 'Date inconnue'}</p>
-                    </div>
-                  </div>
-
-                  {(isFetchingTrip || isFetchingPath) && (
-                    <p className="text-sm text-text-muted">Chargement des détails...</p>
-                  )}
-
-                  {hasTripError && (
-                    <p className="text-sm text-warning">Impossible de charger le détail complet du trajet.</p>
-                  )}
-
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    <DetailMetric icon={Route} label="Distance" value={formatKm(detailTrip.distanceKm ?? 0)} />
-                    <DetailMetric icon={Clock} label="Durée" value={detailTrip.durationMin ? formatDuration(Math.round(detailTrip.durationMin)) : '—'} />
-                    <DetailMetric icon={Zap} label="Énergie" value={detailEnergyKwh != null ? `${Number(detailEnergyKwh).toFixed(1)} kWh` : '—'} />
-                    <DetailMetric icon={Gauge} label="Conso" value={detailConsumptionWhKm != null ? `${Math.round(detailConsumptionWhKm)} Wh/km` : '—'} />
-                    <DetailMetric icon={BatteryCharging} label="SOC départ" value={detailTrip.startBatteryLevel != null ? `${Math.round(detailTrip.startBatteryLevel)}%` : '—'} />
-                    <DetailMetric icon={BatteryCharging} label="SOC arrivée" value={detailTrip.endBatteryLevel != null ? `${Math.round(detailTrip.endBatteryLevel)}%` : '—'} />
-                    <DetailMetric
-                      icon={MapPin}
-                      label="Coord. départ"
-                      value={detailTrip.startLatitude != null && detailTrip.startLongitude != null
-                        ? `${detailTrip.startLatitude.toFixed(5)}, ${detailTrip.startLongitude.toFixed(5)}`
-                        : '—'}
-                    />
-                    <DetailMetric
-                      icon={MapPin}
-                      label="Coord. arrivée"
-                      value={detailTrip.endLatitude != null && detailTrip.endLongitude != null
-                        ? `${detailTrip.endLatitude.toFixed(5)}, ${detailTrip.endLongitude.toFixed(5)}`
-                        : '—'}
-                    />
-                  </div>
-
-                  {pathInsights && (
-                    <div className="space-y-3">
-                      <p className="text-xs uppercase tracking-wide text-text-muted">Deep dive conduite</p>
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                        <DetailMetric
-                          icon={Route}
-                          label="Odomètre"
-                          value={pathInsights.odometerFrom != null && pathInsights.odometerTo != null
-                            ? `${Math.round(pathInsights.odometerFrom)} - ${Math.round(pathInsights.odometerTo)} km`
-                            : '—'}
-                        />
-                        <DetailMetric
-                          icon={Gauge}
-                          label="Vitesse moy"
-                          value={avgSpeedDisplay != null ? `${Math.round(avgSpeedDisplay)} km/h` : '—'}
-                        />
-                        <DetailMetric
-                          icon={Gauge}
-                          label="Vitesse max"
-                          value={maxSpeedDisplay != null ? `${Math.round(maxSpeedDisplay)} km/h` : '—'}
-                        />
-                      </div>
-
-                      <div className="rounded-xl border border-border-subtle bg-bg-overlay/55 p-3">
-                        <p className="text-xs uppercase tracking-wide text-text-muted mb-2">Distribution vitesse</p>
-                        {pathInsights.speedBins.reduce((sum, bin) => sum + bin.count, 0) >= 3 ? (
-                          <SpeedDistribution bins={pathInsights.speedBins} />
-                        ) : (
-                          <p className="text-xs text-text-muted">Échantillons vitesse insuffisants pour histogramme fiable.</p>
-                        )}
-                        <p className="text-xs text-text-muted mt-2">Les statistiques de vitesse sont issues de la télémétrie TeslaMate du trajet sélectionné.</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {detailRoutePoints.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs uppercase tracking-wide text-text-muted">Carte du trajet</p>
-                      <div className="w-full h-64 lg:h-80 rounded-lg border border-border-subtle overflow-hidden">
-                        <MapContainer
-                          bounds={detailRoutePoints}
-                          className="h-full w-full"
-                          scrollWheelZoom
-                        >
-                          <TileLayer
-                            attribution='&copy; OpenStreetMap contributors'
-                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                          />
-                          {detailRoutePoints.length >= 2 && (
-                            <Polyline positions={detailRoutePoints} pathOptions={{ color: '#E8112D', weight: 5 }} />
-                          )}
-                          <CircleMarker
-                            center={detailRoutePoints[0] as [number, number]}
-                            radius={6}
-                            pathOptions={{ color: '#16a34a', fillColor: '#16a34a', fillOpacity: 0.9 }}
-                          />
-                          <CircleMarker
-                            center={detailRoutePoints[detailRoutePoints.length - 1] as [number, number]}
-                            radius={6}
-                            pathOptions={{ color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9 }}
-                          />
-                        </MapContainer>
-                      </div>
-                      {detailStartCoords && detailEndCoords && (
-                        <div className="flex justify-end">
-                          <a
-                            href={`https://www.google.com/maps/dir/?api=1&origin=${detailStartCoords.lat},${detailStartCoords.lon}&destination=${detailEndCoords.lat},${detailEndCoords.lon}&travelmode=driving`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-accent-400 hover:text-accent-300 inline-flex items-center gap-1 text-xs"
-                          >
-                            <MapPin size={14} /> Ouvrir l itinéraire dans Google Maps
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
             </Card>
             )
           })}
         </div>
+      )}
+
+      {selectedTripId && detailTrip && (
+        <Card className="surface-premium p-4 md:p-5 sticky top-4 shadow-xl shadow-black/10">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-text-muted">Détail trajet</p>
+              <h2 className="text-lg font-semibold text-text-primary mt-1">{startLabel} → {endLabel}</h2>
+              <p className="text-xs text-text-muted mt-1">{detailTrip.startedAt ? formatDate(detailTrip.startedAt) : 'Date inconnue'}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedTripId(null)}
+              className="text-xs text-text-secondary hover:text-text-primary"
+            >
+              Fermer
+            </button>
+          </div>
+
+          {(isFetchingTrip || isFetchingPath) && (
+            <p className="text-sm text-text-muted mt-4">Chargement des détails...</p>
+          )}
+
+          {hasTripError && (
+            <p className="text-sm text-warning mt-4">Impossible de charger le détail complet du trajet.</p>
+          )}
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+            <DetailMetric icon={Route} label="Distance" value={formatKm(detailTrip.distanceKm ?? 0)} />
+            <DetailMetric icon={Clock} label="Durée" value={detailTrip.durationMin ? formatDuration(Math.round(detailTrip.durationMin)) : '—'} />
+            <DetailMetric icon={Zap} label="Énergie" value={detailEnergyKwh != null ? `${Number(detailEnergyKwh).toFixed(1)} kWh` : '—'} />
+            <DetailMetric icon={Gauge} label="Conso" value={detailConsumptionWhKm != null ? `${Math.round(detailConsumptionWhKm)} Wh/km` : '—'} />
+            <DetailMetric icon={BatteryCharging} label="SOC départ" value={detailTrip.startBatteryLevel != null ? `${Math.round(detailTrip.startBatteryLevel)}%` : '—'} />
+            <DetailMetric icon={BatteryCharging} label="SOC arrivée" value={detailTrip.endBatteryLevel != null ? `${Math.round(detailTrip.endBatteryLevel)}%` : '—'} />
+            <DetailMetric
+              icon={MapPin}
+              label="Coord. départ"
+              value={detailTrip.startLatitude != null && detailTrip.startLongitude != null
+                ? `${detailTrip.startLatitude.toFixed(5)}, ${detailTrip.startLongitude.toFixed(5)}`
+                : '—'}
+            />
+            <DetailMetric
+              icon={MapPin}
+              label="Coord. arrivée"
+              value={detailTrip.endLatitude != null && detailTrip.endLongitude != null
+                ? `${detailTrip.endLatitude.toFixed(5)}, ${detailTrip.endLongitude.toFixed(5)}`
+                : '—'}
+            />
+          </div>
+
+          {pathInsights && (
+            <div className="space-y-3 mt-4">
+              <p className="text-xs uppercase tracking-wide text-text-muted">Deep dive conduite</p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <DetailMetric
+                  icon={Route}
+                  label="Odomètre"
+                  value={pathInsights.odometerFrom != null && pathInsights.odometerTo != null
+                    ? `${Math.round(pathInsights.odometerFrom)} - ${Math.round(pathInsights.odometerTo)} km`
+                    : '—'}
+                />
+                <DetailMetric
+                  icon={Gauge}
+                  label="Vitesse moy"
+                  value={avgSpeedDisplay != null ? `${Math.round(avgSpeedDisplay)} km/h` : '—'}
+                />
+                <DetailMetric
+                  icon={Gauge}
+                  label="Vitesse max"
+                  value={maxSpeedDisplay != null ? `${Math.round(maxSpeedDisplay)} km/h` : '—'}
+                />
+              </div>
+
+              <div className="rounded-xl border border-border-subtle bg-bg-overlay/55 p-3">
+                <p className="text-xs uppercase tracking-wide text-text-muted mb-2">Distribution vitesse</p>
+                {pathInsights.speedBins.reduce((sum, bin) => sum + bin.count, 0) >= 3 ? (
+                  <SpeedDistribution bins={pathInsights.speedBins} />
+                ) : (
+                  <p className="text-xs text-text-muted">Échantillons vitesse insuffisants pour histogramme fiable.</p>
+                )}
+                <p className="text-xs text-text-muted mt-2">Les statistiques de vitesse sont issues de la télémétrie TeslaMate du trajet sélectionné.</p>
+              </div>
+            </div>
+          )}
+
+          {detailRoutePoints.length > 0 && detailStartCoords && detailEndCoords && (
+            <div className="space-y-2 mt-4">
+              <p className="text-xs uppercase tracking-wide text-text-muted">Carte du trajet</p>
+              <div className="w-full h-64 lg:h-80 rounded-lg border border-border-subtle overflow-hidden">
+                <MapContainer
+                  bounds={detailRoutePoints}
+                  className="h-full w-full"
+                  scrollWheelZoom
+                >
+                  <TileLayer
+                    attribution='&copy; OpenStreetMap contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  {detailRoutePoints.length >= 2 && (
+                    <Polyline positions={detailRoutePoints} pathOptions={{ color: '#E8112D', weight: 5 }} />
+                  )}
+                  <CircleMarker
+                    center={detailRoutePoints[0] as [number, number]}
+                    radius={6}
+                    pathOptions={{ color: '#16a34a', fillColor: '#16a34a', fillOpacity: 0.9 }}
+                  />
+                  <CircleMarker
+                    center={detailRoutePoints[detailRoutePoints.length - 1] as [number, number]}
+                    radius={6}
+                    pathOptions={{ color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9 }}
+                  />
+                </MapContainer>
+              </div>
+              <div className="flex justify-end">
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&origin=${detailStartCoords.lat},${detailStartCoords.lon}&destination=${detailEndCoords.lat},${detailEndCoords.lon}&travelmode=driving`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent-400 hover:text-accent-300 inline-flex items-center gap-1 text-xs"
+                >
+                  <MapPin size={14} /> Ouvrir l'itinéraire dans Google Maps
+                </a>
+              </div>
+            </div>
+          )}
+        </Card>
       )}
     </div>
   )
