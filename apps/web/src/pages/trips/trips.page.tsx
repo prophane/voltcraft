@@ -726,7 +726,10 @@ export function TripsPage() {
                       </div>
                         <button
                           type="button"
-                          onClick={() => setSelectedTripId(null)}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setSelectedTripId(null)
+                          }}
                           className="text-xs text-text-secondary hover:text-text-primary"
                         >
                           Masquer
