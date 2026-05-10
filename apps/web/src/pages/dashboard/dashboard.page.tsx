@@ -27,13 +27,6 @@ interface LatestTrip {
   endAddress: string | null
 }
 
-interface TripPathPoint {
-  capturedAt?: string | null
-  power?: number | null
-  odometer?: number | null
-  speed?: number | null
-}
-
 function toFiniteNumber(value: unknown): number | null {
   const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
   return Number.isFinite(parsed) ? parsed : null
@@ -83,61 +76,6 @@ function parseLatestTrip(raw: unknown): LatestTrip | null {
     avgConsumptionKwh100: toFiniteNumber(obj.avgConsumptionKwh100 ?? obj.avg_consumption_kwh100),
     startAddress: obj.startAddress == null ? null : String(obj.startAddress),
     endAddress: obj.endAddress == null ? null : String(obj.endAddress),
-  }
-}
-
-function normalizePath(raw: unknown): TripPathPoint[] {
-  if (!Array.isArray(raw)) return []
-  return raw
-    .map((item) => {
-      if (!item || typeof item !== 'object') return null
-      const row = item as Record<string, unknown>
-      return {
-        capturedAt: typeof row.capturedAt === 'string' ? row.capturedAt : typeof row.captured_at === 'string' ? row.captured_at : null,
-        power: toFiniteNumber(row.power),
-        odometer: toFiniteNumber(row.odometer),
-        speed: toFiniteNumber(row.speed),
-      }
-    })
-    .filter(Boolean) as TripPathPoint[]
-}
-
-function computePathEnergy(points: TripPathPoint[]) {
-  const timePoints = points
-    .map((point) => ({
-      at: point.capturedAt ? new Date(point.capturedAt).getTime() : NaN,
-      power: point.power ?? null,
-      odometer: point.odometer ?? null,
-    }))
-    .filter((point) => Number.isFinite(point.at))
-    .sort((a, b) => a.at - b.at)
-
-  if (timePoints.length < 2) return null
-
-  let consumedKwh = 0
-  let recoveredKwh = 0
-
-  for (let i = 1; i < timePoints.length; i++) {
-    const prev = timePoints[i - 1]
-    const curr = timePoints[i]
-    if (!prev || !curr) continue
-
-    const dtHours = (curr.at - prev.at) / 3_600_000
-    if (dtHours <= 0 || dtHours > 0.5) continue
-
-    const avgPower = ((prev.power ?? 0) + (curr.power ?? 0)) / 2
-    if (avgPower >= 0) consumedKwh += avgPower * dtHours
-    else recoveredKwh += Math.abs(avgPower) * dtHours
-  }
-
-  const firstOdo = timePoints.find((point) => point.odometer != null)?.odometer ?? null
-  const lastOdo = [...timePoints].reverse().find((point) => point.odometer != null)?.odometer ?? null
-
-  return {
-    consumedKwh,
-    recoveredKwh,
-    netKwh: consumedKwh - recoveredKwh,
-    distanceKm: firstOdo != null && lastOdo != null ? Math.max(0, lastOdo - firstOdo) : null,
   }
 }
 
@@ -308,20 +246,9 @@ export function DashboardPage() {
   const longitude = toFiniteNumber(location?.longitude)
   const latestTrip = useMemo(() => parseLatestTrip(latestTripRaw), [latestTripRaw])
 
-  const { data: latestTripPathRaw } = useQuery({
-    queryKey: ['trips', latestTrip?.id, 'path'],
-    queryFn: () => tripsApi.path(latestTrip!.id),
-    enabled: !!latestTrip?.id,
-    staleTime: 120_000,
-  })
-
-  const latestTripPath = useMemo(() => normalizePath(latestTripPathRaw), [latestTripPathRaw])
-  const latestTripEnergy = useMemo(() => computePathEnergy(latestTripPath), [latestTripPath])
-  const latestTripNetEnergyKwh = latestTripEnergy?.netKwh ?? (
-    latestTrip?.avgConsumptionKwh100 != null && latestTrip.distanceKm != null
-      ? (latestTrip.avgConsumptionKwh100 * latestTrip.distanceKm) / 100
-      : null
-  )
+  const latestTripWhKm = latestTrip?.avgConsumptionKwh100 != null
+    ? Math.round(latestTrip.avgConsumptionKwh100 * 10)
+    : null
 
   const homeLocation = useMemo<HomeLocation | null>(() => {
     const settings = (settingsData ?? {}) as Record<string, unknown>
@@ -404,7 +331,7 @@ export function DashboardPage() {
 
           <p className="text-center text-sm text-text-muted -mt-2">
             <MapPin size={12} className="inline mr-1" />
-            {vehicle?.lastSeenAt ? `Stationne · ${formatDate(vehicle.lastSeenAt)}` : 'En attente de la premiere telemetrie'}
+            {vehicle?.lastSeenAt ? `Stationné · ${formatDate(vehicle.lastSeenAt)}` : 'En attente de la première télémétrie'}
           </p>
 
           <div className="mt-5 rounded-2xl border border-border-subtle bg-bg-overlay/70 p-4">
@@ -551,8 +478,8 @@ export function DashboardPage() {
                   <p className="text-text-secondary">{formatDurationMin(latestTrip.durationMin)}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-text-muted uppercase">Conso nette</p>
-                  <p className="text-text-secondary">{latestTripNetEnergyKwh != null ? `${latestTripNetEnergyKwh.toFixed(1)} kWh` : '—'}</p>
+                  <p className="text-[11px] text-text-muted uppercase">Conso</p>
+                  <p className="text-text-secondary">{latestTripWhKm != null ? `${latestTripWhKm} Wh/km` : '—'}</p>
                 </div>
               </div>
             </Link>
