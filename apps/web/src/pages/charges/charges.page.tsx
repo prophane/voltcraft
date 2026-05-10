@@ -176,7 +176,10 @@ export function ChargesPage() {
     queryFn: () => api.get('/settings/geofences'),
   })
 
-  const sessions = normalizeSessions(data)
+  const sessions = normalizeSessions(data).filter((session) => {
+    const energy = session.energyAddedKwh
+    return energy == null || energy > 0
+  })
   const geofences = normalizeGeofences(geofencesData)
   const addressCounts = sessions.reduce((acc, session) => {
     const key = session.address ?? ''
