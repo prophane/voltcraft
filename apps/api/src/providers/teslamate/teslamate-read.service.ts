@@ -906,7 +906,13 @@ export class TeslaMateReadService {
         WITH drive_stats AS (
           SELECT
             COALESCE(SUM(d.distance), 0) AS distance_km,
-            COALESCE(SUM(d.distance * COALESCE(c.efficiency, 0)), 0) AS energy_used_kwh,
+            COALESCE(SUM(
+              CASE
+                WHEN d.start_ideal_range_km IS NOT NULL AND d.end_ideal_range_km IS NOT NULL AND c.efficiency IS NOT NULL
+                  THEN (d.start_ideal_range_km - d.end_ideal_range_km) * c.efficiency
+                ELSE d.distance * COALESCE(c.efficiency, 0)
+              END
+            ), 0) AS energy_used_kwh,
             COUNT(*)::int AS trips_count
           FROM drives d
           INNER JOIN cars c ON c.id = d.car_id
