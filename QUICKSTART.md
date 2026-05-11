@@ -1,6 +1,6 @@
-# Quick Start Voltcraft
+# Demarrage rapide Voltcraft
 
-Guide court pour demarrer vite. Pour la procedure complete d'exploitation et de production, voir [DEPLOYMENT.md](D:/voltcraft/DEPLOYMENT.md).
+Guide court pour demarrer rapidement. Pour la procedure complete d'exploitation et de production, voir [DEPLOYMENT.md](D:/voltcraft/DEPLOYMENT.md).
 
 ## 1) Recuperer le projet
 
@@ -10,7 +10,7 @@ cd voltcraft
 cp .env.example .env
 ```
 
-## 2) Renseigner le minimum dans `.env`
+## 2) Completer le minimum dans `.env`
 
 Valeurs obligatoires:
 - `POSTGRES_PASSWORD`
@@ -47,7 +47,7 @@ docker compose --profile teslamate up -d
 Par defaut:
 - interface principale: `http://localhost:3000`
 - API backend: `http://localhost:3001`
-- healthcheck: `http://localhost:3001/health`
+- healthcheck API: `http://localhost:3001/health`
 
 ## 5) Completer la configuration initiale
 
@@ -59,7 +59,7 @@ Si `AUTH_DISABLED=false`:
 - l'assistant cree un compte admin local
 - puis demande la configuration OAuth Tesla
 
-Vous pourrez ensuite retrouver la configuration Tesla dans Parametres.
+Vous pourrez ensuite retrouver la configuration Tesla dans la page Parametres.
 
 ## 6) Verification rapide
 
@@ -94,7 +94,7 @@ docker compose --profile teslamate up -d --build
 ## 8) Si l'interface semble incoherente
 
 1. Faire un hard refresh navigateur
-2. Cliquer sur `Actualiser` dans le dashboard pour forcer une synchro vehicule
+2. Cliquer sur `Actualiser` dans le tableau de bord pour forcer une synchronisation vehicule
 3. Verifier `docker compose logs --tail=200 api`
 4. Verifier `GET /api/config`
 5. Si TeslaMate est active, verifier la coherence des credentials TeslaMate

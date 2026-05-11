@@ -30,7 +30,7 @@ Volumes critiques:
 - `teslamate-db-data`
 - `teslamate-grafana-data`
 
-Le volume `voltcraft-app-config` contient la configuration runtime persistee par l'application, notamment certaines mises a jour faites depuis l'UI Parametres Tesla.
+Le volume `voltcraft-app-config` contient la configuration runtime persistee par l'application, notamment certaines mises a jour faites depuis l'interface Parametres Tesla.
 
 ## 3. Installation initiale
 
@@ -101,7 +101,7 @@ Validation minimale:
 - `vehicle-command` demarre
 - pas d'erreur fatale repetee dans les logs API
 
-## 4. Configuration applicative apres boot
+## 4. Configuration applicative apres demarrage
 
 ### 4.1 Flux de setup
 
@@ -117,11 +117,11 @@ Si `AUTH_DISABLED=false`:
 
 La configuration Tesla peut etre faite:
 - dans l'assistant initial
-- ensuite dans l'UI Parametres
+- ensuite dans l'interface Parametres
 
 Le backend persiste la configuration dans `APP_CONFIG_PATH` (par defaut `/app/data/runtime.env`) a l'interieur du volume `voltcraft-app-config`.
 
-### 4.3 Proxy commandes Tesla
+### 4.3 Proxy de commandes Tesla
 
 Le service `vehicle-command` est demarre par Docker Compose et utilise les fichiers generes dans le volume `app-config`.
 
@@ -153,7 +153,7 @@ docker compose --profile teslamate build --no-cache
 docker compose --profile teslamate up -d
 ```
 
-Checks post-update:
+Verifications post-mise a jour:
 
 ```bash
 docker compose logs --tail=200 api
@@ -167,7 +167,7 @@ Endpoints utiles a verifier:
 - `GET /api/vehicle/state`
 - `GET /api/stats/summary?days=30`
 
-## 6. Rollback rapide
+## 6. Retour arriere rapide
 
 Lister les derniers commits:
 
@@ -203,7 +203,7 @@ docker exec -t voltcraft-db pg_dump -U voltcraft -d voltcraft > voltcraft.sql
 docker exec -t teslamate-db pg_dump -U teslamate -d teslamate > teslamate.sql
 ```
 
-### 7.3 Sauvegarde config runtime
+### 7.3 Sauvegarde de la configuration runtime
 
 La configuration sauvegardee depuis l'UI est stockee dans le volume `voltcraft-app-config`. Il faut donc inclure ce volume dans votre strategie de backup si vous ne voulez pas perdre la configuration Tesla / TeslaMate persistee par l'application.
 
@@ -239,13 +239,13 @@ Verifier:
 2. `GET /api/vehicle/state` repond `200`
 3. `GET /api/stats/summary?days=30` repond `200`
 4. hard refresh navigateur
-5. bouton `Actualiser` dans le dashboard
+5. bouton `Actualiser` dans le tableau de bord
 6. logs API sans erreur fatale
 
 ### 9.2 Etat vehicule stale ou incorrect
 
 Actions:
-1. cliquer `Actualiser` dans le dashboard
+1. cliquer `Actualiser` dans le tableau de bord
 2. verifier `GET /api/vehicle/state`
 3. verifier les logs API lors d'un sync manuel
 4. si TeslaMate est active, verifier quelle source alimente l'etat observe

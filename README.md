@@ -4,7 +4,7 @@ Voltcraft est une application web auto-hebergee pour piloter, superviser et hist
 
 Tesla est une marque de Tesla, Inc. Voltcraft est un projet independant et non affilie a Tesla.
 
-## Ce que fait Voltcraft
+## Fonctions principales
 
 - Tableau de bord temps reel avec etat compose du vehicule
 - Commandes vehicule via Tesla Fleet API et proxy `vehicle-command`
@@ -13,7 +13,7 @@ Tesla est une marque de Tesla, Inc. Voltcraft est un projet independant et non a
 - Integration MQTT / Home Assistant
 - Mode `AUTH_DISABLED` pour reverse proxy avec pre-authentification amont
 
-## Architecture actuelle
+## Architecture
 
 Services principaux:
 - `api` : backend Fastify qui sert aussi l'application web
@@ -30,24 +30,24 @@ Services optionnels sous profil `teslamate`:
 
 Definition complete des services: [docker-compose.yml](D:/voltcraft/docker-compose.yml)
 
-## Flux recommande
+## Parcours recommande
 
 1. Copier [.env.example](D:/voltcraft/.env.example) vers `.env`
 2. Renseigner les secrets de base et les ports souhaites
 3. Lancer la stack Docker Compose
 4. Ouvrir Voltcraft dans le navigateur
 5. Completer l'assistant initial ou la page Parametres Tesla pour configurer l'OAuth Tesla
-6. Si TeslaMate est active, verifier la connectivite TeslaMate depuis l'UI Parametres
+6. Si TeslaMate est active, verifier la connectivite TeslaMate depuis l'interface Parametres
 
 ## Configuration Tesla
 
-Voltcraft supporte aujourd'hui une configuration Tesla basee sur OAuth applicatif.
+Voltcraft utilise actuellement une configuration Tesla basee sur OAuth applicatif.
 
 Deux modes existent:
 - `AUTH_DISABLED=true` : l'assistant initial saute la creation du compte admin et demande uniquement la configuration OAuth Tesla
 - `AUTH_DISABLED=false` : l'assistant cree d'abord un compte admin local, puis demande la configuration OAuth Tesla
 
-La configuration Tesla peut etre mise a jour depuis l'interface dans Parametres. Le backend la persiste dans un fichier runtime (`APP_CONFIG_PATH`, par defaut `/app/data/runtime.env`) monte dans le volume `voltcraft-app-config`.
+La configuration Tesla peut etre mise a jour depuis l'interface Parametres. Le backend la persiste dans un fichier runtime (`APP_CONFIG_PATH`, par defaut `/app/data/runtime.env`) monte dans le volume `voltcraft-app-config`.
 
 Champs Tesla principaux:
 - `TESLA_CLIENT_ID`
@@ -56,7 +56,7 @@ Champs Tesla principaux:
 - `TESLA_REGION`
 - `TESLA_COMMAND_PROXY_URL`
 
-## Documentation disponible
+## Documentation
 
 - Demarrage rapide: [QUICKSTART.md](D:/voltcraft/QUICKSTART.md)
 - Procedure d'exploitation et de deploiement: [DEPLOYMENT.md](D:/voltcraft/DEPLOYMENT.md)
@@ -90,7 +90,7 @@ git pull
 docker compose --profile teslamate up -d --build
 ```
 
-Etat et logs:
+Etat des services et logs:
 
 ```bash
 docker compose ps
@@ -129,7 +129,7 @@ Tests API:
 pnpm --filter @voltcraft/api test
 ```
 
-## Robustesse actuelle
+## Comportement actuel
 
 - La route d'etat vehicule peut renvoyer un snapshot cache si Tesla refuse `vehicle_data` sur une voiture asleep/offline
 - Le dashboard propose un bouton `Actualiser` pour forcer une synchronisation immediate
