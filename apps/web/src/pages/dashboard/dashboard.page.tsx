@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { vehicleApi, statsApi, settingsApi, tripsApi } from '@/features/vehicle/api'
 import { useVehicleComposedState } from '@/hooks/use-vehicle-composed-state'
@@ -128,7 +128,8 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 export function DashboardPage() {
-  const [mapZoomLevel, setMapZoomLevel] = useState(16)
+  const [mapZoomLevel, setMapZoomLevel] = useState(18)
+  const [hasManualMapZoom, setHasManualMapZoom] = useState(false)
   const queryClient = useQueryClient()
 
   const syncMutation = useMutation({
@@ -172,6 +173,22 @@ export function DashboardPage() {
     queryFn: () => settingsApi.get(),
     staleTime: 60_000,
   })
+
+  const preferredMapPreset = useMemo(() => {
+    const raw = (settingsData as Record<string, unknown> | undefined)?.['dashboardMapZoomPreset']
+    if (raw === 'city' || raw === 'district' || raw === 'street') return raw
+    return 'street' as const
+  }, [settingsData])
+
+  useEffect(() => {
+    if (hasManualMapZoom) return
+    const zoomByPreset = {
+      street: 18,
+      district: 16,
+      city: 14,
+    } as const
+    setMapZoomLevel(zoomByPreset[preferredMapPreset])
+  }, [preferredMapPreset, hasManualMapZoom])
 
   const { data: location } = useQuery({
     queryKey: ['vehicle', 'location'],
@@ -375,7 +392,10 @@ export function DashboardPage() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setMapZoomLevel((z) => Math.max(13, z - 1))}
+                onClick={() => {
+                  setHasManualMapZoom(true)
+                  setMapZoomLevel((z) => Math.max(13, z - 1))
+                }}
                 className="px-2 py-1 rounded-md border border-border-subtle text-text-secondary hover:text-text-primary"
               >
                 <Minus size={14} />
@@ -383,7 +403,10 @@ export function DashboardPage() {
               <span className="text-xs text-text-muted min-w-14 text-center">Zoom {mapZoomLevel}</span>
               <button
                 type="button"
-                onClick={() => setMapZoomLevel((z) => Math.min(18, z + 1))}
+                onClick={() => {
+                  setHasManualMapZoom(true)
+                  setMapZoomLevel((z) => Math.min(18, z + 1))
+                }}
                 className="px-2 py-1 rounded-md border border-border-subtle text-text-secondary hover:text-text-primary"
               >
                 <Plus size={14} />
@@ -394,21 +417,30 @@ export function DashboardPage() {
           <div className="mt-3 flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => setMapZoomLevel(18)}
+              onClick={() => {
+                setHasManualMapZoom(true)
+                setMapZoomLevel(18)
+              }}
               className={cn('px-2.5 py-1 rounded-md border text-xs transition-colors', mapPreset === 'street' ? 'border-accent-500/40 bg-accent-500/10 text-accent-400' : 'border-border-subtle text-text-secondary hover:text-text-primary')}
             >
               Rue
             </button>
             <button
               type="button"
-              onClick={() => setMapZoomLevel(16)}
+              onClick={() => {
+                setHasManualMapZoom(true)
+                setMapZoomLevel(16)
+              }}
               className={cn('px-2.5 py-1 rounded-md border text-xs transition-colors', mapPreset === 'district' ? 'border-accent-500/40 bg-accent-500/10 text-accent-400' : 'border-border-subtle text-text-secondary hover:text-text-primary')}
             >
               Quartier
             </button>
             <button
               type="button"
-              onClick={() => setMapZoomLevel(14)}
+              onClick={() => {
+                setHasManualMapZoom(true)
+                setMapZoomLevel(14)
+              }}
               className={cn('px-2.5 py-1 rounded-md border text-xs transition-colors', mapPreset === 'city' ? 'border-accent-500/40 bg-accent-500/10 text-accent-400' : 'border-border-subtle text-text-secondary hover:text-text-primary')}
             >
               Ville

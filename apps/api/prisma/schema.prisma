@@ -401,6 +401,7 @@ model UserSettings {
   // App
   timezone     String @default("Europe/Paris")
   ecoModeEnabled Boolean @default(true)
+  dashboardMapZoomPreset String @default("street")
 
   // MQTT / Home Assistant
   mqttEnabled  Boolean @default(false)

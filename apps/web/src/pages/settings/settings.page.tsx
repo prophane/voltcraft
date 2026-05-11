@@ -206,6 +206,18 @@ export function SettingsPage() {
                 <option value="fahrenheit">Fahrenheit</option>
               </select>
             </div>
+            <div>
+              <label className="stat-label block mb-1">Vue carte par défaut</label>
+              <select
+                className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                defaultValue={s?.['dashboardMapZoomPreset'] as string ?? 'street'}
+                onChange={(e) => updateMutation.mutate({ dashboardMapZoomPreset: e.target.value })}
+              >
+                <option value="street">Rue</option>
+                <option value="district">Quartier</option>
+                <option value="city">Ville</option>
+              </select>
+            </div>
           </div>
 
           <div>

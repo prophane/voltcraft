@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const updateSettingsSchema = z.object({
   distanceUnit: z.enum(['km', 'miles']).optional(),
   temperatureUnit: z.enum(['celsius', 'fahrenheit']).optional(),
+  dashboardMapZoomPreset: z.enum(['street', 'district', 'city']).optional(),
   pricePerKwh: z.number().min(0).max(10).optional(),
   minTripDistanceKm: z.number().min(0).max(200).optional(),
   diagnosticsFreshnessWarnMin: z.number().int().min(1).max(180).optional(),
