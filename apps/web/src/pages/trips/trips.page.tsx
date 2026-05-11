@@ -47,6 +47,8 @@ type TripPathInsights = {
   speedBins: SpeedBin[]
 }
 
+type LatLonTuple = [number, number]
+
 type TripTab = 'all' | 'work' | 'personal'
 type ResolvedTripAddresses = Record<string, { start: string | null; end: string | null }>
 type HomeLocation = { lat: number; lon: number; radiusM: number }
@@ -330,6 +332,7 @@ export function TripsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState<TripTab>('all')
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
+  const [visibleCount, setVisibleCount] = useState(10)
   const hasHydratedTripFromUrl = useRef(false)
 
   const { data: settingsData } = useQuery({
@@ -385,10 +388,15 @@ export function TripsPage() {
     }
   }, [settingsData])
 
-  const trips = useMemo(
-    () => normalizeTrips(data).filter((trip) => isMeaningfulTrip(trip, minTripDistanceKm)),
-    [data, minTripDistanceKm],
-  )
+  const trips = useMemo(() => {
+    return normalizeTrips(data)
+      .filter((trip) => isMeaningfulTrip(trip, minTripDistanceKm))
+      .sort((a, b) => {
+        const aTime = new Date(a.startedAt).getTime()
+        const bTime = new Date(b.startedAt).getTime()
+        return bTime - aTime
+      })
+  }, [data, minTripDistanceKm])
   const selectedTrip = useMemo(() => normalizeTrip(selectedTripData), [selectedTripData])
   const selectedPath = useMemo(() => normalizePath(selectedPathData), [selectedPathData])
 
@@ -522,6 +530,8 @@ export function TripsPage() {
     return trips.filter((t) => !isWorkTrip(t))
   }, [tab, trips])
 
+  const displayedTrips = useMemo(() => filteredTrips.slice(0, visibleCount), [filteredTrips, visibleCount])
+
   const activeTrip = useMemo(
     () => filteredTrips.find((trip) => String(trip.id) === selectedTripId) ?? null,
     [filteredTrips, selectedTripId],
@@ -531,13 +541,12 @@ export function TripsPage() {
     queryKey: [
       'trips',
       'list-addresses',
-      filteredTrips
-        .slice(0, 20)
+      displayedTrips
         .map((trip) => `${trip.id}:${trip.startLatitude ?? ''}:${trip.startLongitude ?? ''}:${trip.endLatitude ?? ''}:${trip.endLongitude ?? ''}`)
         .join('|'),
     ],
     queryFn: async () => {
-      const candidates = filteredTrips.slice(0, 20)
+      const candidates = displayedTrips
       const entries = await Promise.all(candidates.map(async (trip) => {
         const start = trip.startAddress && trip.startAddress.trim().length > 0
           ? trip.startAddress
@@ -553,9 +562,43 @@ export function TripsPage() {
       }))
       return Object.fromEntries(entries) as ResolvedTripAddresses
     },
-    enabled: filteredTrips.length > 0,
+    enabled: displayedTrips.length > 0,
     staleTime: 30 * 60_000,
   })
+
+  const { data: listPreviewRoutes } = useQuery({
+    queryKey: ['trips', 'list-preview-routes', displayedTrips.map((trip) => String(trip.id)).join('|')],
+    queryFn: async () => {
+      const entries = await Promise.all(displayedTrips.map(async (trip) => {
+        const start = trip.startLatitude != null && trip.startLongitude != null
+          ? { lat: trip.startLatitude, lon: trip.startLongitude }
+          : null
+        const end = trip.endLatitude != null && trip.endLongitude != null
+          ? { lat: trip.endLatitude, lon: trip.endLongitude }
+          : null
+
+        if (!start || !end) {
+          return [String(trip.id), [] as LatLonTuple[]] as const
+        }
+
+        try {
+          const rawPath = await tripsApi.path(String(trip.id))
+          const path = normalizePath(rawPath)
+          const route = normalizeRoutePoints(start, end, path)
+          return [String(trip.id), route] as const
+        } catch {
+          return [String(trip.id), normalizeRoutePoints(start, end, [])] as const
+        }
+      }))
+      return Object.fromEntries(entries) as Record<string, LatLonTuple[]>
+    },
+    enabled: displayedTrips.length > 0,
+    staleTime: 10 * 60_000,
+  })
+
+  useEffect(() => {
+    setVisibleCount(10)
+  }, [tab])
 
   const summary = useMemo(() => {
     const totalDistance = filteredTrips.reduce((acc, t) => acc + (t.distanceKm ?? 0), 0)
@@ -623,7 +666,7 @@ export function TripsPage() {
         <Card className="text-center py-12 text-text-muted">Aucun trajet enregistré</Card>
       ) : (
         <div className="space-y-3">
-          {filteredTrips.map((trip) => {
+          {displayedTrips.map((trip) => {
             const tripId = String(trip.id)
             const isSelected = selectedTripId === tripId
             const detailTrip = isSelected && selectedTrip?.id === tripId ? selectedTrip : trip
@@ -649,6 +692,12 @@ export function TripsPage() {
             const detailEndCoords = detailTrip.endLatitude != null && detailTrip.endLongitude != null
               ? { lat: detailTrip.endLatitude, lon: detailTrip.endLongitude }
               : null
+            const fallbackPreviewRoute = detailStartCoords && detailEndCoords
+              ? [[detailStartCoords.lat, detailStartCoords.lon], [detailEndCoords.lat, detailEndCoords.lon]] as LatLonTuple[]
+              : []
+            const previewRoutePoints = isSelected && selectedDisplayedRoutePoints.length > 0
+              ? selectedDisplayedRoutePoints
+              : (listPreviewRoutes?.[tripId] ?? fallbackPreviewRoute)
             const detailRoutePoints = isSelected ? selectedDisplayedRoutePoints : []
             const pathInsights = isSelected ? buildPathInsights(selectedPath) : null
             const avgSpeedFromTrip = detailTrip != null && (detailTrip.distanceKm ?? 0) > 0 && (detailTrip.durationMin ?? 0) > 0
@@ -697,6 +746,7 @@ export function TripsPage() {
                   <TripRoutePreview
                     start={detailStartCoords}
                     end={detailEndCoords}
+                    routePoints={previewRoutePoints}
                     startLabel={startLabel}
                     endLabel={endLabel}
                   />
@@ -851,6 +901,21 @@ export function TripsPage() {
             </Card>
             )
           })}
+
+          {filteredTrips.length > displayedTrips.length && (
+            <div className="flex items-center justify-between px-1 pt-1">
+              <p className="text-xs text-text-muted">
+                {displayedTrips.length} sur {filteredTrips.length} trajets affichés
+              </p>
+              <button
+                type="button"
+                onClick={() => setVisibleCount((count) => Math.min(filteredTrips.length, count + 10))}
+                className="px-3 py-1.5 rounded-md border border-border-subtle text-text-secondary hover:text-text-primary text-sm"
+              >
+                Charger plus
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -861,15 +926,64 @@ export function TripsPage() {
 function TripRoutePreview({
   start,
   end,
+  routePoints,
   startLabel,
   endLabel,
 }: {
   start: { lat: number; lon: number } | null
   end: { lat: number; lon: number } | null
+  routePoints: LatLonTuple[]
   startLabel: string
   endLabel: string
 }) {
   const hasCoords = !!start && !!end
+  const simplified = useMemo(() => {
+    if (!Array.isArray(routePoints) || routePoints.length <= 24) return routePoints
+    const step = Math.ceil(routePoints.length / 24)
+    const sampled: LatLonTuple[] = []
+    for (let i = 0; i < routePoints.length; i += step) {
+      const point = routePoints[i]
+      if (point) sampled.push(point)
+    }
+    const last = routePoints[routePoints.length - 1]
+    if (last && sampled[sampled.length - 1] !== last) sampled.push(last)
+    return sampled
+  }, [routePoints])
+
+  const previewPath = useMemo(() => {
+    if (!simplified || simplified.length < 2) return null
+
+    const lats = simplified.map((p) => p[0])
+    const lons = simplified.map((p) => p[1])
+    const minLat = Math.min(...lats)
+    const maxLat = Math.max(...lats)
+    const minLon = Math.min(...lons)
+    const maxLon = Math.max(...lons)
+
+    const width = 280
+    const height = 38
+    const pad = 8
+    const drawWidth = width - pad * 2
+    const drawHeight = height - pad * 2
+    const lonSpan = Math.max(maxLon - minLon, 0.00001)
+    const latSpan = Math.max(maxLat - minLat, 0.00001)
+
+    const scaled = simplified.map(([lat, lon]) => {
+      const x = pad + ((lon - minLon) / lonSpan) * drawWidth
+      const y = pad + (1 - ((lat - minLat) / latSpan)) * drawHeight
+      return [x, y] as const
+    })
+
+    const path = scaled
+      .map(([x, y], index) => `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`)
+      .join(' ')
+
+    return {
+      path,
+      start: scaled[0] as readonly [number, number],
+      end: scaled[scaled.length - 1] as readonly [number, number],
+    }
+  }, [simplified])
 
   return (
     <div className="rounded-lg border border-border-subtle bg-bg-overlay/50 h-24 px-3 py-2">
@@ -880,11 +994,21 @@ function TripRoutePreview({
             <span className="truncate max-w-[42%] text-right">{endLabel}</span>
           </div>
           <svg viewBox="0 0 280 38" className="w-full h-10" role="img" aria-label="Aperçu itinéraire">
-            <path d="M 18 19 C 90 8, 190 30, 262 19" fill="none" stroke="#f97316" strokeWidth="4" strokeLinecap="round" />
-            <circle cx="18" cy="19" r="5" fill="#16a34a" />
-            <circle cx="262" cy="19" r="5" fill="#ef4444" />
+            {previewPath ? (
+              <>
+                <path d={previewPath.path} fill="none" stroke="#f97316" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
+                <circle cx={previewPath.start[0]} cy={previewPath.start[1]} r="4.5" fill="#16a34a" />
+                <circle cx={previewPath.end[0]} cy={previewPath.end[1]} r="4.5" fill="#ef4444" />
+              </>
+            ) : (
+              <>
+                <path d="M 18 19 L 262 19" fill="none" stroke="#f97316" strokeWidth="3" strokeLinecap="round" />
+                <circle cx="18" cy="19" r="4.5" fill="#16a34a" />
+                <circle cx="262" cy="19" r="4.5" fill="#ef4444" />
+              </>
+            )}
           </svg>
-          <p className="text-[11px] text-text-muted">Aperçu rapide de l'itinéraire</p>
+          <p className="text-[11px] text-text-muted">Aperçu simplifié du tracé réel</p>
         </div>
       ) : (
         <div className="h-full flex items-center justify-center text-xs text-text-muted">Coordonnées manquantes pour l'aperçu</div>
