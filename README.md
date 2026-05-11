@@ -22,6 +22,27 @@ Services principaux:
 - `mqtt` : broker Mosquitto pour integrations MQTT
 - `vehicle-command` : proxy Tesla pour commandes signees
 
+Schema de fonctionnement (vue d'ensemble):
+
+```mermaid
+flowchart LR
+	U[Utilisateur<br/>Navigateur] --> W[Web UI<br/>React/Vite]
+	W --> A[API Voltcraft<br/>Fastify]
+
+	A --> P[(PostgreSQL<br/>Voltcraft)]
+	A --> R[(Redis<br/>cache/jobs)]
+	A --> M[(MQTT Broker<br/>Mosquitto)]
+
+	A --> VC[vehicle-command<br/>proxy Tesla]
+	VC --> TF[Tesla Fleet API]
+
+	A -. optionnel .-> TM[TeslaMate Read Service]
+	TM --> TDB[(TeslaMate DB)]
+
+	TF --> A
+	TDB --> A
+```
+
 Services optionnels sous profil `teslamate`:
 - `teslamate`
 - `teslamate-db`
