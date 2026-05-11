@@ -273,6 +273,14 @@ export function ChargesPage() {
       ) : (
         <div className="space-y-3">
           {sessions.map((session) => (
+            (() => {
+              const isOngoingCharge = session.endedAt == null
+              const primaryChargeKw = isOngoingCharge
+                ? (session.chargerPower ?? session.avgChargeKw ?? session.maxChargeKw)
+                : (session.avgChargeKw ?? session.maxChargeKw ?? session.chargerPower)
+              const speedLabel = isOngoingCharge ? 'Vitesse charge' : 'Vitesse moyenne'
+
+              return (
             <Card key={session['id'] as string} className="surface-premium">
               <div className="space-y-3">
                 <div className="flex items-center justify-between flex-wrap gap-3">
@@ -316,8 +324,8 @@ export function ChargesPage() {
                     <p className="text-text-primary font-medium mt-1">{chargeTypeLabel(session.chargeType)}</p>
                   </div>
                   <div className="p-2 rounded-lg bg-bg-overlay/50 border border-border-subtle">
-                    <p className="text-[11px] uppercase text-text-muted">Vitesse charge</p>
-                    <p className="text-text-primary font-medium mt-1 inline-flex items-center gap-1"><Gauge size={12} /> {session.chargerPower != null ? `${session.chargerPower.toFixed(0)} kW` : '—'}</p>
+                    <p className="text-[11px] uppercase text-text-muted">{speedLabel}</p>
+                    <p className="text-text-primary font-medium mt-1 inline-flex items-center gap-1"><Gauge size={12} /> {primaryChargeKw != null ? `${primaryChargeKw.toFixed(1)} kW` : '—'}</p>
                     <p className="text-[11px] text-text-muted mt-1">Max {session.maxChargeKw != null ? `${session.maxChargeKw.toFixed(0)} kW` : '—'} / Moy {session.avgChargeKw != null ? `${session.avgChargeKw.toFixed(0)} kW` : '—'}</p>
                   </div>
                   <div className="p-2 rounded-lg bg-bg-overlay/50 border border-border-subtle">
@@ -376,6 +384,8 @@ export function ChargesPage() {
                 )}
               </div>
             </Card>
+              )
+            })()
           ))}
         </div>
       )}
