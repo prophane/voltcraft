@@ -1,8 +1,30 @@
-<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="32" cy="32" r="26" stroke="#0F172A" stroke-width="2.5" opacity="0.22"/>
-  <path d="M32 6A26 26 0 0 1 55 20" stroke="#E11D48" stroke-width="3" stroke-linecap="round"/>
-  <path d="M9 24A26 26 0 0 0 21 54" stroke="#0F172A" stroke-width="3" stroke-linecap="round"/>
-  <path d="M18 21L32 46L46 21" stroke="#0F172A" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="49" cy="18" r="2" fill="#E11D48" opacity="0.92"/>
-  <circle cx="15" cy="46" r="2" fill="#0F172A" opacity="0.85"/>
+<svg width="64" height="64" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>{`
+      @keyframes energyPulse {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 1; }
+      }
+      .energy-dot { animation: energyPulse 2.4s ease-in-out infinite; }
+    `}</style>
+  </defs>
+  
+  <!-- Outer ring - circuit boundary -->
+  <circle cx="40" cy="40" r="35" stroke="#0F172A" stroke-width="1.5" opacity="0.18"/>
+  
+  <!-- Energy flow arc - top right (accent red) -->
+  <path d="M 40 10 A 30 30 0 0 1 65 25" stroke="#E11D48" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.7"/>
+  
+  <!-- Energy flow arc - bottom left (dark slate) -->
+  <path d="M 15 55 A 30 30 0 0 1 40 70" stroke="#0F172A" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.65"/>
+
+  <!-- Core V - premium stylized -->
+  <path d="M 25 32 Q 40 55 55 32" stroke="#0F172A" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Energy nodes -->
+  <circle cx="65" cy="20" r="2.2" fill="#E11D48" opacity="0.92"/>
+  <circle cx="15" cy="60" r="2.2" fill="#0F172A" opacity="0.8"/>
+  
+  <!-- Center point -->
+  <circle cx="40" cy="40" r="1.8" fill="#0F172A" opacity="0.95"/>
 </svg>
