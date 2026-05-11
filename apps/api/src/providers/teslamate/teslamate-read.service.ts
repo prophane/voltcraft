@@ -73,6 +73,7 @@ type TeslaMateVehicleRow = {
   charger_phases: number | null
   charger_actual_current: number | null
   charger_voltage: number | null
+  conn_charge_cable?: string | null
 }
 
 function toNumber(value: unknown): number | null {
@@ -384,7 +385,7 @@ export class TeslaMateReadService {
     const chargePower = toNumber(row.charger_power)
     const chargerCurrent = toNumber(row.charger_actual_current)
     const chargeSignalFresh = isChargeSignalFresh(row.captured_at, row.charge_captured_at)
-    const isPluggedIn = row.open_charge_id != null && chargeSignalFresh
+    const isPluggedIn = row.conn_charge_cable != null && row.conn_charge_cable !== 'None'
     const isCharging = row.open_charge_id != null
       ? (
         chargeSignalFresh && (
@@ -1039,7 +1040,8 @@ export class TeslaMateReadService {
           ch.charger_power,
           ch.charger_phases,
           ch.charger_actual_current,
-          ch.charger_voltage
+          ch.charger_voltage,
+          ch.conn_charge_cable
         FROM cars c
         LEFT JOIN LATERAL (
           SELECT *
