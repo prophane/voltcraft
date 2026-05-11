@@ -48,8 +48,17 @@ export class TeslaSyncService {
         latitude,
         longitude,
       )
-      const inferredDrivingFromMotion = movedKm >= 0.05 && data.state !== 'asleep' && data.state !== 'offline'
-      const isDrivingNow = (driveState.speed ?? 0) > 0 || shiftState === 'd' || shiftState === 'r' || inferredDrivingFromMotion
+      const speedKmh = driveState.speed != null ? driveState.speed * 1.609344 : null
+      const powerKw = driveState.power ?? 0
+      const hasExplicitDrivingSignal = (speedKmh ?? 0) > 0.5 || shiftState === 'd' || shiftState === 'r'
+      // Only infer motion when Tesla omits speed/gear but power and GPS still clearly indicate movement.
+      const inferredDrivingFromMotion =
+        !hasExplicitDrivingSignal
+        && movedKm >= 0.15
+        && Math.abs(powerKw) >= 3
+        && data.state !== 'asleep'
+        && data.state !== 'offline'
+      const isDrivingNow = hasExplicitDrivingSignal || inferredDrivingFromMotion
 
       const isAsleep = data.state === 'asleep' || data.state === 'offline'
       const snapshotForDb = {
@@ -76,7 +85,7 @@ export class TeslaSyncService {
         isFrunkOpen: (vehicleState.ft ?? 0) > 0,
 
         isDriving: isDrivingNow,
-        speed: driveState.speed != null ? driveState.speed * 1.609344 : null,
+        speed: speedKmh,
         power: driveState.power ?? null,
 
         latitude,

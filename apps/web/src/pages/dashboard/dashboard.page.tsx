@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { vehicleApi, statsApi, settingsApi, tripsApi } from '@/features/vehicle/api'
 import { useVehicleComposedState } from '@/hooks/use-vehicle-composed-state'
 import { Card } from '@/components/ui/card'
-import { Lock, Unlock, MapPin, Plus, Minus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Lock, Unlock, MapPin, Plus, Minus, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { cn, formatDate } from '@/lib/utils'
 
@@ -127,7 +128,19 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 export function DashboardPage() {
-  const [mapZoomLevel, setMapZoomLevel] = useState(14)
+  const [mapZoomLevel, setMapZoomLevel] = useState(16)
+  const queryClient = useQueryClient()
+
+  const syncMutation = useMutation({
+    mutationFn: () => vehicleApi.sync(),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['vehicle', 'current'] }),
+        queryClient.invalidateQueries({ queryKey: ['vehicle', 'state'] }),
+        queryClient.invalidateQueries({ queryKey: ['vehicle', 'location'] }),
+      ])
+    },
+  })
 
   const { data: vehicle } = useQuery({
     queryKey: ['vehicle', 'current'],
@@ -211,22 +224,6 @@ export function DashboardPage() {
     return looksLikeVin ? `Tesla ${name.slice(-6)}` : name
   }, [vehicle?.displayName])
 
-  const statusLabel = useMemo(() => {
-    if (state?.isCharging) return 'En charge'
-    if (state?.isPluggedIn) return 'Branche'
-    if (!vehicle?.state) return hasTelemetry ? 'En ligne' : 'Aucune donnee pour le moment'
-
-    const stateLabels: Record<string, string> = {
-      online: 'En ligne',
-      offline: 'Hors ligne',
-      asleep: 'En veille',
-      charging: 'En charge',
-      driving: 'En conduite',
-    }
-
-    return stateLabels[vehicle.state] ?? vehicle.state
-  }, [hasTelemetry, state?.isCharging, state?.isPluggedIn, vehicle?.state])
-
   const extendedState = state as (typeof state & {
     chargeLimitSoc?: number | null
     odometer?: number | null
@@ -283,13 +280,16 @@ export function DashboardPage() {
   })
 
   const statusDetail = vehicleComposedState.label
+  const statusLabel = hasTelemetry || vehicle?.state
+    ? vehicleComposedState.label
+    : 'Aucune donnee pour le moment'
 
   const mapEmbedUrl = useMemo(() => {
     if (latitude == null || longitude == null) return null
     const lon = longitude
     const lat = latitude
-    const safeZoom = Math.max(11, Math.min(17, mapZoomLevel))
-    const delta = 0.2 / (2 ** (safeZoom - 10))
+    const safeZoom = Math.max(13, Math.min(18, mapZoomLevel))
+    const delta = 0.14 / (2 ** (safeZoom - 10))
     const left = lon - delta
     const right = lon + delta
     const top = lat + delta
@@ -298,8 +298,8 @@ export function DashboardPage() {
   }, [latitude, longitude, mapZoomLevel])
 
   const mapPreset = useMemo(() => {
-    if (mapZoomLevel >= 16) return 'street'
-    if (mapZoomLevel <= 12) return 'city'
+    if (mapZoomLevel >= 17) return 'street'
+    if (mapZoomLevel <= 14) return 'city'
     return 'district'
   }, [mapZoomLevel])
 
@@ -310,6 +310,15 @@ export function DashboardPage() {
           <h1 className="text-4xl font-semibold tracking-tight text-text-primary">Tableau de bord</h1>
           <p className="text-sm text-text-muted mt-1">{state ? (state.isCached ? 'Donnees cache' : 'Donnees fraiches') : 'Synchronisation requise'}</p>
         </div>
+        <Button
+          variant="secondary"
+          onClick={() => syncMutation.mutate()}
+          disabled={syncMutation.isPending}
+          className="shrink-0 gap-2"
+        >
+          <RefreshCw size={14} className={syncMutation.isPending ? 'animate-spin' : ''} />
+          {syncMutation.isPending ? 'Synchronisation...' : 'Actualiser'}
+        </Button>
       </div>
 
       <div className="grid lg:grid-cols-[420px_minmax(0,1fr)] gap-5 items-start">
@@ -331,7 +340,7 @@ export function DashboardPage() {
 
           <p className="text-center text-sm text-text-muted -mt-2">
             <MapPin size={12} className="inline mr-1" />
-            {vehicle?.lastSeenAt ? `Stationné · ${formatDate(vehicle.lastSeenAt)}` : 'En attente de la première télémétrie'}
+            {vehicle?.lastSeenAt ? `${statusDetail} · ${formatDate(vehicle.lastSeenAt)}` : 'En attente de la première télémétrie'}
           </p>
 
           <div className="mt-5 rounded-2xl border border-border-subtle bg-bg-overlay/70 p-4">
@@ -366,7 +375,7 @@ export function DashboardPage() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setMapZoomLevel((z) => Math.max(11, z - 1))}
+                onClick={() => setMapZoomLevel((z) => Math.max(13, z - 1))}
                 className="px-2 py-1 rounded-md border border-border-subtle text-text-secondary hover:text-text-primary"
               >
                 <Minus size={14} />
@@ -374,7 +383,7 @@ export function DashboardPage() {
               <span className="text-xs text-text-muted min-w-14 text-center">Zoom {mapZoomLevel}</span>
               <button
                 type="button"
-                onClick={() => setMapZoomLevel((z) => Math.min(17, z + 1))}
+                onClick={() => setMapZoomLevel((z) => Math.min(18, z + 1))}
                 className="px-2 py-1 rounded-md border border-border-subtle text-text-secondary hover:text-text-primary"
               >
                 <Plus size={14} />
@@ -385,21 +394,21 @@ export function DashboardPage() {
           <div className="mt-3 flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => setMapZoomLevel(16)}
+              onClick={() => setMapZoomLevel(18)}
               className={cn('px-2.5 py-1 rounded-md border text-xs transition-colors', mapPreset === 'street' ? 'border-accent-500/40 bg-accent-500/10 text-accent-400' : 'border-border-subtle text-text-secondary hover:text-text-primary')}
             >
               Rue
             </button>
             <button
               type="button"
-              onClick={() => setMapZoomLevel(14)}
+              onClick={() => setMapZoomLevel(16)}
               className={cn('px-2.5 py-1 rounded-md border text-xs transition-colors', mapPreset === 'district' ? 'border-accent-500/40 bg-accent-500/10 text-accent-400' : 'border-border-subtle text-text-secondary hover:text-text-primary')}
             >
               Quartier
             </button>
             <button
               type="button"
-              onClick={() => setMapZoomLevel(12)}
+              onClick={() => setMapZoomLevel(14)}
               className={cn('px-2.5 py-1 rounded-md border text-xs transition-colors', mapPreset === 'city' ? 'border-accent-500/40 bg-accent-500/10 text-accent-400' : 'border-border-subtle text-text-secondary hover:text-text-primary')}
             >
               Ville
