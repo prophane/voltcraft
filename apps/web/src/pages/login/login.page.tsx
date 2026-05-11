@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/features/auth/store'
 import { api } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
-import { Zap } from 'lucide-react'
+import VoltcraftLogo from '@/components/branding/voltcraft-logo'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -29,9 +29,7 @@ export function LoginPage() {
       <div className="w-full max-w-sm space-y-8">
         {/* Logo */}
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-accent-500 mb-4 shadow-glow">
-            <Zap size={28} className="text-white" />
-          </div>
+          <VoltcraftLogo size={56} className="text-accent-500 mb-4" />
           <h1 className="text-3xl font-bold text-text-primary">Voltcraft</h1>
           <p className="text-text-secondary text-sm mt-1">Tesla Fleet Companion · Self-hosted</p>
         </div>

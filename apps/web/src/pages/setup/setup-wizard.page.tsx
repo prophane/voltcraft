@@ -5,7 +5,8 @@ import { useAuthStore } from '@/features/auth/store'
 import { api } from '@/lib/api-client'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Zap, CheckCircle2, ArrowRight } from 'lucide-react'
+import { CheckCircle2, ArrowRight } from 'lucide-react'
+import VoltcraftLogo from '@/components/branding/voltcraft-logo'
 
 type Step = 'admin' | 'tesla' | 'optional' | 'complete'
 type TeslaRegion = 'na' | 'eu' | 'cn'
@@ -151,9 +152,7 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
       <div className="min-h-screen bg-bg-base flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-2xl space-y-8">
           <div className="text-center">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-accent-500 mb-4 shadow-glow animate-pulse">
-              <Zap size={28} className="text-white" />
-            </div>
+            <VoltcraftLogo size={56} className="text-accent-500 mb-4 animate-pulse" />
             <p className="text-text-secondary">Loading setup wizard...</p>
           </div>
         </div>
@@ -166,9 +165,7 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
       <div className="w-full max-w-2xl space-y-8">
         {/* Logo */}
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-accent-500 mb-4 shadow-glow">
-            <Zap size={28} className="text-white" />
-          </div>
+          <VoltcraftLogo size={56} className="text-accent-500 mb-4" />
           <h1 className="text-3xl font-bold text-text-primary">Voltcraft Setup</h1>
           <p className="text-text-secondary text-sm mt-1">
             First-time initialization · Self-hosted Tesla Fleet Companion

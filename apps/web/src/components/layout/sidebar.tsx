@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom'
-import { LogOut, Zap } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/features/auth/store'
 import { api } from '@/lib/api-client'
 import { MENU_ICON_REGISTRY } from './nav-config'
 import { useNavPreferences } from '@/features/preferences/nav-preferences'
+import VoltcraftLogo from '@/components/branding/voltcraft-logo'
 
 export function Sidebar() {
   const logout = useAuthStore((s) => s.logout)
@@ -18,11 +19,8 @@ export function Sidebar() {
   return (
     <aside className="hidden lg:flex flex-col w-64 min-h-screen bg-bg-surface border-r border-border-subtle py-6 px-3 fixed left-0 top-0 bottom-0 z-30">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-3 mb-8">
-        <div className="w-8 h-8 rounded-lg bg-accent-500 flex items-center justify-center">
-          <Zap size={16} className="text-white" />
-        </div>
-        <span className="text-lg font-semibold text-text-primary tracking-tight">Voltcraft</span>
+      <div className="px-3 mb-8">
+        <VoltcraftLogo size={32} showWordmark className="text-text-primary" />
       </div>
 
       {/* Nav */}
