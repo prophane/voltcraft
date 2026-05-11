@@ -1,8 +1,8 @@
 # Quick Start Voltcraft
 
-Ce guide est la version courte. Pour la procedure complete de production, voir [DEPLOYMENT.md](DEPLOYMENT.md).
+Guide court pour demarrer vite. Pour la procedure complete d'exploitation et de production, voir [DEPLOYMENT.md](D:/voltcraft/DEPLOYMENT.md).
 
-## 1) Preparation
+## 1) Recuperer le projet
 
 ```bash
 git clone https://github.com/prophane/voltcraft.git
@@ -10,22 +10,25 @@ cd voltcraft
 cp .env.example .env
 ```
 
-Editer .env et definir au minimum:
-- POSTGRES_PASSWORD
-- REDIS_PASSWORD
-- SESSION_SECRET
-- ENCRYPTION_KEY
-- TESLA_CLIENT_ID
-- TESLA_CLIENT_SECRET
-- TESLA_REDIRECT_URI
-- TESLA_REGION
+## 2) Renseigner le minimum dans `.env`
 
-Si profil TeslaMate:
-- TESLAMATE_DB_PASSWORD
-- TESLAMATE_ENCRYPTION_KEY
-- TESLAMATE_GRAFANA_PASSWORD
+Valeurs obligatoires:
+- `POSTGRES_PASSWORD`
+- `REDIS_PASSWORD`
+- `SESSION_SECRET`
+- `ENCRYPTION_KEY`
 
-## 2) Demarrage
+Valeurs recommandees selon votre mode d'acces:
+- `AUTH_DISABLED=true` si l'application est derriere un reverse proxy avec pre-authentification
+- `TESLA_REDIRECT_URI` avec votre domaine public si vous utiliserez l'OAuth Tesla
+- `TESLA_REGION` (`na`, `eu`, `cn`)
+
+Si vous activez TeslaMate:
+- `TESLAMATE_DB_PASSWORD`
+- `TESLAMATE_ENCRYPTION_KEY`
+- `TESLAMATE_GRAFANA_PASSWORD`
+
+## 3) Demarrer la stack
 
 Sans TeslaMate:
 
@@ -39,30 +42,60 @@ Avec TeslaMate:
 docker compose --profile teslamate up -d
 ```
 
-## 3) Verification
+## 4) Ouvrir l'application
+
+Par defaut:
+- interface principale: `http://localhost:3000`
+- API backend: `http://localhost:3001`
+- healthcheck: `http://localhost:3001/health`
+
+## 5) Completer la configuration initiale
+
+Si `AUTH_DISABLED=true`:
+- l'assistant saute la creation de compte local
+- il demande directement la configuration OAuth Tesla
+
+Si `AUTH_DISABLED=false`:
+- l'assistant cree un compte admin local
+- puis demande la configuration OAuth Tesla
+
+Vous pourrez ensuite retrouver la configuration Tesla dans Parametres.
+
+## 6) Verification rapide
 
 ```bash
-docker compose --profile teslamate ps
-docker compose --profile teslamate logs -f api
+docker compose ps
+docker compose logs --tail=200 api
 ```
 
-Endpoints a tester:
-- /health
-- /api/vehicle/current
-- /api/stats/summary?days=30
-- /api/vehicle/state
+Endpoints utiles:
+- `GET /health`
+- `GET /api/config`
+- `GET /api/vehicle/current`
+- `GET /api/vehicle/state`
+- `GET /api/stats/summary?days=30`
 
-## 4) Mise a jour
+## 7) Mise a jour
+
+Sans TeslaMate:
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+Avec TeslaMate:
 
 ```bash
 git pull
 docker compose --profile teslamate up -d --build
 ```
 
-## 5) Si interface vide
+## 8) Si l'interface semble incoherente
 
 1. Faire un hard refresh navigateur
-2. Verifier les logs api
-3. Verifier la coherence mot de passe TeslaMate DB entre .env et volume teslamate-db
-4. Suivre la section depannage de [DEPLOYMENT.md](DEPLOYMENT.md)
-5. Ouvrir la page /diagnostics pour verifier les statuts services et Fleet API
+2. Cliquer sur `Actualiser` dans le dashboard pour forcer une synchro vehicule
+3. Verifier `docker compose logs --tail=200 api`
+4. Verifier `GET /api/config`
+5. Si TeslaMate est active, verifier la coherence des credentials TeslaMate
+6. Consulter la section depannage de [DEPLOYMENT.md](D:/voltcraft/DEPLOYMENT.md)

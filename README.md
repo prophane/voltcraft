@@ -1,51 +1,70 @@
 # Voltcraft
 
-Voltcraft est une application web auto-hebergee pour piloter et suivre un vehicule Tesla avec une architecture locale, dockerisee, et orientee maitrise des appels Tesla Fleet API.
+Voltcraft est une application web auto-hebergee pour piloter, superviser et historiser un vehicule Tesla avec une architecture locale et dockerisee. L'application privilegie la maitrise des appels Tesla Fleet API, le cache intelligent et l'exploitation locale sans SaaS obligatoire.
 
-Tesla est une marque de Tesla, Inc. Voltcraft est un projet independant non affilie a Tesla.
+Tesla est une marque de Tesla, Inc. Voltcraft est un projet independant et non affilie a Tesla.
 
-## Objectif du projet
+## Ce que fait Voltcraft
 
-- Pilotage et supervision vehicule depuis une UI unique
-- Historique trajets, charges et statistiques
-- Integration TeslaMate possible en backend telemetry
-- Integration MQTT/Home Assistant
-- Deploiement local sans SaaS obligatoire
+- Tableau de bord temps reel avec etat compose du vehicule
+- Commandes vehicule via Tesla Fleet API et proxy `vehicle-command`
+- Historique trajets, charges, statistiques et diagnostics
+- Support optionnel de TeslaMate comme backend telemetry/historique
+- Integration MQTT / Home Assistant
+- Mode `AUTH_DISABLED` pour reverse proxy avec pre-authentification amont
 
-## Architecture
+## Architecture actuelle
 
-Services principaux (profil par defaut):
-- web + api
-- db (PostgreSQL)
-- redis
-- mqtt
-- vehicle-command (proxy commandes signees)
+Services principaux:
+- `api` : backend Fastify qui sert aussi l'application web
+- `db` : PostgreSQL principal Voltcraft
+- `redis` : cache / coordination / BullMQ
+- `mqtt` : broker Mosquitto pour integrations MQTT
+- `vehicle-command` : proxy Tesla pour commandes signees
 
-Services optionnels (profil teslamate):
-- teslamate
-- teslamate-db
-- teslamate-mqtt
-- teslamate-grafana
+Services optionnels sous profil `teslamate`:
+- `teslamate`
+- `teslamate-db`
+- `teslamate-mqtt`
+- `teslamate-grafana`
 
-Definition des services: [docker-compose.yml](docker-compose.yml)
-
-## Documentation de deploiement
-
-- Demarrage rapide: [QUICKSTART.md](QUICKSTART.md)
-- Mode operatoire complet (prod, upgrade, rollback, diagnostic): [DEPLOYMENT.md](DEPLOYMENT.md)
-- Variables d environnement: [.env.example](.env.example)
+Definition complete des services: [docker-compose.yml](D:/voltcraft/docker-compose.yml)
 
 ## Flux recommande
 
-1. Copier [.env.example](.env.example) vers .env et remplir les secrets
-2. Lancer la stack avec Docker Compose
-3. Configurer OAuth Tesla depuis l UI
-4. Si TeslaMate est active, verifier la coherence des credentials DB TeslaMate cote api et teslamate-db
-5. Valider les endpoints metier et la sante des conteneurs
+1. Copier [.env.example](D:/voltcraft/.env.example) vers `.env`
+2. Renseigner les secrets de base et les ports souhaites
+3. Lancer la stack Docker Compose
+4. Ouvrir Voltcraft dans le navigateur
+5. Completer l'assistant initial ou la page Parametres Tesla pour configurer l'OAuth Tesla
+6. Si TeslaMate est active, verifier la connectivite TeslaMate depuis l'UI Parametres
+
+## Configuration Tesla
+
+Voltcraft supporte aujourd'hui une configuration Tesla basee sur OAuth applicatif.
+
+Deux modes existent:
+- `AUTH_DISABLED=true` : l'assistant initial saute la creation du compte admin et demande uniquement la configuration OAuth Tesla
+- `AUTH_DISABLED=false` : l'assistant cree d'abord un compte admin local, puis demande la configuration OAuth Tesla
+
+La configuration Tesla peut etre mise a jour depuis l'interface dans Parametres. Le backend la persiste dans un fichier runtime (`APP_CONFIG_PATH`, par defaut `/app/data/runtime.env`) monte dans le volume `voltcraft-app-config`.
+
+Champs Tesla principaux:
+- `TESLA_CLIENT_ID`
+- `TESLA_CLIENT_SECRET`
+- `TESLA_REDIRECT_URI`
+- `TESLA_REGION`
+- `TESLA_COMMAND_PROXY_URL`
+
+## Documentation disponible
+
+- Demarrage rapide: [QUICKSTART.md](D:/voltcraft/QUICKSTART.md)
+- Procedure d'exploitation et de deploiement: [DEPLOYMENT.md](D:/voltcraft/DEPLOYMENT.md)
+- Variables d'environnement: [.env.example](D:/voltcraft/.env.example)
 
 ## Commandes utiles
 
-Demarrage stack standard:
+Demarrage standard:
 
 ```bash
 docker compose up -d
@@ -61,34 +80,22 @@ Mise a jour applicative:
 
 ```bash
 git pull
+docker compose up -d --build
+```
+
+Mise a jour applicative avec TeslaMate:
+
+```bash
+git pull
 docker compose --profile teslamate up -d --build
 ```
 
-Etat des services:
+Etat et logs:
 
 ```bash
-docker compose --profile teslamate ps
-docker compose --profile teslamate logs -f api
+docker compose ps
+docker compose logs -f api
 ```
-
-## Deploiement TeslaMate en backend
-
-La partie TeslaMate est consideree optionnelle mais peut devenir la source prioritaire pour les pages historiques et etat cache.
-
-Variables critiques:
-- TESLAMATE_DB_HOST
-- TESLAMATE_DB_PORT
-- TESLAMATE_DB_NAME
-- TESLAMATE_DB_USER
-- TESLAMATE_DB_PASSWORD
-- TESLAMATE_ENCRYPTION_KEY
-- TESLAMATE_GRAFANA_PASSWORD
-
-Attention importante:
-- Si teslamate-db a deja ete initialisee, changer seulement le .env ne change pas le mot de passe interne PostgreSQL du volume existant.
-- En cas de mismatch de mot de passe, API ne pourra pas lire TeslaMate.
-
-La procedure de resolution est documentee dans [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Developpement local
 
@@ -96,6 +103,12 @@ Installation:
 
 ```bash
 pnpm install
+```
+
+Build du package shared:
+
+```bash
+pnpm --filter @voltcraft/shared build
 ```
 
 Build API:
@@ -116,16 +129,13 @@ Tests API:
 pnpm --filter @voltcraft/api test
 ```
 
-## Etat actuel de la robustesse
+## Robustesse actuelle
 
-- Les endpoints listes et syntheses tombent en mode de secours si TeslaMate est indisponible
-- La route etat vehicule renvoie un snapshot cache si le vehicule est asleep/offline cote Tesla, pour eviter un blocage UI
-- Un test unitaire couvre la persistance de configuration TeslaMate lors de la sauvegarde
+- La route d'etat vehicule peut renvoyer un snapshot cache si Tesla refuse `vehicle_data` sur une voiture asleep/offline
+- Le dashboard propose un bouton `Actualiser` pour forcer une synchronisation immediate
+- L'etat compose du vehicule est derive de la telemetrie fraiche cote UI
+- Les pages historiques peuvent utiliser TeslaMate quand il est configure et disponible
 
 ## Exploitation
 
-Pour la production, suivre en priorite [DEPLOYMENT.md](DEPLOYMENT.md), puis garder [QUICKSTART.md](QUICKSTART.md) comme memo court.
-
-## Licence
-
-Usage prive et auto-heberge. Adapter la section license selon vos besoins projet.
+Pour un deploiement serveur, suivre d'abord [DEPLOYMENT.md](D:/voltcraft/DEPLOYMENT.md). Pour un rappel rapide une fois l'installation comprise, garder [QUICKSTART.md](D:/voltcraft/QUICKSTART.md).

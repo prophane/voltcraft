@@ -1,15 +1,15 @@
 # Mode operatoire de deploiement Voltcraft
 
-Ce document decrit une procedure deploiement exploitable en production, avec ou sans profil TeslaMate.
+Ce document decrit la procedure de deploiement et d'exploitation de Voltcraft en environnement serveur, avec ou sans profil TeslaMate.
 
 ## 1. Prerequis
 
-- Docker Engine + Docker Compose plugin
+- Docker Engine + plugin Docker Compose
 - Acces shell sur le serveur
-- DNS/reverse proxy deja en place si exposition externe
-- Repository clone sur le serveur
+- DNS / reverse proxy deja en place si exposition externe
+- Git et acces au depot
 
-## 2. Arborescence cible
+## 2. Emplacement recommande
 
 Exemple:
 
@@ -17,10 +17,20 @@ Exemple:
 /opt/voltcraft
 ```
 
-Fichiers cle:
-- [docker-compose.yml](docker-compose.yml)
-- [.env.example](.env.example)
-- .env (local serveur, non versionne)
+Fichiers importants:
+- [docker-compose.yml](D:/voltcraft/docker-compose.yml)
+- [.env.example](D:/voltcraft/.env.example)
+- `.env` : secrets et configuration serveur
+
+Volumes critiques:
+- `voltcraft-db-data`
+- `voltcraft-redis-data`
+- `voltcraft-mqtt-data`
+- `voltcraft-app-config`
+- `teslamate-db-data`
+- `teslamate-grafana-data`
+
+Le volume `voltcraft-app-config` contient la configuration runtime persistee par l'application, notamment certaines mises a jour faites depuis l'UI Parametres Tesla.
 
 ## 3. Installation initiale
 
@@ -31,26 +41,28 @@ git clone https://github.com/prophane/voltcraft.git /opt/voltcraft
 cd /opt/voltcraft
 ```
 
-### 3.2 Creer la config environnement
+### 3.2 Creer `.env`
 
 ```bash
 cp .env.example .env
 ```
 
-Renseigner les secrets obligatoires:
-- POSTGRES_PASSWORD
-- REDIS_PASSWORD
-- SESSION_SECRET
-- ENCRYPTION_KEY
-- TESLA_CLIENT_ID
-- TESLA_CLIENT_SECRET
-- TESLA_REDIRECT_URI
-- TESLA_REGION
+Minimum obligatoire:
+- `POSTGRES_PASSWORD`
+- `REDIS_PASSWORD`
+- `SESSION_SECRET`
+- `ENCRYPTION_KEY`
 
-Si TeslaMate active:
-- TESLAMATE_DB_PASSWORD
-- TESLAMATE_ENCRYPTION_KEY
-- TESLAMATE_GRAFANA_PASSWORD
+Variables importantes selon votre architecture:
+- `AUTH_DISABLED=true` si une pre-authentification est deja geree par votre reverse proxy
+- `TESLA_REDIRECT_URI` avec votre domaine public
+- `TESLA_REGION`
+- `TESLA_COMMAND_PROXY_URL` si vous utilisez un proxy different du service compose par defaut
+
+Si TeslaMate est active:
+- `TESLAMATE_DB_PASSWORD`
+- `TESLAMATE_ENCRYPTION_KEY`
+- `TESLAMATE_GRAFANA_PASSWORD`
 
 ### 3.3 Demarrer les services
 
@@ -66,7 +78,16 @@ Stack avec TeslaMate:
 docker compose --profile teslamate up -d
 ```
 
-### 3.4 Verifier l etat
+### 3.4 Verifier l'etat initial
+
+Sans TeslaMate:
+
+```bash
+docker compose ps
+docker compose logs --tail=200 api
+```
+
+Avec TeslaMate:
 
 ```bash
 docker compose --profile teslamate ps
@@ -74,174 +95,218 @@ docker compose --profile teslamate logs --tail=200 api
 ```
 
 Validation minimale:
-- api en healthy
-- db et redis en healthy
-- pas d erreur fatale bouclee dans logs api
+- `api` healthy
+- `db` healthy
+- `redis` healthy
+- `vehicle-command` demarre
+- pas d'erreur fatale repetee dans les logs API
 
-## 4. Procedure de mise a jour
+## 4. Configuration applicative apres boot
 
-Depuis /opt/voltcraft:
+### 4.1 Flux de setup
+
+Si `AUTH_DISABLED=true`:
+- pas de login local obligatoire
+- l'assistant demande directement la configuration OAuth Tesla
+
+Si `AUTH_DISABLED=false`:
+- l'assistant cree un compte admin local
+- puis demande la configuration OAuth Tesla
+
+### 4.2 Configuration Tesla
+
+La configuration Tesla peut etre faite:
+- dans l'assistant initial
+- ensuite dans l'UI Parametres
+
+Le backend persiste la configuration dans `APP_CONFIG_PATH` (par defaut `/app/data/runtime.env`) a l'interieur du volume `voltcraft-app-config`.
+
+### 4.3 Proxy commandes Tesla
+
+Le service `vehicle-command` est demarre par Docker Compose et utilise les fichiers generes dans le volume `app-config`.
+
+Variables associees:
+- `TESLA_COMMAND_PROXY_URL`
+- `TESLA_REDIRECT_URI`
+- `TESLA_CLIENT_ID`
+- `TESLA_CLIENT_SECRET`
+
+## 5. Procedure de mise a jour
+
+Depuis `/opt/voltcraft`.
+
+Sans TeslaMate:
 
 ```bash
-git pull
-docker compose --profile teslamate up -d --build
+git pull origin main
+docker compose down
+docker compose build --no-cache
+docker compose up -d
+```
+
+Avec TeslaMate:
+
+```bash
+git pull origin main
+docker compose --profile teslamate down
+docker compose --profile teslamate build --no-cache
+docker compose --profile teslamate up -d
 ```
 
 Checks post-update:
 
 ```bash
-docker compose --profile teslamate ps
-docker compose --profile teslamate logs --tail=200 api
+docker compose logs --tail=200 api
+docker compose ps
 ```
 
-Endpoints a verifier:
-- GET /health
-- GET /api/vehicle/current
-- GET /api/stats/summary?days=30
-- GET /api/vehicle/state
+Endpoints utiles a verifier:
+- `GET /health`
+- `GET /api/config`
+- `GET /api/vehicle/current`
+- `GET /api/vehicle/state`
+- `GET /api/stats/summary?days=30`
 
-## 5. Rollback rapide
+## 6. Rollback rapide
 
-Lister commits recents:
+Lister les derniers commits:
 
 ```bash
 git log --oneline -n 10
 ```
 
-Revenir au commit precedent stable:
+Revenir a un commit stable:
 
 ```bash
 git checkout <commit_stable>
-docker compose --profile teslamate up -d --build
+docker compose up -d --build
 ```
 
-Ensuite, si necessaire, creer une branche hotfix pour corriger avant retour sur main.
-
-Retour sur main apres rollback temporaire:
+Puis revenir sur `main` quand le correctif est pret:
 
 ```bash
 git checkout main
-git pull
+git pull origin main
 ```
 
-## 6. Sauvegarde et restauration
+## 7. Sauvegardes
 
-### 6.1 Volumes critiques
-
-- voltcraft-db-data
-- voltcraft-redis-data
-- teslamate-db-data
-- teslamate-grafana-data
-- voltcraft-app-config
-
-### 6.2 Backup logique PostgreSQL (Voltcraft)
+### 7.1 Backup logique PostgreSQL Voltcraft
 
 ```bash
 docker exec -t voltcraft-db pg_dump -U voltcraft -d voltcraft > voltcraft.sql
 ```
 
-### 6.3 Backup logique PostgreSQL (TeslaMate)
+### 7.2 Backup logique PostgreSQL TeslaMate
 
 ```bash
 docker exec -t teslamate-db pg_dump -U teslamate -d teslamate > teslamate.sql
 ```
 
-## 7. TeslaMate backend mode
+### 7.3 Sauvegarde config runtime
 
-### 7.1 Objectif
+La configuration sauvegardee depuis l'UI est stockee dans le volume `voltcraft-app-config`. Il faut donc inclure ce volume dans votre strategie de backup si vous ne voulez pas perdre la configuration Tesla / TeslaMate persistee par l'application.
 
-Permettre a Voltcraft de lire les donnees historiques/etat depuis TeslaMate en backend.
+## 8. TeslaMate backend mode
 
-### 7.2 Conditions de fonctionnement
+### 8.1 Objectif
 
-- profil teslamate demarre
-- teslamate-db accessible depuis api
-- credentials TESLAMATE_DB_* coherents
+Permettre a Voltcraft de lire l'historique et certaines donnees telemetry depuis TeslaMate.
 
-### 7.3 Point critique: mot de passe PostgreSQL TeslaMate
+### 8.2 Conditions
 
-Si le volume teslamate-db existe deja, modifier .env ne met pas a jour automatiquement le mot de passe interne PostgreSQL.
+- profil `teslamate` demarre
+- `teslamate-db` accessible depuis `api`
+- credentials `TESLAMATE_DB_*` coherents
+
+### 8.3 Point critique sur le mot de passe TeslaMate
+
+Si le volume `teslamate-db` existe deja, modifier seulement `.env` ne met pas automatiquement a jour le mot de passe PostgreSQL interne.
 
 Symptome typique:
-- erreurs auth PostgreSQL dans logs api pour utilisateur teslamate
+- erreurs d'authentification PostgreSQL dans les logs API
 
 Resolution:
-- soit remettre dans .env le mot de passe qui a servi a initialiser le volume
-- soit reinitialiser/recreer le volume teslamate-db si perte historique acceptable
+- remettre dans `.env` le mot de passe ayant servi a initialiser le volume
+- ou recreer le volume TeslaMate si la perte d'historique est acceptable
 
-## 8. Depannage cible
+## 9. Depannage cible
 
-### 8.1 Dashboard vide ou No data
+### 9.1 Dashboard vide ou incoherent
 
 Verifier:
-1. GET /api/vehicle/current repond 200
-2. GET /api/stats/summary?days=30 repond 200
-3. GET /api/vehicle/state repond 200
+1. `GET /api/vehicle/current` repond `200`
+2. `GET /api/vehicle/state` repond `200`
+3. `GET /api/stats/summary?days=30` repond `200`
 4. hard refresh navigateur
-5. logs api sans erreurs fatales
+5. bouton `Actualiser` dans le dashboard
+6. logs API sans erreur fatale
 
-### 8.2 /api/vehicle/state retourne 502 Vehicle is offline or asleep
+### 9.2 Etat vehicule stale ou incorrect
 
-Comportement attendu possible quand Tesla refuse vehicle_data sur voiture asleep.
+Actions:
+1. cliquer `Actualiser` dans le dashboard
+2. verifier `GET /api/vehicle/state`
+3. verifier les logs API lors d'un sync manuel
+4. si TeslaMate est active, verifier quelle source alimente l'etat observe
 
-Mitigation en place:
-- fallback snapshot cache cote api pour eviter blocage complet UI
+### 9.3 `Vehicle is offline or asleep`
 
-Si visible encore frequemment:
-- verifier presence de snapshots en base
-- verifier coherence des routes avec la version deployee
+Comportement parfois attendu quand Tesla refuse `vehicle_data`.
 
-### 8.3 Container voltcraft-mqtt en restart
+Mitigation actuelle:
+- retour d'un snapshot cache cote API
 
-Commandes:
+### 9.4 MQTT en restart
 
 ```bash
 docker compose logs --tail=200 mqtt
 ```
 
-Points frequents:
-- conf mosquitto invalide
-- droits volume
+Causes frequentes:
+- conf Mosquitto invalide
 - port deja occupe
+- probleme de volume/droits
 
-### 8.4 Healthcheck API ko
+### 9.5 Healthcheck API KO
 
 Verifier:
-- DATABASE_URL resolvable
-- REDIS_URL resolvable
-- migrations Prisma appliquees
+- `DATABASE_URL`
+- `REDIS_URL`
+- generation Prisma / migrations
+- acces a `vehicle-command` si commandes Tesla configurees
 
-## 9. Checklist exploitation
+## 10. Checklist d'exploitation
 
 Apres chaque deploiement:
-1. Services healthy
-2. Endpoints metier en 200
-3. Dashboard charge sans erreurs JS
-4. Logs api sans erreur critique repetitive
-5. Sauvegarde planifiee confirmee
+1. conteneurs healthy
+2. endpoints critiques en `200`
+3. dashboard charge sans erreur JS bloquante
+4. logs API sans erreur critique repetitive
+5. configuration runtime preservee si attendue
 
-## 10. Commandes d exploitation utiles
+## 11. Commandes utiles
 
-Logs API en continu:
+Logs API:
 
 ```bash
-docker compose --profile teslamate logs -f api
+docker compose logs -f api
 ```
 
 Etat des conteneurs:
 
 ```bash
-docker compose --profile teslamate ps
+docker compose ps
 ```
 
-Redemarrage API uniquement:
+Rebuild API uniquement:
 
 ```bash
-docker compose --profile teslamate up -d --build api
+docker compose up -d --build api
 ```
 
-Redemarrage complet:
+Rebuild complet:
 
 ```bash
-docker compose --profile teslamate up -d --build
+docker compose up -d --build
 ```
