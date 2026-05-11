@@ -385,7 +385,9 @@ export class TeslaMateReadService {
     const chargePower = toNumber(row.charger_power)
     const chargerCurrent = toNumber(row.charger_actual_current)
     const chargeSignalFresh = isChargeSignalFresh(row.captured_at, row.charge_captured_at)
-    const isPluggedIn = row.conn_charge_cable != null && row.conn_charge_cable !== 'None'
+    const cable = (row.conn_charge_cable ?? '').toLowerCase()
+    const hasCableConnected = cable !== '' && cable !== 'none'
+    const isPluggedIn = hasCableConnected && chargeSignalFresh
     const isCharging = row.open_charge_id != null
       ? (
         chargeSignalFresh && (
@@ -394,7 +396,7 @@ export class TeslaMateReadService {
         )
       )
       : fallback?.isCharging === true
-    const chargeState = row.open_charge_id != null
+    const chargeState = isPluggedIn
       ? (isCharging ? 'Charging' : 'Stopped')
       : 'Disconnected'
     const odometerMultiplier = await this.inferOdometerMultiplier(vehicle.vin)
