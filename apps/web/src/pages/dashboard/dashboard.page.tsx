@@ -338,8 +338,8 @@ export function DashboardPage() {
         </Button>
       </div>
 
-      <div className="grid lg:grid-cols-[420px_minmax(0,1fr)] gap-5 items-start">
-        <Card className="surface-premium p-4 md:p-6">
+      <div className="grid lg:grid-cols-[420px_minmax(0,1fr)] gap-5 items-stretch">
+        <Card className="surface-premium p-4 md:p-6 h-full flex flex-col">
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-3xl font-medium text-text-primary">{friendlyName}</h2>
@@ -373,7 +373,7 @@ export function DashboardPage() {
           </div>
         </Card>
 
-        <Card className="surface-premium p-4 md:p-6">
+        <Card className="surface-premium p-4 md:p-6 h-full flex flex-col">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <p className="text-sm text-text-primary">{location ? 'Dernière position connue' : 'Position indisponible'}</p>
