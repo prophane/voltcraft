@@ -375,6 +375,14 @@ export function TripsPage() {
     return value != null && value >= 0 ? value : 0
   }, [settingsData])
 
+  const initialTripDisplayCount = useMemo(() => {
+    const raw = (settingsData as Record<string, unknown> | undefined)?.['tripsInitialDisplayCount']
+    const value = parseNumber(raw)
+    if (value == null) return 10
+    const rounded = Math.round(value)
+    return Math.max(1, Math.min(200, rounded))
+  }, [settingsData])
+
   const homeLocation = useMemo(() => {
     const settings = (settingsData ?? {}) as Record<string, unknown>
     const lat = parseNumber(settings.homeLatitude)
@@ -597,8 +605,8 @@ export function TripsPage() {
   })
 
   useEffect(() => {
-    setVisibleCount(10)
-  }, [tab])
+    setVisibleCount(initialTripDisplayCount)
+  }, [tab, initialTripDisplayCount])
 
   const summary = useMemo(() => {
     const totalDistance = filteredTrips.reduce((acc, t) => acc + (t.distanceKm ?? 0), 0)
@@ -909,7 +917,7 @@ export function TripsPage() {
               </p>
               <button
                 type="button"
-                onClick={() => setVisibleCount((count) => Math.min(filteredTrips.length, count + 10))}
+                onClick={() => setVisibleCount((count) => Math.min(filteredTrips.length, count + initialTripDisplayCount))}
                 className="px-3 py-1.5 rounded-md border border-border-subtle text-text-secondary hover:text-text-primary text-sm"
               >
                 Charger plus

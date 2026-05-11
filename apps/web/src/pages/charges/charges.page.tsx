@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { chargesApi } from '@/features/vehicle/api'
+import { chargesApi, settingsApi } from '@/features/vehicle/api'
 import { Card } from '@/components/ui/card'
 import { CardSkeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { api, ApiError } from '@/lib/api-client'
 import { formatDate, formatDuration } from '@/lib/utils'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Battery, Clock, Euro, Gauge, MapPin, Zap } from 'lucide-react'
 
 type ChargeSessionRecord = {
@@ -129,6 +129,23 @@ function normalizeSessions(raw: unknown): ChargeSessionRecord[] {
   return []
 }
 
+async function fetchAllChargeSessions() {
+  const pageSize = 100
+  const maxPages = 50
+  let page = 1
+  const sessions: ChargeSessionRecord[] = []
+
+  while (page <= maxPages) {
+    const response = await chargesApi.list(page, pageSize)
+    const pageSessions = normalizeSessions(response)
+    sessions.push(...pageSessions)
+    if (pageSessions.length < pageSize) break
+    page += 1
+  }
+
+  return sessions
+}
+
 function chargeTypeLabel(type?: string | null) {
   if (!type) return 'Inconnu'
   if (type === 'SUPERCHARGER') return 'Rapide (Supercharger)'
@@ -144,16 +161,35 @@ export function ChargesPage() {
   const [geofenceName, setGeofenceName] = useState('')
   const [geofenceRadius, setGeofenceRadius] = useState(100)
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null)
+  const [visibleCount, setVisibleCount] = useState(10)
+
+  const { data: settingsData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => settingsApi.get(),
+    staleTime: 60_000,
+  })
+
+  const initialChargeDisplayCount = useMemo(() => {
+    const raw = (settingsData as Record<string, unknown> | undefined)?.['chargesInitialDisplayCount']
+    const value = parseNumber(raw)
+    if (value == null) return 10
+    const rounded = Math.round(value)
+    return Math.max(1, Math.min(200, rounded))
+  }, [settingsData])
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['charges'],
-    queryFn: () => chargesApi.list(),
+    queryFn: () => fetchAllChargeSessions(),
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     staleTime: 0,
     placeholderData: (previousData) => previousData,
   })
+
+  useEffect(() => {
+    setVisibleCount(initialChargeDisplayCount)
+  }, [initialChargeDisplayCount])
 
   const createGeofenceMutation = useMutation({
     mutationFn: (payload: { name: string; latitude: number; longitude: number; radius: number }) =>
@@ -189,8 +225,9 @@ export function ChargesPage() {
 
     return !isTrivialShortSession
   })
+  const displayedSessions = sessions.slice(0, visibleCount)
   const geofences = normalizeGeofences(geofencesData)
-  const addressCounts = sessions.reduce((acc, session) => {
+  const addressCounts = displayedSessions.reduce((acc, session) => {
     const key = session.address ?? ''
     if (!key) return acc
     acc.set(key, (acc.get(key) ?? 0) + 1)
@@ -272,7 +309,7 @@ export function ChargesPage() {
         <Card className="text-center py-12 text-text-muted">Aucune session de recharge enregistrée</Card>
       ) : (
         <div className="space-y-3">
-          {sessions.map((session) => (
+          {displayedSessions.map((session) => (
             (() => {
               const isOngoingCharge = session.endedAt == null
               const primaryChargeKw = isOngoingCharge
@@ -387,6 +424,21 @@ export function ChargesPage() {
               )
             })()
           ))}
+
+          {sessions.length > displayedSessions.length && (
+            <div className="flex items-center justify-between px-1 pt-1">
+              <p className="text-xs text-text-muted">
+                {displayedSessions.length} sur {sessions.length} sessions affichées
+              </p>
+              <button
+                type="button"
+                onClick={() => setVisibleCount((count) => Math.min(sessions.length, count + initialChargeDisplayCount))}
+                className="px-3 py-1.5 rounded-md border border-border-subtle text-text-secondary hover:text-text-primary text-sm"
+              >
+                Charger plus
+              </button>
+            </div>
+          )}
         </div>
       )}
 

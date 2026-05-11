@@ -43,6 +43,8 @@ export function SettingsPage() {
 
   const [priceKwh, setPriceKwh] = useState<string>('')
   const [minTripDistanceKm, setMinTripDistanceKm] = useState<string>('')
+  const [tripsInitialDisplayCount, setTripsInitialDisplayCount] = useState<string>('')
+  const [chargesInitialDisplayCount, setChargesInitialDisplayCount] = useState<string>('')
   const [diagFreshnessWarnMin, setDiagFreshnessWarnMin] = useState<string>('')
   const [diagFreshnessCriticalMin, setDiagFreshnessCriticalMin] = useState<string>('')
   const [diagBatteryDeltaWarnPct, setDiagBatteryDeltaWarnPct] = useState<string>('')
@@ -104,6 +106,8 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (!s) return
+    setTripsInitialDisplayCount(String(s['tripsInitialDisplayCount'] ?? 10))
+    setChargesInitialDisplayCount(String(s['chargesInitialDisplayCount'] ?? 10))
     setDiagFreshnessWarnMin(String(s['diagnosticsFreshnessWarnMin'] ?? 8))
     setDiagFreshnessCriticalMin(String(s['diagnosticsFreshnessCriticalMin'] ?? 20))
     setDiagBatteryDeltaWarnPct(String(s['diagnosticsBatteryDeltaWarnPct'] ?? 2))
@@ -264,6 +268,43 @@ export function SettingsPage() {
                 disabled={!minTripDistanceKm}
               >
                 Sauvegarder
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <label className="stat-label block mb-1">Affichage initial trajets / recharges</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <input
+                type="number"
+                min="1"
+                max="200"
+                className="bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                placeholder={s?.['tripsInitialDisplayCount']?.toString() ?? '10'}
+                value={tripsInitialDisplayCount}
+                onChange={(e) => setTripsInitialDisplayCount(e.target.value)}
+              />
+              <input
+                type="number"
+                min="1"
+                max="200"
+                className="bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                placeholder={s?.['chargesInitialDisplayCount']?.toString() ?? '10'}
+                value={chargesInitialDisplayCount}
+                onChange={(e) => setChargesInitialDisplayCount(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 mt-2">
+              <Button
+                size="sm"
+                loading={updateMutation.isPending}
+                onClick={() => updateMutation.mutate({
+                  tripsInitialDisplayCount: Number(tripsInitialDisplayCount),
+                  chargesInitialDisplayCount: Number(chargesInitialDisplayCount),
+                })}
+                disabled={!tripsInitialDisplayCount || !chargesInitialDisplayCount}
+              >
+                Sauvegarder seuil affichage
               </Button>
             </div>
           </div>

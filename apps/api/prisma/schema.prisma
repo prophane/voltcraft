@@ -384,6 +384,10 @@ model UserSettings {
 
   // Trips
   minTripDistanceKm Float @default(0)
+  tripsInitialDisplayCount Int @default(10)
+
+  // Charges
+  chargesInitialDisplayCount Int @default(10)
 
   // Diagnostics thresholds
   diagnosticsFreshnessWarnMin     Int    @default(8)
