@@ -33,11 +33,11 @@ export function getVehicleComposedState(input: VehicleStateInput): VehicleCompos
   // 2. If actively charging
   if (isCharging === true) return VEHICLE_STATES.CHARGING
 
-  // 3. If plugged but not charging
+  // 3. If plugged but not charging, report plugged before parked
   if (isPluggedIn === true && isCharging === false) return VEHICLE_STATES.PLUGGED
 
-  // 4. If not driving, not charging, not plugged → parked
-  if (isDriving === false && isCharging === false && isPluggedIn === false) {
+  // 4. If stationary and not charging, report parked
+  if (isDriving === false && isCharging === false) {
     return VEHICLE_STATES.PARKED
   }
 

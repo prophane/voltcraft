@@ -70,7 +70,10 @@ export class TeslaSyncService {
         chargeLimitSoc: chargeState.charge_limit_soc ?? null,
         chargeState: chargeState.charging_state ?? null,
         isCharging: chargeState.charging_state === 'Charging',
-        isPluggedIn: chargeState.charge_port_door_open ?? false,
+        isPluggedIn: Boolean(
+          chargeState.charging_state === 'Charging'
+          || (chargeState.conn_charge_cable != null && chargeState.conn_charge_cable !== 'None'),
+        ),
         chargeRate: chargeState.charge_rate != null ? chargeState.charge_rate * 1.609344 : null,
         chargeAmps: chargeState.charge_amps ?? null,
         chargeVoltage: chargeState.charger_voltage ?? null,
