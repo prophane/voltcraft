@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { settingsApi, statsApi, tripsApi } from '@/features/vehicle/api'
 import { MapContainer, Polyline, TileLayer, CircleMarker } from 'react-leaflet'
 import { useLocation, useSearchParams } from 'react-router-dom'
@@ -449,6 +449,7 @@ async function reverseGeocode(lat: number, lon: number) {
 }
 
 export function TripsPage() {
+  const queryClient = useQueryClient()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState<TripTab>('all')
@@ -461,6 +462,13 @@ export function TripsPage() {
     queryKey: ['settings'],
     queryFn: () => settingsApi.get(),
     staleTime: 60_000,
+  })
+
+  const heatmapSettingMutation = useMutation({
+    mutationFn: (enabled: boolean) => settingsApi.update({ tripHeatmapEnabled: enabled }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+    },
   })
 
   const {
@@ -609,8 +617,13 @@ export function TripsPage() {
   }, [searchParams, selectedTripId, setSearchParams])
 
   useEffect(() => {
+    const raw = (settingsData as Record<string, unknown> | undefined)?.['tripHeatmapEnabled']
+    if (typeof raw === 'boolean') {
+      setIsHeatmapEnabled(raw)
+      return
+    }
     setIsHeatmapEnabled(true)
-  }, [selectedTripId])
+  }, [settingsData])
 
   useEffect(() => {
     void refetchTrips()
@@ -744,6 +757,12 @@ export function TripsPage() {
       totalEnergy,
     }
   }, [filteredTrips])
+
+  const handleHeatmapToggle = () => {
+    const next = !isHeatmapEnabled
+    setIsHeatmapEnabled(next)
+    heatmapSettingMutation.mutate(next)
+  }
 
   return (
     <div className="space-y-6">
@@ -1031,10 +1050,24 @@ export function TripsPage() {
                           <p className="text-xs uppercase tracking-wide text-text-muted">Carte du trajet</p>
                           <button
                             type="button"
-                            onClick={() => setIsHeatmapEnabled((value) => !value)}
-                            className="text-xs px-2.5 py-1 rounded-md border border-border-subtle text-text-secondary hover:text-text-primary"
+                            onClick={handleHeatmapToggle}
+                            className="inline-flex items-center gap-2 text-xs text-text-secondary hover:text-text-primary"
+                            aria-pressed={isHeatmapEnabled}
                           >
-                            Heatmap: {isHeatmapEnabled ? 'ON' : 'OFF'}
+                            <span className={[
+                              'relative inline-flex h-5 w-9 items-center rounded-full border transition-colors',
+                              isHeatmapEnabled
+                                ? 'border-accent-500/60 bg-accent-500/30'
+                                : 'border-border-subtle bg-bg-overlay/70',
+                            ].join(' ')}>
+                              <span
+                                className={[
+                                  'inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform',
+                                  isHeatmapEnabled ? 'translate-x-4' : 'translate-x-1',
+                                ].join(' ')}
+                              />
+                            </span>
+                            Heatmap {isHeatmapEnabled ? 'ON' : 'OFF'}
                           </button>
                         </div>
                         <div className="w-full h-64 lg:h-80 rounded-lg border border-border-subtle overflow-hidden">

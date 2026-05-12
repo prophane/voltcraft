@@ -385,6 +385,7 @@ model UserSettings {
   // Trips
   minTripDistanceKm Float @default(0)
   tripsInitialDisplayCount Int @default(10)
+  tripHeatmapEnabled Boolean @default(true)
 
   // Charges
   chargesInitialDisplayCount Int @default(10)

@@ -7,6 +7,7 @@ export const updateSettingsSchema = z.object({
   pricePerKwh: z.number().min(0).max(10).optional(),
   minTripDistanceKm: z.number().min(0).max(200).optional(),
   tripsInitialDisplayCount: z.number().int().min(1).max(200).optional(),
+  tripHeatmapEnabled: z.boolean().optional(),
   chargesInitialDisplayCount: z.number().int().min(1).max(200).optional(),
   diagnosticsFreshnessWarnMin: z.number().int().min(1).max(180).optional(),
   diagnosticsFreshnessCriticalMin: z.number().int().min(2).max(360).optional(),
