@@ -474,16 +474,10 @@ export class TeslaMateReadService {
           d.end_date AS "endedAt",
           d.duration_min AS "durationMin",
           d.distance AS "distanceKm",
+          te.energy_used_kwh AS "energyUsedKwh",
           CASE
-            WHEN d.start_ideal_range_km IS NOT NULL AND d.end_ideal_range_km IS NOT NULL AND c.efficiency IS NOT NULL
-              THEN ROUND(((d.start_ideal_range_km - d.end_ideal_range_km) * c.efficiency)::numeric, 2)
-            WHEN c.efficiency IS NOT NULL AND d.distance IS NOT NULL
-              THEN ROUND((d.distance * c.efficiency)::numeric, 2)
-            ELSE NULL
-          END AS "energyUsedKwh",
-          CASE
-            WHEN d.start_ideal_range_km IS NOT NULL AND d.end_ideal_range_km IS NOT NULL AND d.distance > 0 AND c.efficiency IS NOT NULL
-              THEN ROUND(((d.start_ideal_range_km - d.end_ideal_range_km) * c.efficiency / d.distance * 100)::numeric, 1)
+            WHEN te.energy_used_kwh IS NOT NULL AND d.distance > 0
+              THEN ROUND((te.energy_used_kwh / d.distance * 100)::numeric, 1)
             WHEN c.efficiency IS NOT NULL
               THEN ROUND((c.efficiency * 100)::numeric, 1)
             ELSE NULL
@@ -516,6 +510,48 @@ export class TeslaMateReadService {
         LEFT JOIN addresses ea ON ea.id = d.end_address_id
         LEFT JOIN geofences sg ON sg.id = d.start_geofence_id
         LEFT JOIN geofences eg ON eg.id = d.end_geofence_id
+        LEFT JOIN LATERAL (
+          WITH samples AS (
+            SELECT
+              p.date AS captured_at,
+              p.power::float8 AS power_kw,
+              LAG(p.date) OVER (ORDER BY p.date) AS prev_captured_at,
+              LAG(p.power::float8) OVER (ORDER BY p.date) AS prev_power_kw
+            FROM positions p
+            WHERE p.car_id = d.car_id
+              AND p.date >= d.start_date
+              AND p.date <= COALESCE(
+                d.end_date,
+                d.start_date + (COALESCE(d.duration_min, 0) * INTERVAL '1 minute')
+              )
+              AND p.power IS NOT NULL
+          )
+          SELECT ROUND(
+            SUM(
+              CASE
+                WHEN prev_captured_at IS NULL THEN 0
+                WHEN EXTRACT(EPOCH FROM (captured_at - prev_captured_at)) <= 0 THEN 0
+                WHEN EXTRACT(EPOCH FROM (captured_at - prev_captured_at)) > 1800 THEN 0
+                ELSE
+                  ((COALESCE(prev_power_kw, power_kw) + power_kw) / 2.0)
+                  * (EXTRACT(EPOCH FROM (captured_at - prev_captured_at)) / 3600.0)
+              END
+            )::numeric,
+            2
+          ) AS energy_net_kwh
+          FROM samples
+        ) tp ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT CASE
+            WHEN tp.energy_net_kwh IS NOT NULL AND tp.energy_net_kwh > 0
+              THEN tp.energy_net_kwh
+            WHEN d.start_ideal_range_km IS NOT NULL AND d.end_ideal_range_km IS NOT NULL AND c.efficiency IS NOT NULL
+              THEN ROUND(((d.start_ideal_range_km - d.end_ideal_range_km) * c.efficiency)::numeric, 2)
+            WHEN c.efficiency IS NOT NULL AND d.distance IS NOT NULL
+              THEN ROUND((d.distance * c.efficiency)::numeric, 2)
+            ELSE NULL
+          END AS energy_used_kwh
+        ) te ON TRUE
         WHERE c.vin = $1${where.sql}
         ORDER BY d.start_date DESC
         LIMIT $${where.params.length + 2}
@@ -541,16 +577,10 @@ export class TeslaMateReadService {
           d.end_date AS "endedAt",
           d.duration_min AS "durationMin",
           d.distance AS "distanceKm",
+          te.energy_used_kwh AS "energyUsedKwh",
           CASE
-            WHEN d.start_ideal_range_km IS NOT NULL AND d.end_ideal_range_km IS NOT NULL AND c.efficiency IS NOT NULL
-              THEN ROUND(((d.start_ideal_range_km - d.end_ideal_range_km) * c.efficiency)::numeric, 2)
-            WHEN c.efficiency IS NOT NULL AND d.distance IS NOT NULL
-              THEN ROUND((d.distance * c.efficiency)::numeric, 2)
-            ELSE NULL
-          END AS "energyUsedKwh",
-          CASE
-            WHEN d.start_ideal_range_km IS NOT NULL AND d.end_ideal_range_km IS NOT NULL AND d.distance > 0 AND c.efficiency IS NOT NULL
-              THEN ROUND(((d.start_ideal_range_km - d.end_ideal_range_km) * c.efficiency / d.distance * 100)::numeric, 1)
+            WHEN te.energy_used_kwh IS NOT NULL AND d.distance > 0
+              THEN ROUND((te.energy_used_kwh / d.distance * 100)::numeric, 1)
             WHEN c.efficiency IS NOT NULL
               THEN ROUND((c.efficiency * 100)::numeric, 1)
             ELSE NULL
@@ -583,6 +613,48 @@ export class TeslaMateReadService {
         LEFT JOIN addresses ea ON ea.id = d.end_address_id
         LEFT JOIN geofences sg ON sg.id = d.start_geofence_id
         LEFT JOIN geofences eg ON eg.id = d.end_geofence_id
+        LEFT JOIN LATERAL (
+          WITH samples AS (
+            SELECT
+              p.date AS captured_at,
+              p.power::float8 AS power_kw,
+              LAG(p.date) OVER (ORDER BY p.date) AS prev_captured_at,
+              LAG(p.power::float8) OVER (ORDER BY p.date) AS prev_power_kw
+            FROM positions p
+            WHERE p.car_id = d.car_id
+              AND p.date >= d.start_date
+              AND p.date <= COALESCE(
+                d.end_date,
+                d.start_date + (COALESCE(d.duration_min, 0) * INTERVAL '1 minute')
+              )
+              AND p.power IS NOT NULL
+          )
+          SELECT ROUND(
+            SUM(
+              CASE
+                WHEN prev_captured_at IS NULL THEN 0
+                WHEN EXTRACT(EPOCH FROM (captured_at - prev_captured_at)) <= 0 THEN 0
+                WHEN EXTRACT(EPOCH FROM (captured_at - prev_captured_at)) > 1800 THEN 0
+                ELSE
+                  ((COALESCE(prev_power_kw, power_kw) + power_kw) / 2.0)
+                  * (EXTRACT(EPOCH FROM (captured_at - prev_captured_at)) / 3600.0)
+              END
+            )::numeric,
+            2
+          ) AS energy_net_kwh
+          FROM samples
+        ) tp ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT CASE
+            WHEN tp.energy_net_kwh IS NOT NULL AND tp.energy_net_kwh > 0
+              THEN tp.energy_net_kwh
+            WHEN d.start_ideal_range_km IS NOT NULL AND d.end_ideal_range_km IS NOT NULL AND c.efficiency IS NOT NULL
+              THEN ROUND(((d.start_ideal_range_km - d.end_ideal_range_km) * c.efficiency)::numeric, 2)
+            WHEN c.efficiency IS NOT NULL AND d.distance IS NOT NULL
+              THEN ROUND((d.distance * c.efficiency)::numeric, 2)
+            ELSE NULL
+          END AS energy_used_kwh
+        ) te ON TRUE
         WHERE c.vin = $1 AND d.id = $2::int
         LIMIT 1
       `,
