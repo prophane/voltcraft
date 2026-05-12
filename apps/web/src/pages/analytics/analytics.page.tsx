@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Bar, BarChart, CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { statsApi, vehicleApi, type VehicleHistorySnapshot } from '@/features/vehicle/api'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn, formatDate } from '@/lib/utils'
@@ -82,14 +82,23 @@ export function AnalyticsPage() {
       const time = isToday
         ? at.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
         : at.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-      return { time, speed: Number(row.speed ?? 0), power: Number(row.power ?? 0) }
+      const power = Number(row.power ?? 0)
+      return {
+        time,
+        speed: Number(row.speed ?? 0),
+        powerTraction: power > 0 ? power : null,
+        powerRegen: power < 0 ? Math.abs(power) : null,
+      }
     })
   }, [historyRows])
 
-  const drivePowerDomain = useMemo<[number, number]>(() => {
-    if (driveTrend.length === 0) return [-25, 25]
-    const maxAbs = Math.max(...driveTrend.map((row) => Math.abs(Number(row.power ?? 0))), 25)
-    return [-Math.ceil(maxAbs / 5) * 5, Math.ceil(maxAbs / 5) * 5]
+  const drivePowerMax = useMemo(() => {
+    if (driveTrend.length === 0) return 30
+    const maxPower = Math.max(
+      ...driveTrend.map((row) => Math.max(Number(row.powerTraction ?? 0), Number(row.powerRegen ?? 0))),
+      30,
+    )
+    return Math.ceil((maxPower * 1.15) / 10) * 10
   }, [driveTrend])
 
   const driveSpeedMax = useMemo(() => {
@@ -200,18 +209,34 @@ export function AnalyticsPage() {
             </div>
             <div className="h-72 px-3 pb-4 pt-2">
               {driveTrend.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={driveTrend} margin={{ left: 8, right: 12, top: 8, bottom: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
-                    <XAxis dataKey="time" stroke="#8D8D8D" tickLine={false} axisLine={false} />
-                    <YAxis yAxisId="left" domain={[0, driveSpeedMax]} stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} />
-                    <YAxis yAxisId="right" domain={drivePowerDomain} orientation="right" stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} />
-                    <Tooltip contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 10, color: '#F5F5F5' }} />
-                    <ReferenceLine yAxisId="right" y={0} stroke="#444" strokeDasharray="4 4" />
-                    <Line yAxisId="left" type="monotone" dataKey="speed" name="Vitesse km/h" stroke="#22c55e" strokeWidth={2} dot={false} />
-                    <Line yAxisId="right" type="monotone" dataKey="power" name="Puissance kW" stroke="#f59e0b" strokeWidth={2} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
+                <>
+                  <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-text-muted">
+                    <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#22c55e]" /> Vitesse (axe gauche, km/h)</span>
+                    <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#f59e0b]" /> Traction (axe droit, +kW)</span>
+                    <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#38bdf8]" /> Régénération (axe droit, kW récupérés)</span>
+                  </div>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={driveTrend} margin={{ left: 8, right: 12, top: 8, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
+                      <XAxis dataKey="time" stroke="#8D8D8D" tickLine={false} axisLine={false} />
+                      <YAxis yAxisId="left" domain={[0, driveSpeedMax]} stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} />
+                      <YAxis yAxisId="right" domain={[0, drivePowerMax]} orientation="right" stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} />
+                      <Tooltip
+                        contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 10, color: '#F5F5F5' }}
+                        formatter={(value: number | string, name: string) => {
+                          const v = Number(value)
+                          if (name === 'Vitesse') return [`${Math.round(v)} km/h`, name]
+                          if (name === 'Traction') return [`${Math.round(v)} kW`, name]
+                          if (name === 'Régénération') return [`${Math.round(v)} kW récupérés`, name]
+                          return [String(value), name]
+                        }}
+                      />
+                      <Line yAxisId="left" type="monotone" dataKey="speed" name="Vitesse" stroke="#22c55e" strokeWidth={2} dot={false} />
+                      <Line yAxisId="right" type="monotone" dataKey="powerTraction" name="Traction" stroke="#f59e0b" strokeWidth={2} dot={false} connectNulls />
+                      <Line yAxisId="right" type="monotone" dataKey="powerRegen" name="Régénération" stroke="#38bdf8" strokeWidth={2} dot={false} connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </>
               ) : (
                 <EmptyState message="Aucune donnée de conduite récente n est disponible pour tracer cette vue." />
               )}
