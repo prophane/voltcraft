@@ -57,6 +57,18 @@ function formatNumberWithSpaces(value: number): string {
   return Math.round(value).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
 }
 
+function normalizeTpmsToBar(value: number | null): number | null {
+  if (value == null || !Number.isFinite(value) || value <= 0) return null
+  // Tesla source can be PSI while TeslaMate is often already metric.
+  if (value > 15) return value * 0.0689476
+  return value
+}
+
+function formatTpms(value: number | null): string {
+  const bar = normalizeTpmsToBar(value)
+  return bar != null ? `${bar.toFixed(2)} bar` : '—'
+}
+
 function parseLatestTrip(raw: unknown): LatestTrip | null {
   if (Array.isArray(raw)) return parseLatestTrip(raw[0])
   if (!raw || typeof raw !== 'object') return null
@@ -256,6 +268,10 @@ export function DashboardPage() {
   const outsideTemp = toFiniteNumber(state?.outsideTemp)
   const insideTemp = toFiniteNumber(state?.insideTemp)
   const odometer = toFiniteNumber(extendedState?.odometer)
+  const tpmsFl = toFiniteNumber(state?.tpmsPressureFl)
+  const tpmsFr = toFiniteNumber(state?.tpmsPressureFr)
+  const tpmsRl = toFiniteNumber(state?.tpmsPressureRl)
+  const tpmsRr = toFiniteNumber(state?.tpmsPressureRr)
   const latitude = toFiniteNumber(location?.latitude)
   const longitude = toFiniteNumber(location?.longitude)
   const latestTrip = useMemo(() => parseLatestTrip(latestTripRaw), [latestTripRaw])
@@ -475,7 +491,7 @@ export function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-5">
+      <div className="grid lg:grid-cols-3 gap-5">
         <Card className="surface-premium p-4 md:p-5">
           <h3 className="text-lg font-medium text-text-primary">Bilan 7 jours</h3>
           <div className="grid grid-cols-2 gap-4 mt-4">
@@ -527,6 +543,32 @@ export function DashboardPage() {
           ) : (
             <p className="mt-3 text-sm text-text-muted">Aucun trajet récent disponible</p>
           )}
+        </Card>
+
+        <Card className="surface-premium p-4 md:p-5">
+          <h3 className="text-lg font-medium text-text-primary">Pression pneus</h3>
+          <p className="text-xs text-text-muted mt-1">Derniere lecture telemetrie</p>
+          <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
+            <div className="rounded-lg border border-border-subtle bg-bg-overlay/60 p-3">
+              <p className="text-[11px] uppercase text-text-muted">Avant gauche</p>
+              <p className="text-base font-medium text-text-primary mt-1">{formatTpms(tpmsFl)}</p>
+            </div>
+            <div className="rounded-lg border border-border-subtle bg-bg-overlay/60 p-3">
+              <p className="text-[11px] uppercase text-text-muted">Avant droit</p>
+              <p className="text-base font-medium text-text-primary mt-1">{formatTpms(tpmsFr)}</p>
+            </div>
+            <div className="rounded-lg border border-border-subtle bg-bg-overlay/60 p-3">
+              <p className="text-[11px] uppercase text-text-muted">Arriere gauche</p>
+              <p className="text-base font-medium text-text-primary mt-1">{formatTpms(tpmsRl)}</p>
+            </div>
+            <div className="rounded-lg border border-border-subtle bg-bg-overlay/60 p-3">
+              <p className="text-[11px] uppercase text-text-muted">Arriere droit</p>
+              <p className="text-base font-medium text-text-primary mt-1">{formatTpms(tpmsRr)}</p>
+            </div>
+          </div>
+          <p className="text-xs text-text-muted mt-3">
+            {state?.capturedAt ? `Mesure du ${formatDate(state.capturedAt)}` : 'Date de mesure indisponible'}
+          </p>
         </Card>
       </div>
     </div>

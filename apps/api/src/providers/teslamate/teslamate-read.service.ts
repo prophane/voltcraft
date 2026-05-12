@@ -22,6 +22,10 @@ type FallbackSnapshot = {
   isDriving?: boolean | null
   speed?: number | null
   power?: number | null
+  tpmsPressureFl?: number | null
+  tpmsPressureFr?: number | null
+  tpmsPressureRl?: number | null
+  tpmsPressureRr?: number | null
   latitude?: number | null
   longitude?: number | null
   heading?: number | null
@@ -57,6 +61,10 @@ type TeslaMateVehicleRow = {
   longitude: number | string | null
   speed: number | string | null
   power: number | string | null
+  tpms_pressure_fl: number | string | null
+  tpms_pressure_fr: number | string | null
+  tpms_pressure_rl: number | string | null
+  tpms_pressure_rr: number | string | null
   odometer: number | string | null
   battery_level: number | null
   usable_battery_level: number | null
@@ -430,6 +438,10 @@ export class TeslaMateReadService {
       isDriving: row.open_drive_id != null || fallback?.isDriving === true,
       speed: toNumber(row.speed) != null ? (toNumber(row.speed) as number) * speedMultiplier : fallback?.speed ?? null,
       power: toNumber(row.power) ?? fallback?.power ?? null,
+      tpmsPressureFl: toNumber(row.tpms_pressure_fl) ?? fallback?.tpmsPressureFl ?? null,
+      tpmsPressureFr: toNumber(row.tpms_pressure_fr) ?? fallback?.tpmsPressureFr ?? null,
+      tpmsPressureRl: toNumber(row.tpms_pressure_rl) ?? fallback?.tpmsPressureRl ?? null,
+      tpmsPressureRr: toNumber(row.tpms_pressure_rr) ?? fallback?.tpmsPressureRr ?? null,
       latitude: toNumber(row.latitude) ?? fallback?.latitude ?? null,
       longitude: toNumber(row.longitude) ?? fallback?.longitude ?? null,
       heading: fallback?.heading ?? null,
@@ -1191,6 +1203,10 @@ export class TeslaMateReadService {
           p.longitude,
           p.speed,
           p.power,
+          p.tpms_pressure_fl,
+          p.tpms_pressure_fr,
+          p.tpms_pressure_rl,
+          p.tpms_pressure_rr,
           COALESCE(p.odometer, po.odometer) AS odometer,
           p.battery_level,
           p.usable_battery_level,

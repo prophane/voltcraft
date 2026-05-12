@@ -18,6 +18,16 @@ import {
   type TelemetrySource,
 } from '../diagnostics/diagnostics-shared'
 
+function normalizeTpmsToBar(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value) || value <= 0) return null
+  if (value > 15) return value * 0.0689476
+  return value
+}
+
+function formatBar(value: number | null): string {
+  return value != null ? `${value.toFixed(2)} bar` : '—'
+}
+
 export function VehicleHealthPage() {
   const [viewMode, setViewMode] = useState<DiagnosticsViewMode>('essential')
 
@@ -92,6 +102,42 @@ export function VehicleHealthPage() {
       est_full_range_km: Number((row as { est_full_range_km?: number }).est_full_range_km ?? 0),
     }))
   }, [batteryHealthMeasurements])
+
+  const tirePressureSeries = useMemo(() => {
+    return historyRows
+      .slice(0, 96)
+      .reverse()
+      .map((row) => ({
+        at: row.capturedAt,
+        fl: normalizeTpmsToBar(row.tpmsPressureFl),
+        fr: normalizeTpmsToBar(row.tpmsPressureFr),
+        rl: normalizeTpmsToBar(row.tpmsPressureRl),
+        rr: normalizeTpmsToBar(row.tpmsPressureRr),
+      }))
+      .filter((row) => row.fl != null || row.fr != null || row.rl != null || row.rr != null)
+  }, [historyRows])
+
+  const tirePressureStats = useMemo(() => {
+    const latest = tirePressureSeries[tirePressureSeries.length - 1] ?? null
+    const allValues = tirePressureSeries.flatMap((row) => [row.fl, row.fr, row.rl, row.rr]).filter((v): v is number => v != null)
+    if (!latest && allValues.length === 0) {
+      return {
+        latest,
+        avg: null,
+        min: null,
+        max: null,
+        spread: null,
+      }
+    }
+
+    const avg = allValues.length > 0 ? allValues.reduce((sum, v) => sum + v, 0) / allValues.length : null
+    const min = allValues.length > 0 ? Math.min(...allValues) : null
+    const max = allValues.length > 0 ? Math.max(...allValues) : null
+    const latestValues = latest ? [latest.fl, latest.fr, latest.rl, latest.rr].filter((v): v is number => v != null) : []
+    const spread = latestValues.length >= 2 ? Math.max(...latestValues) - Math.min(...latestValues) : null
+
+    return { latest, avg, min, max, spread }
+  }, [tirePressureSeries])
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -291,6 +337,39 @@ export function VehicleHealthPage() {
           </Card>
         )}
       </div>
+
+      <Card className="p-5 lg:p-6">
+        <CardHeader>
+          <div>
+            <CardTitle>Suivi pression pneus</CardTitle>
+            <h2 className="mt-2 text-xl font-semibold text-text-primary">Derniere mesure et tendance recente</h2>
+          </div>
+        </CardHeader>
+
+        {tirePressureStats.latest ? (
+          <div className="space-y-4">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm text-text-secondary">
+              <InfoChip label="Avant gauche" value={formatBar(tirePressureStats.latest.fl)} />
+              <InfoChip label="Avant droit" value={formatBar(tirePressureStats.latest.fr)} />
+              <InfoChip label="Arriere gauche" value={formatBar(tirePressureStats.latest.rl)} />
+              <InfoChip label="Arriere droit" value={formatBar(tirePressureStats.latest.rr)} />
+            </div>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm text-text-secondary">
+              <InfoChip label="Moyenne 96 pts" value={formatBar(tirePressureStats.avg)} />
+              <InfoChip label="Minimum" value={formatBar(tirePressureStats.min)} />
+              <InfoChip label="Maximum" value={formatBar(tirePressureStats.max)} />
+              <InfoChip label="Ecart actuel" value={tirePressureStats.spread != null ? `${tirePressureStats.spread.toFixed(2)} bar` : '—'} tone={tirePressureStats.spread != null && tirePressureStats.spread > 0.20 ? 'warning' : 'neutral'} />
+            </div>
+
+            <p className="text-xs text-text-muted">
+              {tirePressureStats.latest.at ? `Dernier echantillon: ${formatDate(tirePressureStats.latest.at)}` : 'Date du dernier echantillon indisponible'}
+            </p>
+          </div>
+        ) : (
+          <EmptyState message="Aucune pression pneus disponible pour le moment dans la telemetrie." />
+        )}
+      </Card>
     </div>
   )
 }

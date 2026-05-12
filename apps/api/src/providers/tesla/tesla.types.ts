@@ -61,6 +61,10 @@ export interface TeslaVehicleState {
   ft: number  // frunk: 0=closed
   rt: number  // trunk: 0=closed
   odometer: number
+  tpms_pressure_fl?: number | null
+  tpms_pressure_fr?: number | null
+  tpms_pressure_rl?: number | null
+  tpms_pressure_rr?: number | null
 }
 
 export interface TeslaCommandResponse {

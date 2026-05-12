@@ -90,6 +90,10 @@ export class TeslaSyncService {
         isDriving: isDrivingNow,
         speed: speedKmh,
         power: driveState.power ?? null,
+        tpmsPressureFl: vehicleState.tpms_pressure_fl ?? null,
+        tpmsPressureFr: vehicleState.tpms_pressure_fr ?? null,
+        tpmsPressureRl: vehicleState.tpms_pressure_rl ?? null,
+        tpmsPressureRr: vehicleState.tpms_pressure_rr ?? null,
 
         latitude,
         longitude,

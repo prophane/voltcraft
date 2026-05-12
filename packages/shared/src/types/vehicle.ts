@@ -40,6 +40,12 @@ export interface VehicleStateSnapshot {
   speed: number | null       // km/h
   power: number | null       // kW
 
+  // Tires (raw telemetry unit from backend source)
+  tpmsPressureFl: number | null
+  tpmsPressureFr: number | null
+  tpmsPressureRl: number | null
+  tpmsPressureRr: number | null
+
   // Location
   latitude: number | null
   longitude: number | null

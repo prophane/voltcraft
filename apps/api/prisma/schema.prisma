@@ -156,6 +156,12 @@ model VehicleStateSnapshot {
   speed     Float?  // km/h
   power     Float?  // kW
 
+  // Tires (unit as provided by source telemetry)
+  tpmsPressureFl Float?
+  tpmsPressureFr Float?
+  tpmsPressureRl Float?
+  tpmsPressureRr Float?
+
   // Location
   latitude   Float?
   longitude  Float?

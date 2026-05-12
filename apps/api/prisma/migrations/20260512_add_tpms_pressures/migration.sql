@@ -1,0 +1,5 @@
+ALTER TABLE "vehicle_state_snapshots"
+ADD COLUMN "tpmsPressureFl" DOUBLE PRECISION,
+ADD COLUMN "tpmsPressureFr" DOUBLE PRECISION,
+ADD COLUMN "tpmsPressureRl" DOUBLE PRECISION,
+ADD COLUMN "tpmsPressureRr" DOUBLE PRECISION;
