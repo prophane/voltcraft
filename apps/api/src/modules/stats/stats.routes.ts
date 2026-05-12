@@ -147,6 +147,37 @@ export async function statsRoutes(app: FastifyInstance) {
     const since = new Date(Date.now() - days * 86_400_000)
     const vehicle = await getVehicleForRead(session.userId)
 
+    if (teslamate.isEnabled()) {
+      try {
+        const pageSize = 100
+        const maxPages = 50
+        const trips: Array<{ id: string; startedAt: Date | null; distanceKm: number | null; energyUsedKwh: number | null }> = []
+        let page = 1
+
+        while (page <= maxPages) {
+          const chunk = await teslamate.getTrips(vehicle.vin, { page, pageSize, from: since })
+          trips.push(...chunk.trips)
+          if (chunk.trips.length < pageSize) break
+          page += 1
+        }
+
+        const tripData = trips
+          .filter((t) => t.distanceKm != null && t.distanceKm > 0.1 && t.energyUsedKwh != null && t.energyUsedKwh > 0)
+          .map((t) => ({
+            id: t.id,
+            startedAt: t.startedAt ?? new Date(),
+            distance: t.distanceKm ?? 0,
+            consumption: ((t.energyUsedKwh ?? 0) / (t.distanceKm ?? 1)) * 100,
+          }))
+          .filter((t) => Number.isFinite(t.consumption) && t.consumption > 0)
+
+        const result = detectConsumptionAnomalies(tripData, days)
+        return ok(result)
+      } catch (error) {
+        throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('anomalies query', error), 503)
+      }
+    }
+
     const trips = await statsRepo.getTripsForAnomalyDetection(vehicle.id, since)
     const tripData = trips
       .filter((t) => t.distanceKm != null && t.distanceKm > 0.1 && t.energyUsedKwh != null && t.energyUsedKwh > 0)

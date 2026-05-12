@@ -113,7 +113,9 @@ export function AppHealthPage() {
     ? efficiency.slice(-14).map((row) => ({
         day: String((row as { day?: string }).day ?? '').slice(5, 10),
         distance_km: Number((row as { distance_km?: number }).distance_km ?? 0),
+        consumed_kwh: Number((row as { consumed_kwh?: number }).consumed_kwh ?? 0),
         charged_kwh: Number((row as { charged_kwh?: number }).charged_kwh ?? 0),
+        avg_consumption_kwh_100: Number((row as { avg_consumption_kwh_100?: number }).avg_consumption_kwh_100 ?? 0),
       }))
     : []
 
@@ -261,7 +263,9 @@ export function AppHealthPage() {
     return efficiencyData
       .slice(-7)
       .map((row) => {
-        const kwh100 = row.distance_km > 0 ? (row.charged_kwh / row.distance_km) * 100 : null
+        const directAvg = row.avg_consumption_kwh_100 > 0 ? row.avg_consumption_kwh_100 : null
+        const fromConsumed = row.distance_km > 0 && row.consumed_kwh > 0 ? (row.consumed_kwh / row.distance_km) * 100 : null
+        const kwh100 = directAvg ?? fromConsumed
         const status = kwh100 == null ? 'Faible usage' : kwh100 > 23 ? 'A surveiller' : 'Normal'
         const note = kwh100 == null ? 'Pas assez de distance pour evaluer la conso.' : `${kwh100.toFixed(1)} kWh/100 km`
         return { day: row.day, status, note }

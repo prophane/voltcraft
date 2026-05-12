@@ -1077,17 +1077,61 @@ export class TeslaMateReadService {
     const rows = await this.query<{
       day: Date | string
       distance_km: number | string | null
+      consumed_kwh: number | string | null
       charged_kwh: number | string | null
+      avg_consumption_kwh_100: number | string | null
     }>(
       `
-        WITH trip_daily AS (
+        WITH drive_rows AS (
           SELECT
             DATE_TRUNC('day', d.start_date) AS day,
-            COALESCE(SUM(d.distance), 0) AS distance_km
+            d.distance AS distance_km,
+            CASE
+              WHEN tp.energy_net_kwh IS NOT NULL AND tp.energy_net_kwh > 0
+                THEN tp.energy_net_kwh
+              WHEN d.start_ideal_range_km IS NOT NULL AND d.end_ideal_range_km IS NOT NULL AND c.efficiency IS NOT NULL
+                THEN (d.start_ideal_range_km - d.end_ideal_range_km) * c.efficiency
+              ELSE d.distance * COALESCE(c.efficiency, 0)
+            END AS consumed_kwh
           FROM drives d
           INNER JOIN cars c ON c.id = d.car_id
+          LEFT JOIN LATERAL (
+            WITH samples AS (
+              SELECT
+                p.date AS captured_at,
+                p.power::float8 AS power_kw,
+                LAG(p.date) OVER (ORDER BY p.date) AS prev_captured_at,
+                LAG(p.power::float8) OVER (ORDER BY p.date) AS prev_power_kw
+              FROM positions p
+              WHERE p.car_id = d.car_id
+                AND p.date >= d.start_date
+                AND p.date <= COALESCE(
+                  d.end_date,
+                  d.start_date + (COALESCE(d.duration_min, 0) * INTERVAL '1 minute')
+                )
+                AND p.power IS NOT NULL
+            )
+            SELECT SUM(
+              CASE
+                WHEN prev_captured_at IS NULL THEN 0
+                WHEN EXTRACT(EPOCH FROM (captured_at - prev_captured_at)) <= 0 THEN 0
+                WHEN EXTRACT(EPOCH FROM (captured_at - prev_captured_at)) > 1800 THEN 0
+                ELSE
+                  ((COALESCE(prev_power_kw, power_kw) + power_kw) / 2.0)
+                  * (EXTRACT(EPOCH FROM (captured_at - prev_captured_at)) / 3600.0)
+              END
+            ) AS energy_net_kwh
+            FROM samples
+          ) tp ON TRUE
           WHERE c.vin = $1
             AND d.start_date >= $2
+        ),
+        trip_daily AS (
+          SELECT
+            day,
+            COALESCE(SUM(distance_km), 0) AS distance_km,
+            COALESCE(SUM(COALESCE(consumed_kwh, 0)), 0) AS consumed_kwh
+          FROM drive_rows
           GROUP BY 1
         ),
         charge_daily AS (
@@ -1110,7 +1154,13 @@ export class TeslaMateReadService {
         SELECT
           COALESCE(td.day, cd.day) AS day,
           COALESCE(td.distance_km, 0) AS distance_km,
-          COALESCE(cd.charged_kwh, 0) AS charged_kwh
+          COALESCE(td.consumed_kwh, 0) AS consumed_kwh,
+          COALESCE(cd.charged_kwh, 0) AS charged_kwh,
+          CASE
+            WHEN COALESCE(td.distance_km, 0) > 0
+              THEN ROUND((COALESCE(td.consumed_kwh, 0) / td.distance_km * 100)::numeric, 1)
+            ELSE NULL
+          END AS avg_consumption_kwh_100
         FROM trip_daily td
         FULL OUTER JOIN charge_daily cd ON cd.day = td.day
         ORDER BY 1 ASC
@@ -1121,7 +1171,9 @@ export class TeslaMateReadService {
     return rows.map((row) => ({
       day: toDate(row.day) ?? new Date(),
       distance_km: (toNumber(row.distance_km) ?? 0) * distanceMultiplier,
+      consumed_kwh: toNumber(row.consumed_kwh) ?? 0,
       charged_kwh: toNumber(row.charged_kwh) ?? 0,
+      avg_consumption_kwh_100: toNumber(row.avg_consumption_kwh_100),
     }))
   }
 
