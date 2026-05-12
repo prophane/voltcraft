@@ -1,6 +1,6 @@
 # Demarrage rapide Voltcraft
 
-Guide court pour demarrer rapidement. Pour la procedure complete d'exploitation et de production, voir [DEPLOYMENT.md](D:/voltcraft/DEPLOYMENT.md).
+Guide court pour demarrer rapidement. Pour la procedure complete d'exploitation et de production, voir [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## 1) Recuperer le projet
 
@@ -75,6 +75,12 @@ Endpoints utiles:
 - `GET /api/vehicle/state`
 - `GET /api/stats/summary?days=30`
 
+UI utile a verifier rapidement:
+- Dashboard: carte pression pneus (dernier echantillon)
+- Sante Vehicule: bloc suivi pression pneus
+- Trajets: heatmap ON/OFF persistee
+- Mobile: barre basse 4 entrees + Plus
+
 ## 7) Mise a jour
 
 Sans TeslaMate:
@@ -98,4 +104,4 @@ docker compose --profile teslamate up -d --build
 3. Verifier `docker compose logs --tail=200 api`
 4. Verifier `GET /api/config`
 5. Si TeslaMate est active, verifier la coherence des credentials TeslaMate
-6. Consulter la section depannage de [DEPLOYMENT.md](D:/voltcraft/DEPLOYMENT.md)
+6. Consulter la section depannage de [DEPLOYMENT.md](DEPLOYMENT.md)

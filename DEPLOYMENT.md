@@ -18,8 +18,8 @@ Exemple:
 ```
 
 Fichiers importants:
-- [docker-compose.yml](D:/voltcraft/docker-compose.yml)
-- [.env.example](D:/voltcraft/.env.example)
+- [docker-compose.yml](docker-compose.yml)
+- [.env.example](.env.example)
 - `.env` : secrets et configuration serveur
 
 Volumes critiques:
@@ -242,6 +242,10 @@ Verifier:
 5. bouton `Actualiser` dans le tableau de bord
 6. logs API sans erreur fatale
 
+Si la telemetrie est presente mais la carte pneus est vide:
+1. verifier `GET /api/vehicle/state` et la presence des champs `tpmsPressureFl`, `tpmsPressureFr`, `tpmsPressureRl`, `tpmsPressureRr`
+2. verifier la source active (Tesla ou TeslaMate) et la disponibilite TPMS cote source
+
 ### 9.2 Etat vehicule stale ou incorrect
 
 Actions:
@@ -277,6 +281,13 @@ Verifier:
 - acces a `vehicle-command` si commandes Tesla configurees
 
 ## 10. Checklist d'exploitation
+
+Avant validation release:
+
+1. Dashboard affiche bien la derniere pression pneus
+2. Sante Vehicule affiche le suivi pression pneus
+3. Trajets conserve le choix heatmap ON/OFF apres rechargement
+4. Navigation mobile affiche 4 entrees visibles + Plus
 
 Apres chaque deploiement:
 1. conteneurs healthy

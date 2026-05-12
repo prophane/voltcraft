@@ -11,6 +11,9 @@ Tesla est une marque de Tesla, Inc. Voltcraft est un projet independant et non a
 - Historique trajets, charges, statistiques et diagnostics
 - Support optionnel de TeslaMate comme backend telemetry/historique
 - Integration MQTT / Home Assistant
+- Pression pneus (TPMS) exposee dans l'etat vehicule, visible sur dashboard et suivi sante
+- Carte trajet avec heatmap conso ON/OFF et preference utilisateur persistante
+- Navigation mobile optimisee en barre basse: 4 entrees + menu Plus
 - Mode `AUTH_DISABLED` pour reverse proxy avec pre-authentification amont
 
 ## Architecture
@@ -49,16 +52,32 @@ Services optionnels sous profil `teslamate`:
 - `teslamate-mqtt`
 - `teslamate-grafana`
 
-Definition complete des services: [docker-compose.yml](D:/voltcraft/docker-compose.yml)
+Definition complete des services: [docker-compose.yml](docker-compose.yml)
 
 ## Parcours recommande
 
-1. Copier [.env.example](D:/voltcraft/.env.example) vers `.env`
+1. Copier [.env.example](.env.example) vers `.env`
 2. Renseigner les secrets de base et les ports souhaites
 3. Lancer la stack Docker Compose
 4. Ouvrir Voltcraft dans le navigateur
 5. Completer l'assistant initial ou la page Parametres Tesla pour configurer l'OAuth Tesla
 6. Si TeslaMate est active, verifier la connectivite TeslaMate depuis l'interface Parametres
+
+## Schema des donnees impacte
+
+Le modele `vehicle_state_snapshots` inclut desormais les colonnes suivantes pour la pression pneus:
+
+- `tpmsPressureFl`
+- `tpmsPressureFr`
+- `tpmsPressureRl`
+- `tpmsPressureRr`
+
+Ces champs alimentent:
+
+- la carte `Pression pneus` du dashboard (derniere mesure)
+- le bloc `Suivi pression pneus` dans la page Sante Vehicule (dernier echantillon + stats)
+
+Le modele `user_settings` inclut aussi `tripHeatmapEnabled` pour persister l'affichage heatmap des trajets.
 
 ## Configuration Tesla
 
@@ -79,9 +98,9 @@ Champs Tesla principaux:
 
 ## Documentation
 
-- Demarrage rapide: [QUICKSTART.md](D:/voltcraft/QUICKSTART.md)
-- Procedure d'exploitation et de deploiement: [DEPLOYMENT.md](D:/voltcraft/DEPLOYMENT.md)
-- Variables d'environnement: [.env.example](D:/voltcraft/.env.example)
+- Demarrage rapide: [QUICKSTART.md](QUICKSTART.md)
+- Procedure d'exploitation et de deploiement: [DEPLOYMENT.md](DEPLOYMENT.md)
+- Variables d'environnement: [.env.example](.env.example)
 
 ## Commandes utiles
 
@@ -156,7 +175,10 @@ pnpm --filter @voltcraft/api test
 - Le dashboard propose un bouton `Actualiser` pour forcer une synchronisation immediate
 - L'etat compose du vehicule est derive de la telemetrie fraiche cote UI
 - Les pages historiques peuvent utiliser TeslaMate quand il est configure et disponible
+- Sur mobile, la barre basse affiche 4 entrees visibles (jamais une page masquee), puis `Plus`
+- Le detail trajet permet d'activer/desactiver la heatmap et sauvegarde cette preference
+- Les pressions TPMS sont normalisees et affichees en bar cote UI
 
 ## Exploitation
 
-Pour un deploiement serveur, suivre d'abord [DEPLOYMENT.md](D:/voltcraft/DEPLOYMENT.md). Pour un rappel rapide une fois l'installation comprise, garder [QUICKSTART.md](D:/voltcraft/QUICKSTART.md).
+Pour un deploiement serveur, suivre d'abord [DEPLOYMENT.md](DEPLOYMENT.md). Pour un rappel rapide une fois l'installation comprise, garder [QUICKSTART.md](QUICKSTART.md).
