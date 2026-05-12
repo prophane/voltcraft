@@ -453,6 +453,7 @@ export function TripsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState<TripTab>('all')
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
+  const [isHeatmapEnabled, setIsHeatmapEnabled] = useState(true)
   const [visibleCount, setVisibleCount] = useState(10)
   const hasHydratedTripFromUrl = useRef(false)
 
@@ -606,6 +607,10 @@ export function TripsPage() {
       setSearchParams(nextParams, { replace: true })
     }
   }, [searchParams, selectedTripId, setSearchParams])
+
+  useEffect(() => {
+    setIsHeatmapEnabled(true)
+  }, [selectedTripId])
 
   useEffect(() => {
     void refetchTrips()
@@ -1022,7 +1027,16 @@ export function TripsPage() {
 
                     {detailRoutePoints.length > 0 && detailStartCoords && detailEndCoords && (
                       <div className="space-y-2">
-                        <p className="text-xs uppercase tracking-wide text-text-muted">Carte du trajet</p>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs uppercase tracking-wide text-text-muted">Carte du trajet</p>
+                          <button
+                            type="button"
+                            onClick={() => setIsHeatmapEnabled((value) => !value)}
+                            className="text-xs px-2.5 py-1 rounded-md border border-border-subtle text-text-secondary hover:text-text-primary"
+                          >
+                            Heatmap: {isHeatmapEnabled ? 'ON' : 'OFF'}
+                          </button>
+                        </div>
                         <div className="w-full h-64 lg:h-80 rounded-lg border border-border-subtle overflow-hidden">
                           <MapContainer
                             bounds={detailRoutePoints}
@@ -1036,7 +1050,7 @@ export function TripsPage() {
                             {detailRoutePoints.length >= 2 && (
                               <Polyline positions={detailRoutePoints} pathOptions={{ color: '#E8112D', weight: 5 }} />
                             )}
-                            {consumptionHeatSegments.map((segment, idx) => (
+                            {isHeatmapEnabled && consumptionHeatSegments.map((segment, idx) => (
                               <Polyline
                                 key={`heat-${idx}`}
                                 positions={segment.points}
@@ -1055,13 +1069,15 @@ export function TripsPage() {
                             />
                           </MapContainer>
                         </div>
-                        <div className="flex flex-wrap gap-3 text-[11px] text-text-muted">
-                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#dc2626]" /> Forte traction</span>
-                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#f97316]" /> Traction moyenne</span>
-                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#eab308]" /> Traction légère</span>
-                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#22c55e]" /> Régénération</span>
-                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#0ea5e9]" /> Régénération forte</span>
-                        </div>
+                        {isHeatmapEnabled && (
+                          <div className="flex flex-wrap gap-3 text-[11px] text-text-muted">
+                            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#dc2626]" /> Forte traction</span>
+                            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#f97316]" /> Traction moyenne</span>
+                            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#eab308]" /> Traction légère</span>
+                            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#22c55e]" /> Régénération</span>
+                            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#0ea5e9]" /> Régénération forte</span>
+                          </div>
+                        )}
                         <div className="flex justify-end">
                           <a
                             href={`https://www.google.com/maps/dir/?api=1&origin=${detailStartCoords.lat},${detailStartCoords.lon}&destination=${detailEndCoords.lat},${detailEndCoords.lon}&travelmode=driving`}
