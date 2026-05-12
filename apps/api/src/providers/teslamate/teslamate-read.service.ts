@@ -262,7 +262,7 @@ export class TeslaMateReadService {
   }
 
   isEnabled() {
-    return Boolean(env.TESLAMATE_DB_PASSWORD)
+    return true
   }
 
   private async query<T>(text: string, values: unknown[]) {

@@ -9,7 +9,7 @@ Tesla est une marque de Tesla, Inc. Voltcraft est un projet independant et non a
 - Tableau de bord temps reel avec etat compose du vehicule
 - Commandes vehicule via Tesla Fleet API et proxy `vehicle-command`
 - Historique trajets, charges, statistiques et diagnostics
-- Support optionnel de TeslaMate comme backend telemetry/historique
+- TeslaMate obligatoire comme backend telemetry/historique
 - Integration MQTT / Home Assistant
 - Pression pneus (TPMS) exposee dans l'etat vehicule, visible sur dashboard et suivi sante
 - Carte trajet avec heatmap conso ON/OFF et preference utilisateur persistante
@@ -39,14 +39,14 @@ flowchart LR
 	A --> VC[vehicle-command<br/>proxy Tesla]
 	VC --> TF[Tesla Fleet API]
 
-	A -. optionnel .-> TM[TeslaMate Read Service]
+	A --> TM[TeslaMate Read Service]
 	TM --> TDB[(TeslaMate DB)]
 
 	TF --> A
 	TDB --> A
 ```
 
-Services optionnels sous profil `teslamate`:
+Services TeslaMate requis:
 - `teslamate`
 - `teslamate-db`
 - `teslamate-mqtt`
@@ -110,12 +110,6 @@ Demarrage standard:
 docker compose up -d
 ```
 
-Demarrage avec TeslaMate:
-
-```bash
-docker compose --profile teslamate up -d
-```
-
 Mise a jour applicative:
 
 ```bash
@@ -123,12 +117,6 @@ git pull
 docker compose up -d --build
 ```
 
-Mise a jour applicative avec TeslaMate:
-
-```bash
-git pull
-docker compose --profile teslamate up -d --build
-```
 
 Etat des services et logs:
 

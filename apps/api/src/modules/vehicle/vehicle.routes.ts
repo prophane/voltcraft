@@ -11,7 +11,6 @@ import { requireAuth } from '../auth/auth.routes.js'
 import { ok, paginated } from '../../common/http/response.js'
 import { withVehicleAutoBootstrap } from './vehicle-auto-bootstrap.js'
 import { TeslaMateReadService } from '../../providers/teslamate/teslamate-read.service.js'
-import { TeslaApiError } from '../../common/errors/app-error.js'
 
 const historyQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -131,12 +130,6 @@ export async function vehicleRoutes(app: FastifyInstance) {
   }
 
   const getVehicleForRead = async (userId: string) => {
-    if (teslamate.isEnabled()) {
-      const vehicle = await repo.findActive(userId)
-      if (!vehicle) throw new Error('Vehicle not found')
-      return vehicle
-    }
-
     return withVehicleAutoBootstrap(app, async () => {
       const vehicle = await repo.findActive(userId)
       if (!vehicle) throw new Error('Vehicle not found')
@@ -148,73 +141,48 @@ export async function vehicleRoutes(app: FastifyInstance) {
   app.get('/current', { schema: { tags: ['vehicle'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
-    if (teslamate.isEnabled()) {
-      const vehicle = await getVehicleForRead(session.userId)
-      const fallback = await repo.getLatestSnapshot(vehicle.id)
-      const current = await teslamate.getCurrentVehicle(vehicle, fallback ?? undefined)
-      if (current) return ok(current)
-      const cachedCurrent = snapshotToCurrent(vehicle, fallback)
-      if (cachedCurrent) return ok(cachedCurrent)
-      return ok({
-        id: vehicle.id,
-        vin: vehicle.vin,
-        displayName: vehicle.displayName,
-        model: vehicle.model,
-        year: vehicle.year,
-        color: vehicle.color,
-        state: 'offline',
-        lastSeenAt: null,
-        isCached: true,
-      })
-    }
-    const vehicle = await withVehicleAutoBootstrap(app, () => service.getCurrentVehicle(session.userId))
-    return ok(vehicle)
+    const vehicle = await getVehicleForRead(session.userId)
+    const fallback = await repo.getLatestSnapshot(vehicle.id)
+    const current = await teslamate.getCurrentVehicle(vehicle, fallback ?? undefined)
+    if (current) return ok(current)
+    const cachedCurrent = snapshotToCurrent(vehicle, fallback)
+    if (cachedCurrent) return ok(cachedCurrent)
+    return ok({
+      id: vehicle.id,
+      vin: vehicle.vin,
+      displayName: vehicle.displayName,
+      model: vehicle.model,
+      year: vehicle.year,
+      color: vehicle.color,
+      state: 'offline',
+      lastSeenAt: null,
+      isCached: true,
+    })
   })
 
   // ── GET /vehicle/state ────────────────────────────────────────
   app.get('/state', { schema: { tags: ['vehicle'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
-    if (teslamate.isEnabled()) {
-      const vehicle = await getVehicleForRead(session.userId)
-      const fallback = await repo.getLatestSnapshot(vehicle.id)
-      const state = await teslamate.getVehicleState(vehicle, fallback ?? undefined)
-      if (state) return ok(state)
-      const cachedState = snapshotToState(vehicle.id, fallback)
-      if (cachedState) return ok(cachedState)
-      return ok(emptyCachedState(vehicle.id))
-    }
-
-    try {
-      const state = await withVehicleAutoBootstrap(app, () => service.getVehicleState(session.userId))
-      return ok(state)
-    } catch (error) {
-      if (error instanceof TeslaApiError && error.teslaCode === 'vehicle_unavailable') {
-        const vehicle = await repo.findActive(session.userId)
-        if (vehicle) {
-          const fallback = await repo.getLatestSnapshot(vehicle.id)
-          const cachedState = snapshotToState(vehicle.id, fallback)
-          if (cachedState) return ok(cachedState)
-        }
-      }
-      throw error
-    }
+    const vehicle = await getVehicleForRead(session.userId)
+    const fallback = await repo.getLatestSnapshot(vehicle.id)
+    const state = await teslamate.getVehicleState(vehicle, fallback ?? undefined)
+    if (state) return ok(state)
+    const cachedState = snapshotToState(vehicle.id, fallback)
+    if (cachedState) return ok(cachedState)
+    return ok(emptyCachedState(vehicle.id))
   })
 
   // ── GET /vehicle/location ─────────────────────────────────────
   app.get('/location', { schema: { tags: ['vehicle'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
-    if (teslamate.isEnabled()) {
-      const vehicle = await getVehicleForRead(session.userId)
-      const location = await teslamate.getVehicleLocation(vehicle.vin)
-      if (location) return ok(location)
-      const fallbackLocation = await repo.getLatestLocationSnapshot(vehicle.id)
-      if (fallbackLocation) return ok({ ...fallbackLocation, isCached: true })
-      return ok(null)
-    }
-    const location = await withVehicleAutoBootstrap(app, () => service.getVehicleLocation(session.userId))
-    return ok(location)
+    const vehicle = await getVehicleForRead(session.userId)
+    const location = await teslamate.getVehicleLocation(vehicle.vin)
+    if (location) return ok(location)
+    const fallbackLocation = await repo.getLatestLocationSnapshot(vehicle.id)
+    if (fallbackLocation) return ok({ ...fallbackLocation, isCached: true })
+    return ok(null)
   })
 
   // ── GET /vehicle/history ──────────────────────────────────────

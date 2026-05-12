@@ -113,10 +113,17 @@ export async function buildApp() {
           teslaNeedsSetup = !oauthConfigured && !hasActiveAccount
         }
 
+        const teslamateRequiredMissing: string[] = []
+        if (!env.TESLAMATE_DB_PASSWORD) teslamateRequiredMissing.push('TESLAMATE_DB_PASSWORD')
+        if (!env.TESLAMATE_ENCRYPTION_KEY) teslamateRequiredMissing.push('TESLAMATE_ENCRYPTION_KEY')
+        if (!env.TESLAMATE_GRAFANA_PASSWORD) teslamateRequiredMissing.push('TESLAMATE_GRAFANA_PASSWORD')
+        const teslamateNeedsSetup = teslamateRequiredMissing.length > 0
+
         // Return directly without ok() wrapper to match frontend expectations
         return {
           authDisabled: env.AUTH_DISABLED,
-          setupRequired: teslaNeedsSetup,
+          setupRequired: teslaNeedsSetup || teslamateNeedsSetup,
+          teslamateRequiredMissing,
         }
       })
       // Setup routes (no auth required for initial setup)

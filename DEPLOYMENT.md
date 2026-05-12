@@ -1,6 +1,6 @@
 # Mode operatoire de deploiement Voltcraft
 
-Ce document decrit la procedure de deploiement et d'exploitation de Voltcraft en environnement serveur, avec ou sans profil TeslaMate.
+Ce document decrit la procedure de deploiement et d'exploitation de Voltcraft en environnement serveur avec TeslaMate obligatoire.
 
 ## 1. Prerequis
 
@@ -59,39 +59,22 @@ Variables importantes selon votre architecture:
 - `TESLA_REGION`
 - `TESLA_COMMAND_PROXY_URL` si vous utilisez un proxy different du service compose par defaut
 
-Si TeslaMate est active:
+TeslaMate obligatoire:
 - `TESLAMATE_DB_PASSWORD`
 - `TESLAMATE_ENCRYPTION_KEY`
 - `TESLAMATE_GRAFANA_PASSWORD`
 
 ### 3.3 Demarrer les services
 
-Stack standard:
-
 ```bash
 docker compose up -d
 ```
 
-Stack avec TeslaMate:
-
-```bash
-docker compose --profile teslamate up -d
-```
-
 ### 3.4 Verifier l'etat initial
-
-Sans TeslaMate:
 
 ```bash
 docker compose ps
 docker compose logs --tail=200 api
-```
-
-Avec TeslaMate:
-
-```bash
-docker compose --profile teslamate ps
-docker compose --profile teslamate logs --tail=200 api
 ```
 
 Validation minimale:
@@ -135,22 +118,11 @@ Variables associees:
 
 Depuis `/opt/voltcraft`.
 
-Sans TeslaMate:
-
 ```bash
 git pull origin main
 docker compose down
 docker compose build --no-cache
 docker compose up -d
-```
-
-Avec TeslaMate:
-
-```bash
-git pull origin main
-docker compose --profile teslamate down
-docker compose --profile teslamate build --no-cache
-docker compose --profile teslamate up -d
 ```
 
 Verifications post-mise a jour:

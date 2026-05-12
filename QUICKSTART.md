@@ -23,23 +23,15 @@ Valeurs recommandees selon votre mode d'acces:
 - `TESLA_REDIRECT_URI` avec votre domaine public si vous utiliserez l'OAuth Tesla
 - `TESLA_REGION` (`na`, `eu`, `cn`)
 
-Si vous activez TeslaMate:
+TeslaMate obligatoire:
 - `TESLAMATE_DB_PASSWORD`
 - `TESLAMATE_ENCRYPTION_KEY`
 - `TESLAMATE_GRAFANA_PASSWORD`
 
 ## 3) Demarrer la stack
 
-Sans TeslaMate:
-
 ```bash
 docker compose up -d
-```
-
-Avec TeslaMate:
-
-```bash
-docker compose --profile teslamate up -d
 ```
 
 ## 4) Ouvrir l'application
@@ -83,18 +75,9 @@ UI utile a verifier rapidement:
 
 ## 7) Mise a jour
 
-Sans TeslaMate:
-
 ```bash
 git pull
 docker compose up -d --build
-```
-
-Avec TeslaMate:
-
-```bash
-git pull
-docker compose --profile teslamate up -d --build
 ```
 
 ## 8) Si l'interface semble incoherente

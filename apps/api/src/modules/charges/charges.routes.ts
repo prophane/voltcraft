@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { ChargesRepository } from './charges.repository.js'
 import { VehicleRepository } from '../vehicle/vehicle.repository.js'
 import { AuthRepository } from '../auth/auth.repository.js'
 import { AuthService } from '../auth/auth.service.js'
@@ -27,7 +26,6 @@ const monthlySummarySchema = z.object({
 })
 
 export async function chargesRoutes(app: FastifyInstance) {
-  const chargesRepo = new ChargesRepository(app.prisma)
   const vehicleRepo = new VehicleRepository(app.prisma)
   const authService = new AuthService(new AuthRepository(app.prisma))
   const teslamate = new TeslaMateReadService()
@@ -38,34 +36,24 @@ export async function chargesRoutes(app: FastifyInstance) {
     return v
   }
 
-  const getVehicleForRead = (userId: string) =>
-    teslamate.isEnabled() ? getVehicle(userId) : withVehicleAutoBootstrap(app, () => getVehicle(userId))
+  const getVehicleForRead = (userId: string) => withVehicleAutoBootstrap(app, () => getVehicle(userId))
 
   app.get('/', { schema: { tags: ['charges'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
     const query = paginationSchema.parse(req.query)
     const vehicle = await getVehicleForRead(session.userId)
-    if (teslamate.isEnabled()) {
-      try {
-        const teslamateCharges = await teslamate.getCharges(vehicle.vin, {
-          page: query.page,
-          pageSize: query.pageSize,
-          from: query.from ? new Date(query.from) : undefined,
-          to: query.to ? new Date(query.to) : undefined,
-        })
-        return paginated(teslamateCharges.sessions, teslamateCharges.total, query.page, query.pageSize)
-      } catch (error) {
-        throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('charges query', error), 503)
-      }
+    try {
+      const teslamateCharges = await teslamate.getCharges(vehicle.vin, {
+        page: query.page,
+        pageSize: query.pageSize,
+        from: query.from ? new Date(query.from) : undefined,
+        to: query.to ? new Date(query.to) : undefined,
+      })
+      return paginated(teslamateCharges.sessions, teslamateCharges.total, query.page, query.pageSize)
+    } catch (error) {
+      throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('charges query', error), 503)
     }
-    const { sessions, total } = await chargesRepo.findMany(vehicle.id, {
-      page: query.page,
-      pageSize: query.pageSize,
-      from: query.from ? new Date(query.from) : undefined,
-      to: query.to ? new Date(query.to) : undefined,
-    })
-    return paginated(sessions, total, query.page, query.pageSize)
   })
 
   app.get('/summary/monthly', { schema: { tags: ['charges'] } }, async (req) => {
@@ -77,16 +65,12 @@ export async function chargesRoutes(app: FastifyInstance) {
       month: (req.query as Record<string, string>)['month'] ?? now.getMonth() + 1,
     })
     const vehicle = await getVehicleForRead(sess.userId)
-    if (teslamate.isEnabled()) {
-      try {
-        const summary = await teslamate.getMonthlyChargeSummary(vehicle.vin, year, month)
-        return ok(summary)
-      } catch (error) {
-        throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('monthly charge summary', error), 503)
-      }
+    try {
+      const summary = await teslamate.getMonthlyChargeSummary(vehicle.vin, year, month)
+      return ok(summary)
+    } catch (error) {
+      throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('monthly charge summary', error), 503)
     }
-    const summary = await chargesRepo.getMonthlySummary(vehicle.id, year, month)
-    return ok(summary)
   })
 
   app.get('/:id', { schema: { tags: ['charges'] } }, async (req) => {
@@ -94,16 +78,13 @@ export async function chargesRoutes(app: FastifyInstance) {
     const session = await authService.validateSession(token)
     const { id } = req.params as { id: string }
     const vehicle = await getVehicleForRead(session.userId)
-    if (teslamate.isEnabled()) {
-      try {
-        const session_ = await teslamate.getChargeById(vehicle.vin, id)
-        if (session_) return ok(session_)
-      } catch (error) {
-        throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('charge detail query', error), 503)
-      }
+    try {
+      const session_ = await teslamate.getChargeById(vehicle.vin, id)
+      if (!session_) throw new NotFoundError('Charge session')
+      return ok(session_)
+    } catch (error) {
+      if (error instanceof NotFoundError) throw error
+      throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('charge detail query', error), 503)
     }
-    const session_ = await chargesRepo.findById(id, vehicle.id)
-    if (!session_) throw new NotFoundError('Charge session')
-    return ok(session_)
   })
 }

@@ -109,6 +109,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      teslamate-db:
+        condition: service_healthy
       vehicle-command:
         condition: service_started
     environment:
@@ -129,7 +131,9 @@ services:
       TESLAMATE_DB_PORT: ${TESLAMATE_DB_PORT:-5432}
       TESLAMATE_DB_NAME: ${TESLAMATE_DB_NAME:-teslamate}
       TESLAMATE_DB_USER: ${TESLAMATE_DB_USER:-teslamate}
-      TESLAMATE_DB_PASSWORD: ${TESLAMATE_DB_PASSWORD:-}
+      TESLAMATE_DB_PASSWORD: ${TESLAMATE_DB_PASSWORD:-CHANGE_ME_TESLAMATE_DB_PASSWORD}
+      TESLAMATE_ENCRYPTION_KEY: ${TESLAMATE_ENCRYPTION_KEY:-CHANGE_ME_TESLAMATE_ENCRYPTION_KEY}
+      TESLAMATE_GRAFANA_PASSWORD: ${TESLAMATE_GRAFANA_PASSWORD:-CHANGE_ME_TESLAMATE_GRAFANA_PASSWORD}
       TESLAMATE_BACKEND_ONLY: ${TESLAMATE_BACKEND_ONLY:-true}
       MQTT_ENABLED: ${MQTT_ENABLED:-false}
       MQTT_BROKER: mqtt
@@ -153,14 +157,12 @@ services:
       - voltcraft-net
 
   # ---------------------------------------------------------------
-  # TeslaMate PostgreSQL — dedicated DB for TeslaMate (optional)
+  # TeslaMate PostgreSQL — dedicated DB for TeslaMate (required)
   # ---------------------------------------------------------------
   teslamate-db:
     image: postgres:16-alpine
     container_name: teslamate-db
     restart: unless-stopped
-    profiles:
-      - teslamate
     environment:
       POSTGRES_DB: ${TESLAMATE_DB_NAME:-teslamate}
       POSTGRES_USER: ${TESLAMATE_DB_USER:-teslamate}
@@ -182,8 +184,6 @@ services:
     image: eclipse-mosquitto:2
     container_name: teslamate-mqtt
     restart: unless-stopped
-    profiles:
-      - teslamate
     command: ["mosquitto", "-c", "/mosquitto/config/mosquitto-no-auth.conf"]
     volumes:
       - ./infra/docker/teslamate/mosquitto-no-auth.conf:/mosquitto/config/mosquitto-no-auth.conf:ro
@@ -196,14 +196,12 @@ services:
       - voltcraft-net
 
   # ---------------------------------------------------------------
-  # TeslaMate — telemetry ingestion + analytics backend (optional)
+  # TeslaMate — telemetry ingestion + analytics backend (required)
   # ---------------------------------------------------------------
   teslamate:
     image: teslamate/teslamate:latest
     container_name: teslamate
     restart: unless-stopped
-    profiles:
-      - teslamate
     depends_on:
       teslamate-db:
         condition: service_healthy
@@ -224,14 +222,12 @@ services:
       - voltcraft-net
 
   # ---------------------------------------------------------------
-  # TeslaMate Grafana — dashboards (optional)
+  # TeslaMate Grafana — dashboards (required)
   # ---------------------------------------------------------------
   teslamate-grafana:
     image: teslamate/grafana:latest
     container_name: teslamate-grafana
     restart: unless-stopped
-    profiles:
-      - teslamate
     depends_on:
       teslamate-db:
         condition: service_healthy

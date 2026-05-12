@@ -7,7 +7,6 @@ import { AuthService } from '../auth/auth.service.js'
 import { requireAuth } from '../auth/auth.routes.js'
 import { AppError } from '../../common/errors/app-error.js'
 import { NotFoundError } from '../../common/errors/app-error.js'
-import { calcAvgConsumption } from './calculators/summary.calculator.js'
 import { detectConsumptionAnomalies } from './calculators/anomalies.calculator.js'
 import { ok } from '../../common/http/response.js'
 import { withVehicleAutoBootstrap } from '../vehicle/vehicle-auto-bootstrap.js'
@@ -37,8 +36,7 @@ export async function statsRoutes(app: FastifyInstance) {
     return v
   }
 
-  const getVehicleForRead = (userId: string) =>
-    teslamate.isEnabled() ? getVehicle(userId) : withVehicleAutoBootstrap(app, () => getVehicle(userId))
+  const getVehicleForRead = (userId: string) => withVehicleAutoBootstrap(app, () => getVehicle(userId))
 
   // GET /stats/summary?days=30
   app.get('/summary', { schema: { tags: ['stats'] } }, async (req) => {
@@ -48,34 +46,12 @@ export async function statsRoutes(app: FastifyInstance) {
     const since = new Date(Date.now() - days * 86_400_000)
     const vehicle = await getVehicleForRead(session.userId)
 
-    if (teslamate.isEnabled()) {
-      try {
-        const summary = await teslamate.getSummary(vehicle.vin, since, days)
-        return ok(summary)
-      } catch (error) {
-        throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('summary query', error), 503)
-      }
+    try {
+      const summary = await teslamate.getSummary(vehicle.vin, since, days)
+      return ok(summary)
+    } catch (error) {
+      throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('summary query', error), 503)
     }
-
-    const [distanceKm, energyAddedKwh, energyUsedKwh, cost, tripsCount, chargesCount] = await Promise.all([
-      statsRepo.getDistanceSum(vehicle.id, since),
-      statsRepo.getEnergySum(vehicle.id, since),
-      statsRepo.getTripEnergySum(vehicle.id, since),
-      statsRepo.getCostSum(vehicle.id, since),
-      statsRepo.getTripsCount(vehicle.id, since),
-      statsRepo.getChargesCount(vehicle.id, since),
-    ])
-
-    return ok({
-      periodDays: days,
-      distanceKm: Math.round(distanceKm * 10) / 10,
-      energyAddedKwh: Math.round(energyAddedKwh * 10) / 10,
-      energyUsedKwh: Math.round(energyUsedKwh * 10) / 10,
-      estimatedCostEur: Math.round(cost * 100) / 100,
-      avgConsumptionKwhPer100km: calcAvgConsumption(energyUsedKwh, distanceKm),
-      tripsCount,
-      chargeSessionsCount: chargesCount,
-    })
   })
 
   // GET /stats/battery?days=30
@@ -119,13 +95,12 @@ export async function statsRoutes(app: FastifyInstance) {
     const since = new Date(Date.now() - days * 86_400_000)
     const vehicle = await getVehicleForRead(session.userId)
 
-    if (teslamate.isEnabled()) {
+    try {
       const metrics = await teslamate.getDailyEfficiency(vehicle.vin, since)
-      if (metrics) return ok(metrics)
+      return ok(metrics)
+    } catch (error) {
+      throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('efficiency query', error), 503)
     }
-
-    const metrics = await statsRepo.getDailyTripMetrics(vehicle.id, since)
-    return ok(metrics)
   })
 
   // GET /stats/idles?days=7&minDurationMin=5
@@ -147,49 +122,33 @@ export async function statsRoutes(app: FastifyInstance) {
     const since = new Date(Date.now() - days * 86_400_000)
     const vehicle = await getVehicleForRead(session.userId)
 
-    if (teslamate.isEnabled()) {
-      try {
-        const pageSize = 100
-        const maxPages = 50
-        const trips: Array<{ id: string; startedAt: Date | null; distanceKm: number | null; energyUsedKwh: number | null }> = []
-        let page = 1
+    try {
+      const pageSize = 100
+      const maxPages = 50
+      const trips: Array<{ id: string; startedAt: Date | null; distanceKm: number | null; energyUsedKwh: number | null }> = []
+      let page = 1
 
-        while (page <= maxPages) {
-          const chunk = await teslamate.getTrips(vehicle.vin, { page, pageSize, from: since })
-          trips.push(...chunk.trips)
-          if (chunk.trips.length < pageSize) break
-          page += 1
-        }
-
-        const tripData = trips
-          .filter((t) => t.distanceKm != null && t.distanceKm > 0.1 && t.energyUsedKwh != null && t.energyUsedKwh > 0)
-          .map((t) => ({
-            id: t.id,
-            startedAt: t.startedAt ?? new Date(),
-            distance: t.distanceKm ?? 0,
-            consumption: ((t.energyUsedKwh ?? 0) / (t.distanceKm ?? 1)) * 100,
-          }))
-          .filter((t) => Number.isFinite(t.consumption) && t.consumption > 0)
-
-        const result = detectConsumptionAnomalies(tripData, days)
-        return ok(result)
-      } catch (error) {
-        throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('anomalies query', error), 503)
+      while (page <= maxPages) {
+        const chunk = await teslamate.getTrips(vehicle.vin, { page, pageSize, from: since })
+        trips.push(...chunk.trips)
+        if (chunk.trips.length < pageSize) break
+        page += 1
       }
+
+      const tripData = trips
+        .filter((t) => t.distanceKm != null && t.distanceKm > 0.1 && t.energyUsedKwh != null && t.energyUsedKwh > 0)
+        .map((t) => ({
+          id: t.id,
+          startedAt: t.startedAt ?? new Date(),
+          distance: t.distanceKm ?? 0,
+          consumption: ((t.energyUsedKwh ?? 0) / (t.distanceKm ?? 1)) * 100,
+        }))
+        .filter((t) => Number.isFinite(t.consumption) && t.consumption > 0)
+
+      const result = detectConsumptionAnomalies(tripData, days)
+      return ok(result)
+    } catch (error) {
+      throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('anomalies query', error), 503)
     }
-
-    const trips = await statsRepo.getTripsForAnomalyDetection(vehicle.id, since)
-    const tripData = trips
-      .filter((t) => t.distanceKm != null && t.distanceKm > 0.1 && t.energyUsedKwh != null && t.energyUsedKwh > 0)
-      .map((t) => ({
-        id: t.id,
-        startedAt: t.startedAt,
-        distance: t.distanceKm ?? 0,
-        consumption: ((t.energyUsedKwh ?? 0) / (t.distanceKm ?? 1)) * 100, // kWh/100km
-      }))
-      .filter((t) => Number.isFinite(t.consumption) && t.consumption > 0)
-
-    const result = detectConsumptionAnomalies(tripData, days)
-    return ok(result)
   })
 }
