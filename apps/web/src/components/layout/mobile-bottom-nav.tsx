@@ -4,8 +4,11 @@ import { Ellipsis, LogOut, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/features/auth/store'
 import { api } from '@/lib/api-client'
-import { MENU_ICON_REGISTRY, NAV_ITEMS } from './nav-config'
+import { MENU_ICON_REGISTRY } from './nav-config'
 import { useNavPreferences, type ResolvedNavItem } from '@/features/preferences/nav-preferences'
+
+const MOBILE_PRIMARY_LIMIT = 4
+const MOBILE_PRIMARY_PRIORITY: Array<ResolvedNavItem['key']> = ['dashboard', 'trips', 'charges', 'app-health']
 
 function isResolvedNavItem(item: ResolvedNavItem | undefined): item is ResolvedNavItem {
   return item != null
@@ -14,23 +17,23 @@ function isResolvedNavItem(item: ResolvedNavItem | undefined): item is ResolvedN
 export function MobileBottomNav() {
   const location = useLocation()
   const logout = useAuthStore((s) => s.logout)
-  const { visibleItems, resolvedItems } = useNavPreferences()
+  const { visibleItems } = useNavPreferences()
   const [moreOpen, setMoreOpen] = useState(false)
   const navBottomOffset = 'calc(env(safe-area-inset-bottom, 0px) + 0.5rem)'
   const sheetBottomOffset = 'calc(env(safe-area-inset-bottom, 0px) + 4.75rem)'
 
-  const preferredPrimaryItems = visibleItems.filter((item) => item.mobilePrimary).slice(0, 4)
-  const resolvedByKey = new Map(resolvedItems.map((item) => [item.key, item]))
-  const fallbackPrimaryItems = NAV_ITEMS
-    .filter((item) => item.mobilePrimary)
-    .slice(0, 4)
-    .map((item) => resolvedByKey.get(item.key))
+  const visibleByKey = new Map(visibleItems.map((item) => [item.key, item]))
+
+  const prioritizedPrimaryItems = MOBILE_PRIMARY_PRIORITY
+    .map((key) => visibleByKey.get(key))
     .filter(isResolvedNavItem)
 
-  // Keep the mobile bar stable even if preferences hide too many primary entries.
-  const primaryItems = preferredPrimaryItems.length >= 2
-    ? preferredPrimaryItems
-    : fallbackPrimaryItems
+  const fallbackPrimaryItems = visibleItems.filter(
+    (item) => item.mobilePrimary && !prioritizedPrimaryItems.some((primary) => primary.key === item.key),
+  )
+
+  const primaryItems = [...prioritizedPrimaryItems, ...fallbackPrimaryItems]
+    .slice(0, MOBILE_PRIMARY_LIMIT)
 
   const moreItems = visibleItems.filter((item) => !primaryItems.some((primary) => primary.key === item.key))
 
