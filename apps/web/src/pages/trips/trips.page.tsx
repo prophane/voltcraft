@@ -44,7 +44,22 @@ type TripPathInsights = {
   odometerTo: number | null
   avgSpeed: number | null
   maxSpeed: number | null
+  tractionKwh: number
+  regenKwh: number
+  netKwh: number
+  regenSharePct: number | null
   speedBins: SpeedBin[]
+}
+
+type EfficiencyScore = {
+  score: number
+  label: string
+  reasons: string[]
+}
+
+type HeatSegment = {
+  points: LatLonTuple[]
+  color: string
 }
 
 type LatLonTuple = [number, number]
@@ -196,6 +211,8 @@ function buildPathInsights(points: TripPathPoint[]): TripPathInsights | null {
 
   if (timePoints.length < 2) return null
   const speeds: number[] = []
+  let tractionKwh = 0
+  let regenKwh = 0
 
   for (let i = 1; i < timePoints.length; i++) {
     const prev = timePoints[i - 1]
@@ -203,6 +220,17 @@ function buildPathInsights(points: TripPathPoint[]): TripPathInsights | null {
     if (!prev || !curr) continue
     const dtHours = (curr.at - prev.at) / 3_600_000
     if (dtHours <= 0 || dtHours > 0.5) continue
+
+    const prevPower = prev.power ?? null
+    const currPower = curr.power ?? null
+    if (prevPower != null || currPower != null) {
+      const avgPower = ((prevPower ?? currPower ?? 0) + (currPower ?? prevPower ?? 0)) / 2
+      if (avgPower > 0) {
+        tractionKwh += avgPower * dtHours
+      } else if (avgPower < 0) {
+        regenKwh += Math.abs(avgPower) * dtHours
+      }
+    }
 
     if (curr.speed != null && curr.speed >= 0) speeds.push(curr.speed)
   }
@@ -226,13 +254,106 @@ function buildPathInsights(points: TripPathPoint[]): TripPathInsights | null {
     pct: total > 0 ? (counts[idx] / total) * 100 : 0,
   }))
 
+  const roundedTraction = Math.round(tractionKwh * 100) / 100
+  const roundedRegen = Math.round(regenKwh * 100) / 100
+  const netKwh = Math.max(0, roundedTraction - roundedRegen)
+  const regenSharePct = roundedTraction > 0
+    ? Math.round((roundedRegen / roundedTraction) * 100)
+    : null
+
   return {
     odometerFrom: firstOdo,
     odometerTo: lastOdo,
     avgSpeed,
     maxSpeed,
+    tractionKwh: roundedTraction,
+    regenKwh: roundedRegen,
+    netKwh,
+    regenSharePct,
     speedBins,
   }
+}
+
+function computeEfficiencyScore(consumptionWhKm: number | null, baselineKwh100: number | null, insights: TripPathInsights | null): EfficiencyScore {
+  let score = 75
+  const reasons: string[] = []
+
+  if (consumptionWhKm != null && baselineKwh100 != null) {
+    const baselineWhKm = baselineKwh100 * 10
+    const ratio = consumptionWhKm / Math.max(1, baselineWhKm)
+
+    if (ratio <= 0.9) {
+      score += 15
+      reasons.push('Conso meilleure que la moyenne 30 jours')
+    } else if (ratio <= 1.05) {
+      score += 5
+      reasons.push('Conso proche de ta moyenne')
+    } else if (ratio >= 1.25) {
+      score -= 20
+      reasons.push('Conso nettement au-dessus de la moyenne')
+    } else if (ratio >= 1.1) {
+      score -= 10
+      reasons.push('Conso un peu élevée vs moyenne')
+    }
+  }
+
+  if (insights?.regenSharePct != null) {
+    if (insights.regenSharePct >= 18) {
+      score += 10
+      reasons.push('Bonne récupération au freinage')
+    } else if (insights.regenSharePct <= 6) {
+      score -= 8
+      reasons.push('Récupération faible')
+    }
+  }
+
+  score = Math.max(0, Math.min(100, Math.round(score)))
+  const label = score >= 85 ? 'Excellent' : score >= 70 ? 'Bon' : score >= 50 ? 'Moyen' : 'À améliorer'
+
+  return {
+    score,
+    label,
+    reasons: reasons.slice(0, 2),
+  }
+}
+
+function buildConsumptionHeatSegments(points: TripPathPoint[]): HeatSegment[] {
+  if (points.length < 2) return []
+
+  const withGeoTime = points
+    .map((p) => ({
+      at: p.capturedAt ? new Date(p.capturedAt).getTime() : NaN,
+      lat: p.latitude,
+      lon: p.longitude,
+      power: p.power,
+    }))
+    .filter((p) => Number.isFinite(p.at) && p.lat != null && p.lon != null)
+    .sort((a, b) => a.at - b.at)
+
+  const segments: HeatSegment[] = []
+  for (let i = 1; i < withGeoTime.length; i++) {
+    const prev = withGeoTime[i - 1]
+    const curr = withGeoTime[i]
+    if (!prev || !curr) continue
+
+    const dtHours = (curr.at - prev.at) / 3_600_000
+    if (dtHours <= 0 || dtHours > 0.5) continue
+
+    const avgPower = ((prev.power ?? curr.power ?? 0) + (curr.power ?? prev.power ?? 0)) / 2
+    let color = '#52525b'
+    if (avgPower >= 30) color = '#dc2626'
+    else if (avgPower >= 16) color = '#f97316'
+    else if (avgPower >= 6) color = '#eab308'
+    else if (avgPower <= -12) color = '#0ea5e9'
+    else if (avgPower <= -4) color = '#22c55e'
+
+    segments.push({
+      points: [[prev.lat as number, prev.lon as number], [curr.lat as number, curr.lon as number]],
+      color,
+    })
+  }
+
+  return segments
 }
 
 function normalizeRoutePoints(start: { lat: number; lon: number } | null, end: { lat: number; lon: number } | null, path: TripPathPoint[]) {
@@ -708,6 +829,10 @@ export function TripsPage() {
               : (listPreviewRoutes?.[tripId] ?? fallbackPreviewRoute)
             const detailRoutePoints = isSelected ? selectedDisplayedRoutePoints : []
             const pathInsights = isSelected ? buildPathInsights(selectedPath) : null
+            const efficiencyScore = isSelected
+              ? computeEfficiencyScore(detailConsumptionWhKm, baselineConsumption, pathInsights)
+              : null
+            const consumptionHeatSegments = isSelected ? buildConsumptionHeatSegments(selectedPath) : []
             const avgSpeedFromTrip = detailTrip != null && (detailTrip.distanceKm ?? 0) > 0 && (detailTrip.durationMin ?? 0) > 0
               ? (detailTrip.distanceKm as number) / ((detailTrip.durationMin as number) / 60)
               : null
@@ -828,6 +953,18 @@ export function TripsPage() {
                       />
                     </div>
 
+                    {efficiencyScore && (
+                      <div className="rounded-xl border border-border-subtle bg-bg-overlay/55 p-3 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs uppercase tracking-wide text-text-muted">Score efficience trajet</p>
+                          <p className="text-sm font-semibold text-text-primary">{efficiencyScore.score}/100 · {efficiencyScore.label}</p>
+                        </div>
+                        {efficiencyScore.reasons.length > 0 && (
+                          <p className="text-xs text-text-muted">{efficiencyScore.reasons.join(' · ')}</p>
+                        )}
+                      </div>
+                    )}
+
                     {pathInsights && (
                       <div className="space-y-3">
                         <p className="text-xs uppercase tracking-wide text-text-muted">Deep dive conduite</p>
@@ -848,6 +985,26 @@ export function TripsPage() {
                             icon={Gauge}
                             label="Vitesse max"
                             value={maxSpeedDisplay != null ? `${Math.round(maxSpeedDisplay)} km/h` : '—'}
+                          />
+                          <DetailMetric
+                            icon={Zap}
+                            label="Traction"
+                            value={`${pathInsights.tractionKwh.toFixed(1)} kWh`}
+                          />
+                          <DetailMetric
+                            icon={Zap}
+                            label="Régénération"
+                            value={`${pathInsights.regenKwh.toFixed(1)} kWh`}
+                          />
+                          <DetailMetric
+                            icon={Zap}
+                            label="Énergie nette"
+                            value={`${pathInsights.netKwh.toFixed(1)} kWh`}
+                          />
+                          <DetailMetric
+                            icon={Gauge}
+                            label="Part récup"
+                            value={pathInsights.regenSharePct != null ? `${pathInsights.regenSharePct}%` : '—'}
                           />
                         </div>
 
@@ -879,6 +1036,13 @@ export function TripsPage() {
                             {detailRoutePoints.length >= 2 && (
                               <Polyline positions={detailRoutePoints} pathOptions={{ color: '#E8112D', weight: 5 }} />
                             )}
+                            {consumptionHeatSegments.map((segment, idx) => (
+                              <Polyline
+                                key={`heat-${idx}`}
+                                positions={segment.points}
+                                pathOptions={{ color: segment.color, weight: 6, opacity: 0.9 }}
+                              />
+                            ))}
                             <CircleMarker
                               center={detailRoutePoints[0] as [number, number]}
                               radius={6}
@@ -890,6 +1054,13 @@ export function TripsPage() {
                               pathOptions={{ color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9 }}
                             />
                           </MapContainer>
+                        </div>
+                        <div className="flex flex-wrap gap-3 text-[11px] text-text-muted">
+                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#dc2626]" /> Forte traction</span>
+                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#f97316]" /> Traction moyenne</span>
+                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#eab308]" /> Traction légère</span>
+                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#22c55e]" /> Régénération</span>
+                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#0ea5e9]" /> Régénération forte</span>
                         </div>
                         <div className="flex justify-end">
                           <a
