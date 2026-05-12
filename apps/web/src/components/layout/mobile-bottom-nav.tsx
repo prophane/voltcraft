@@ -17,12 +17,13 @@ function isResolvedNavItem(item: ResolvedNavItem | undefined): item is ResolvedN
 export function MobileBottomNav() {
   const location = useLocation()
   const logout = useAuthStore((s) => s.logout)
-  const { visibleItems } = useNavPreferences()
+  const { visibleItems, resolvedItems } = useNavPreferences()
   const [moreOpen, setMoreOpen] = useState(false)
   const navBottomOffset = 'calc(env(safe-area-inset-bottom, 0px) + 0.5rem)'
   const sheetBottomOffset = 'calc(env(safe-area-inset-bottom, 0px) + 4.75rem)'
 
   const visibleByKey = new Map(visibleItems.map((item) => [item.key, item]))
+  const resolvedByKey = new Map(resolvedItems.map((item) => [item.key, item]))
 
   const prioritizedPrimaryItems = MOBILE_PRIMARY_PRIORITY
     .map((key) => visibleByKey.get(key))
@@ -32,8 +33,31 @@ export function MobileBottomNav() {
     (item) => item.mobilePrimary && !prioritizedPrimaryItems.some((primary) => primary.key === item.key),
   )
 
-  const primaryItems = [...prioritizedPrimaryItems, ...fallbackPrimaryItems]
-    .slice(0, MOBILE_PRIMARY_LIMIT)
+  const hiddenPriorityBackfill = MOBILE_PRIMARY_PRIORITY
+    .map((key) => resolvedByKey.get(key))
+    .filter(isResolvedNavItem)
+
+  const hiddenMobileBackfill = resolvedItems.filter((item) => item.mobilePrimary)
+
+  const anyResolvedBackfill = resolvedItems
+
+  const pickUnique = (items: ResolvedNavItem[]) => {
+    const selected: ResolvedNavItem[] = []
+    for (const item of items) {
+      if (selected.some((current) => current.key === item.key)) continue
+      selected.push(item)
+      if (selected.length >= MOBILE_PRIMARY_LIMIT) break
+    }
+    return selected
+  }
+
+  const primaryItems = pickUnique([
+    ...prioritizedPrimaryItems,
+    ...fallbackPrimaryItems,
+    ...hiddenPriorityBackfill,
+    ...hiddenMobileBackfill,
+    ...anyResolvedBackfill,
+  ])
 
   const moreItems = visibleItems.filter((item) => !primaryItems.some((primary) => primary.key === item.key))
 
