@@ -63,12 +63,19 @@ export class StatsRepository {
 
   async getDailyTripMetrics(vehicleId: string, since: Date) {
     return this.db.$queryRaw<
-      Array<{ day: string; distance_km: number; charged_kwh: number }>
+      Array<{
+        day: string
+        distance_km: number
+        consumed_kwh: number
+        charged_kwh: number
+        avg_consumption_kwh_100: number | null
+      }>
     >`
       WITH trip_daily AS (
         SELECT
           DATE_TRUNC('day', t."started_at") AS day,
-          COALESCE(SUM(t."distance_km"), 0) AS distance_km
+          COALESCE(SUM(t."distance_km"), 0) AS distance_km,
+          COALESCE(SUM(t."energy_used_kwh"), 0) AS consumed_kwh
         FROM trips t
         WHERE t."vehicle_id" = ${vehicleId}
           AND t."started_at" >= ${since}
@@ -86,7 +93,13 @@ export class StatsRepository {
       SELECT
         COALESCE(td.day, cd.day) AS day,
         COALESCE(td.distance_km, 0) AS distance_km,
-        COALESCE(cd.charged_kwh, 0) AS charged_kwh
+        COALESCE(td.consumed_kwh, 0) AS consumed_kwh,
+        COALESCE(cd.charged_kwh, 0) AS charged_kwh,
+        CASE
+          WHEN COALESCE(td.distance_km, 0) > 0
+            THEN ROUND((COALESCE(td.consumed_kwh, 0) / td.distance_km * 100)::numeric, 1)
+          ELSE NULL
+        END AS avg_consumption_kwh_100
       FROM trip_daily td
       FULL OUTER JOIN charge_daily cd ON cd.day = td.day
       ORDER BY 1 ASC

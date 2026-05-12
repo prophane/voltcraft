@@ -63,7 +63,9 @@ export function AnalyticsPage() {
     ? efficiency.slice(-14).map((row) => ({
         day: String((row as { day?: string }).day ?? '').slice(5, 10),
         distance_km: Number((row as { distance_km?: number }).distance_km ?? 0),
+        consumed_kwh: Number((row as { consumed_kwh?: number }).consumed_kwh ?? 0),
         charged_kwh: Number((row as { charged_kwh?: number }).charged_kwh ?? 0),
+        avg_consumption_kwh_100: Number((row as { avg_consumption_kwh_100?: number }).avg_consumption_kwh_100 ?? 0),
       }))
     : []
 
@@ -178,7 +180,7 @@ export function AnalyticsPage() {
         <Card className="p-0 overflow-hidden">
           <div className="p-5 lg:p-6 border-b border-border-subtle">
             <CardTitle>Activité quotidienne</CardTitle>
-            <h2 className="mt-2 text-xl font-semibold text-text-primary">Distance et énergie chargée sur 14 jours</h2>
+            <h2 className="mt-2 text-xl font-semibold text-text-primary">Distance et énergie consommée sur 14 jours</h2>
           </div>
           <div className="h-72 px-3 pb-4 pt-2">
             {efficiencyData.length > 0 ? (
@@ -189,7 +191,7 @@ export function AnalyticsPage() {
                   <YAxis stroke="#8D8D8D" tickLine={false} axisLine={false} width={36} />
                   <Tooltip contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 10, color: '#F5F5F5' }} />
                   <Bar dataKey="distance_km" name="km" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="charged_kwh" name="kWh" fill="#38bdf8" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="consumed_kwh" name="kWh consommés" fill="#38bdf8" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (

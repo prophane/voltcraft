@@ -203,7 +203,7 @@ export function StatsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Activite quotidienne (distance vs charge)</CardTitle>
+          <CardTitle>Activite quotidienne (distance vs energie consommee)</CardTitle>
         </CardHeader>
         <div className="h-72 px-3 pb-4">
           {hasDailyActivity ? (
@@ -214,7 +214,7 @@ export function StatsPage() {
                 <YAxis stroke="#8D8D8D" tickLine={false} axisLine={false} width={36} />
                 <Tooltip contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 10, color: '#F5F5F5' }} />
                 <Bar dataKey="distance_km" name="km" fill="#E8112D" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="charged_kwh" name="kWh" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="consumed_kwh" name="kWh consommes" fill="#22c55e" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
