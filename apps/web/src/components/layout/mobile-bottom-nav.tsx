@@ -17,13 +17,12 @@ function isResolvedNavItem(item: ResolvedNavItem | undefined): item is ResolvedN
 export function MobileBottomNav() {
   const location = useLocation()
   const logout = useAuthStore((s) => s.logout)
-  const { visibleItems, resolvedItems } = useNavPreferences()
+  const { visibleItems } = useNavPreferences()
   const [moreOpen, setMoreOpen] = useState(false)
   const navBottomOffset = 'calc(env(safe-area-inset-bottom, 0px) + 0.5rem)'
   const sheetBottomOffset = 'calc(env(safe-area-inset-bottom, 0px) + 4.75rem)'
 
   const visibleByKey = new Map(visibleItems.map((item) => [item.key, item]))
-  const resolvedByKey = new Map(resolvedItems.map((item) => [item.key, item]))
 
   const prioritizedPrimaryItems = MOBILE_PRIMARY_PRIORITY
     .map((key) => visibleByKey.get(key))
@@ -33,13 +32,10 @@ export function MobileBottomNav() {
     (item) => item.mobilePrimary && !prioritizedPrimaryItems.some((primary) => primary.key === item.key),
   )
 
-  const hiddenPriorityBackfill = MOBILE_PRIMARY_PRIORITY
-    .map((key) => resolvedByKey.get(key))
-    .filter(isResolvedNavItem)
-
-  const hiddenMobileBackfill = resolvedItems.filter((item) => item.mobilePrimary)
-
-  const anyResolvedBackfill = resolvedItems
+  const visibleSequentialBackfill = visibleItems.filter(
+    (item) => !prioritizedPrimaryItems.some((primary) => primary.key === item.key)
+      && !fallbackPrimaryItems.some((fallback) => fallback.key === item.key),
+  )
 
   const pickUnique = (items: ResolvedNavItem[]) => {
     const selected: ResolvedNavItem[] = []
@@ -54,9 +50,7 @@ export function MobileBottomNav() {
   const primaryItems = pickUnique([
     ...prioritizedPrimaryItems,
     ...fallbackPrimaryItems,
-    ...hiddenPriorityBackfill,
-    ...hiddenMobileBackfill,
-    ...anyResolvedBackfill,
+    ...visibleSequentialBackfill,
   ])
 
   const moreItems = visibleItems.filter((item) => !primaryItems.some((primary) => primary.key === item.key))
