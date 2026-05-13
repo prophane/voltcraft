@@ -23,7 +23,7 @@ Valeurs recommandees selon votre mode d'acces:
 - `TESLA_REDIRECT_URI` avec votre domaine public si vous utiliserez l'OAuth Tesla
 - `TESLA_REGION` (`na`, `eu`, `cn`)
 
-TeslaMate obligatoire:
+TeslaMate (optionnel):
 - `TESLAMATE_DB_PASSWORD`
 - `TESLAMATE_ENCRYPTION_KEY`
 - `TESLAMATE_GRAFANA_PASSWORD`
@@ -32,6 +32,12 @@ TeslaMate obligatoire:
 
 ```bash
 docker compose up -d
+```
+
+Si vous voulez la stack TeslaMate locale incluse:
+
+```bash
+docker compose --profile teslamate up -d
 ```
 
 ## 4) Ouvrir l'application
@@ -45,11 +51,11 @@ Par defaut:
 
 Si `AUTH_DISABLED=true`:
 - l'assistant saute la creation de compte local
-- il demande directement la configuration OAuth Tesla
+- OAuth Tesla reste configurable mais facultatif
 
 Si `AUTH_DISABLED=false`:
 - l'assistant cree un compte admin local
-- puis demande la configuration OAuth Tesla
+- OAuth Tesla reste configurable mais facultatif
 
 Vous pourrez ensuite retrouver la configuration Tesla dans la page Parametres.
 
@@ -87,4 +93,5 @@ docker compose up -d --build
 3. Verifier `docker compose logs --tail=200 api`
 4. Verifier `GET /api/config`
 5. Si TeslaMate est active, verifier la coherence des credentials TeslaMate
-6. Consulter la section depannage de [DEPLOYMENT.md](DEPLOYMENT.md)
+6. Sans Fleet, verifier que TeslaMate expose bien au moins un vehicule (bootstrap auto VIN)
+7. Consulter la section depannage de [DEPLOYMENT.md](DEPLOYMENT.md)

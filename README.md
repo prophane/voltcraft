@@ -9,7 +9,7 @@ Tesla est une marque de Tesla, Inc. Voltcraft est un projet independant et non a
 - Tableau de bord temps reel avec etat compose du vehicule
 - Commandes vehicule via Tesla Fleet API et proxy `vehicle-command`
 - Historique trajets, charges, statistiques et diagnostics
-- TeslaMate obligatoire comme backend telemetry/historique
+- TeslaMate optionnel: stack locale (profile compose) ou instance externe
 - Integration MQTT / Home Assistant
 - Pression pneus (TPMS) exposee dans l'etat vehicule, visible sur dashboard et suivi sante
 - Carte trajet avec heatmap conso ON/OFF et preference utilisateur persistante
@@ -24,6 +24,7 @@ Services principaux:
 - `redis` : cache / coordination / BullMQ
 - `mqtt` : broker Mosquitto pour integrations MQTT
 - `vehicle-command` : proxy Tesla pour commandes signees
+- `teslamate-*` : optionnels, uniquement si vous activez le profile `teslamate`
 
 Schema de fonctionnement (vue d'ensemble):
 
@@ -46,7 +47,7 @@ flowchart LR
 	TDB --> A
 ```
 
-Services TeslaMate requis:
+Services TeslaMate (optionnels, profile `teslamate`):
 - `teslamate`
 - `teslamate-db`
 - `teslamate-mqtt`
@@ -58,9 +59,9 @@ Definition complete des services: [docker-compose.yml](docker-compose.yml)
 
 1. Copier [.env.example](.env.example) vers `.env`
 2. Renseigner les secrets de base et les ports souhaites
-3. Lancer la stack Docker Compose
+3. Lancer la stack Docker Compose (avec ou sans profile `teslamate`)
 4. Ouvrir Voltcraft dans le navigateur
-5. Completer l'assistant initial ou la page Parametres Tesla pour configurer l'OAuth Tesla
+5. Completer l'assistant initial (OAuth Tesla facultatif)
 6. Si TeslaMate est active, verifier la connectivite TeslaMate depuis l'interface Parametres
 
 ## Schema des donnees impacte
@@ -84,8 +85,10 @@ Le modele `user_settings` inclut aussi `tripHeatmapEnabled` pour persister l'aff
 Voltcraft utilise actuellement une configuration Tesla basee sur OAuth applicatif.
 
 Deux modes existent:
-- `AUTH_DISABLED=true` : l'assistant initial saute la creation du compte admin et demande uniquement la configuration OAuth Tesla
-- `AUTH_DISABLED=false` : l'assistant cree d'abord un compte admin local, puis demande la configuration OAuth Tesla
+- `AUTH_DISABLED=true` : l'assistant initial saute la creation du compte admin local
+- `AUTH_DISABLED=false` : l'assistant cree d'abord un compte admin local
+
+Dans les deux modes, la configuration OAuth Tesla est maintenant facultative au setup.
 
 La configuration Tesla peut etre mise a jour depuis l'interface Parametres. Le backend la persiste dans un fichier runtime (`APP_CONFIG_PATH`, par defaut `/app/data/runtime.env`) monte dans le volume `voltcraft-app-config`.
 
@@ -108,6 +111,12 @@ Demarrage standard:
 
 ```bash
 docker compose up -d
+```
+
+Demarrage avec stack TeslaMate locale:
+
+```bash
+docker compose --profile teslamate up -d
 ```
 
 Mise a jour applicative:
@@ -163,6 +172,7 @@ pnpm --filter @voltcraft/api test
 - Le dashboard propose un bouton `Actualiser` pour forcer une synchronisation immediate
 - L'etat compose du vehicule est derive de la telemetrie fraiche cote UI
 - Les pages historiques peuvent utiliser TeslaMate quand il est configure et disponible
+- Si Fleet n'est pas configure, Voltcraft peut creer automatiquement le vehicule depuis TeslaMate
 - Sur mobile, la barre basse affiche 4 entrees visibles (jamais une page masquee), puis `Plus`
 - Le detail trajet permet d'activer/desactiver la heatmap et sauvegarde cette preference
 - Les pressions TPMS sont normalisees et affichees en bar cote UI

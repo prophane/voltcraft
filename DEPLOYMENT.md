@@ -1,6 +1,6 @@
 # Mode operatoire de deploiement Voltcraft
 
-Ce document decrit la procedure de deploiement et d'exploitation de Voltcraft en environnement serveur avec TeslaMate obligatoire.
+Ce document decrit la procedure de deploiement et d'exploitation de Voltcraft en environnement serveur, avec Tesla Fleet et TeslaMate optionnels selon votre architecture.
 
 ## 1. Prerequis
 
@@ -27,6 +27,8 @@ Volumes critiques:
 - `voltcraft-redis-data`
 - `voltcraft-mqtt-data`
 - `voltcraft-app-config`
+
+Volumes additionnels si profile `teslamate` active:
 - `teslamate-db-data`
 - `teslamate-grafana-data`
 
@@ -59,7 +61,7 @@ Variables importantes selon votre architecture:
 - `TESLA_REGION`
 - `TESLA_COMMAND_PROXY_URL` si vous utilisez un proxy different du service compose par defaut
 
-TeslaMate obligatoire:
+TeslaMate (optionnel):
 - `TESLAMATE_DB_PASSWORD`
 - `TESLAMATE_ENCRYPTION_KEY`
 - `TESLAMATE_GRAFANA_PASSWORD`
@@ -68,6 +70,12 @@ TeslaMate obligatoire:
 
 ```bash
 docker compose up -d
+```
+
+Avec TeslaMate local (profile dedie):
+
+```bash
+docker compose --profile teslamate up -d
 ```
 
 ### 3.4 Verifier l'etat initial
@@ -90,11 +98,15 @@ Validation minimale:
 
 Si `AUTH_DISABLED=true`:
 - pas de login local obligatoire
-- l'assistant demande directement la configuration OAuth Tesla
+- OAuth Tesla est facultatif au setup
 
 Si `AUTH_DISABLED=false`:
 - l'assistant cree un compte admin local
-- puis demande la configuration OAuth Tesla
+- OAuth Tesla est facultatif au setup
+
+Comportement sans Fleet:
+- si TeslaMate est configure et contient un vehicule, Voltcraft peut bootstrapper automatiquement le VIN et creer le vehicule en base
+- les commandes actives Tesla restent indisponibles tant qu'aucun compte Fleet n'est lie
 
 ### 4.2 Configuration Tesla
 
@@ -171,6 +183,8 @@ docker exec -t voltcraft-db pg_dump -U voltcraft -d voltcraft > voltcraft.sql
 
 ### 7.2 Backup logique PostgreSQL TeslaMate
 
+Si profile `teslamate` actif:
+
 ```bash
 docker exec -t teslamate-db pg_dump -U teslamate -d teslamate > teslamate.sql
 ```
@@ -187,9 +201,10 @@ Permettre a Voltcraft de lire l'historique et certaines donnees telemetry depuis
 
 ### 8.2 Conditions
 
-- profil `teslamate` demarre
-- `teslamate-db` accessible depuis `api`
+- soit profile `teslamate` demarre
+- soit TeslaMate externe accessible depuis `api` (`TESLAMATE_DB_HOST`/`TESLAMATE_DB_PORT`)
 - credentials `TESLAMATE_DB_*` coherents
+- la table `cars` TeslaMate contient au moins un VIN pour le bootstrap automatique du vehicule
 
 ### 8.3 Point critique sur le mot de passe TeslaMate
 
@@ -225,6 +240,7 @@ Actions:
 2. verifier `GET /api/vehicle/state`
 3. verifier les logs API lors d'un sync manuel
 4. si TeslaMate est active, verifier quelle source alimente l'etat observe
+5. sans Fleet, verifier qu'un vehicule a bien ete bootstrappe depuis TeslaMate
 
 ### 9.3 `Vehicle is offline or asleep`
 
@@ -250,7 +266,7 @@ Verifier:
 - `DATABASE_URL`
 - `REDIS_URL`
 - generation Prisma / migrations
-- acces a `vehicle-command` si commandes Tesla configurees
+- acces a `vehicle-command` uniquement si commandes Tesla configurees
 
 ## 10. Checklist d'exploitation
 
