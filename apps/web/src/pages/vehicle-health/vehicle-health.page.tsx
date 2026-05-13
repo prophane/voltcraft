@@ -139,6 +139,16 @@ export function VehicleHealthPage() {
     return { latest, avg, min, max, spread }
   }, [tirePressureSeries])
 
+  const tirePressureTrend = useMemo(() => {
+    return tirePressureSeries.map((row) => ({
+      time: new Date(row.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+      fl: row.fl,
+      fr: row.fr,
+      rl: row.rl,
+      rr: row.rr,
+    }))
+  }, [tirePressureSeries])
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
@@ -361,6 +371,28 @@ export function VehicleHealthPage() {
               <InfoChip label="Maximum" value={formatBar(tirePressureStats.max)} />
               <InfoChip label="Ecart actuel" value={tirePressureStats.spread != null ? `${tirePressureStats.spread.toFixed(2)} bar` : '—'} tone={tirePressureStats.spread != null && tirePressureStats.spread > 0.20 ? 'warning' : 'neutral'} />
             </div>
+
+            {tirePressureTrend.length > 1 ? (
+              <div className="rounded-2xl border border-border-subtle bg-bg-overlay/50 p-3">
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={tirePressureTrend} margin={{ left: 8, right: 12, top: 8, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
+                      <XAxis dataKey="time" stroke="#8D8D8D" tickLine={false} axisLine={false} minTickGap={28} />
+                      <YAxis stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} domain={["dataMin - 0.05", "dataMax + 0.05"]} />
+                      <Tooltip
+                        contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 10, color: '#F5F5F5' }}
+                        formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)} bar` : '—')}
+                      />
+                      <Line type="monotone" dataKey="fl" name="Avant gauche" stroke="#60A5FA" strokeWidth={2} dot={false} connectNulls />
+                      <Line type="monotone" dataKey="fr" name="Avant droit" stroke="#34D399" strokeWidth={2} dot={false} connectNulls />
+                      <Line type="monotone" dataKey="rl" name="Arriere gauche" stroke="#F59E0B" strokeWidth={2} dot={false} connectNulls />
+                      <Line type="monotone" dataKey="rr" name="Arriere droit" stroke="#F472B6" strokeWidth={2} dot={false} connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ) : null}
 
             <p className="text-xs text-text-muted">
               {tirePressureStats.latest.at ? `Dernier echantillon: ${formatDate(tirePressureStats.latest.at)}` : 'Date du dernier echantillon indisponible'}

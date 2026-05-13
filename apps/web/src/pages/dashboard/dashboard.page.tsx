@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Lock, Unlock, MapPin, Plus, Minus, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { api } from '@/lib/api'
+import { api } from '@/lib/api-client'
 import { cn, formatDate } from '@/lib/utils'
 
 interface ReverseGeocodeResponse {
