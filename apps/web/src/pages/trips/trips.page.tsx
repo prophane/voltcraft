@@ -111,6 +111,12 @@ function isPointInsideGeofence(lat: number, lon: number, geofence: GeofenceLocat
   return haversineMeters(lat, lon, geofence.latitude, geofence.longitude) <= geofence.radius
 }
 
+function geofenceNameForPoint(lat: number | null | undefined, lon: number | null | undefined, geofences: GeofenceLocation[]): string | null {
+  if (lat == null || lon == null || geofences.length === 0) return null
+  const match = geofences.find((geofence) => isPointInsideGeofence(lat, lon, geofence))
+  return match?.name ?? null
+}
+
 function isWorkTrip(trip: TripRecord, workGeofences: GeofenceLocation[]): boolean {
   if (textContainsWorkHint(trip.startAddress) || textContainsWorkHint(trip.endAddress) || textContainsWorkHint(trip.notes)) {
     return true
@@ -528,13 +534,18 @@ export function TripsPage() {
     staleTime: 60_000,
   })
 
-  const workGeofences = useMemo(() => {
+  const allGeofences = useMemo(() => {
     if (!Array.isArray(geofencesData)) return [] as GeofenceLocation[]
     return geofencesData
       .map(normalizeGeofence)
       .filter((value): value is GeofenceLocation => value != null)
-      .filter((geofence) => isWorkGeofenceName(geofence.name))
   }, [geofencesData])
+
+  const workGeofences = useMemo(() => {
+    if (allGeofences.length === 0) return [] as GeofenceLocation[]
+    return allGeofences
+      .filter((geofence) => isWorkGeofenceName(geofence.name))
+  }, [allGeofences])
 
   const createGeofenceMutation = useMutation({
     mutationFn: async ({ name, latitude, longitude }: { name: string; latitude: number; longitude: number }) => {
@@ -899,14 +910,30 @@ export function TripsPage() {
             const tripId = String(trip.id)
             const isSelected = selectedTripId === tripId
             const detailTrip = isSelected && selectedTrip?.id === tripId ? selectedTrip : trip
+            const tripStartGeofenceName = geofenceNameForPoint(trip.startLatitude, trip.startLongitude, allGeofences)
+            const tripEndGeofenceName = geofenceNameForPoint(trip.endLatitude, trip.endLongitude, allGeofences)
+            const detailStartGeofenceName = geofenceNameForPoint(detailTrip.startLatitude, detailTrip.startLongitude, allGeofences)
+            const detailEndGeofenceName = geofenceNameForPoint(detailTrip.endLatitude, detailTrip.endLongitude, allGeofences)
+            const listStartLabel = formatPointLabel(
+              tripStartGeofenceName ?? listResolvedAddresses?.[tripId]?.start ?? trip.startAddress,
+              trip.startLatitude,
+              trip.startLongitude,
+              homeLocation,
+            )
+            const listEndLabel = formatPointLabel(
+              tripEndGeofenceName ?? listResolvedAddresses?.[tripId]?.end ?? trip.endAddress,
+              trip.endLatitude,
+              trip.endLongitude,
+              homeLocation,
+            )
             const startLabel = formatPointLabel(
-              detailTrip.startAddress ?? (isSelected ? (startResolvedAddress ?? null) : null),
+              detailStartGeofenceName ?? detailTrip.startAddress ?? (isSelected ? (startResolvedAddress ?? null) : null),
               detailTrip.startLatitude,
               detailTrip.startLongitude,
               homeLocation,
             )
             const endLabel = formatPointLabel(
-              detailTrip.endAddress ?? (isSelected ? (endResolvedAddress ?? null) : null),
+              detailEndGeofenceName ?? detailTrip.endAddress ?? (isSelected ? (endResolvedAddress ?? null) : null),
               detailTrip.endLatitude,
               detailTrip.endLongitude,
               homeLocation,
@@ -955,7 +982,7 @@ export function TripsPage() {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-text-primary">
-                        {formatPointLabel(listResolvedAddresses?.[tripId]?.start ?? trip.startAddress, trip.startLatitude, trip.startLongitude, homeLocation)} → {formatPointLabel(listResolvedAddresses?.[tripId]?.end ?? trip.endAddress, trip.endLatitude, trip.endLongitude, homeLocation)}
+                        {listStartLabel} → {listEndLabel}
                       </p>
                       <p className="text-xs text-text-muted mt-0.5">{formatDate(trip.startedAt)}</p>
                     </div>
