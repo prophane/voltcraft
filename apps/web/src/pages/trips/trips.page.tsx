@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { settingsApi, statsApi, tripsApi } from '@/features/vehicle/api'
+import { api } from '@/lib/api-client'
 import { MapContainer, Polyline, TileLayer, CircleMarker } from 'react-leaflet'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
@@ -67,17 +68,64 @@ type LatLonTuple = [number, number]
 type TripTab = 'all' | 'work' | 'personal'
 type ResolvedTripAddresses = Record<string, { start: string | null; end: string | null }>
 type HomeLocation = { lat: number; lon: number; radiusM: number }
+type GeofenceLocation = {
+  id: number
+  name: string
+  latitude: number
+  longitude: number
+  radius: number
+}
 
 function textContainsWorkHint(value?: string | null): boolean {
   if (!value) return false
   const v = value.toLowerCase()
   return [
-    'work', 'office', 'bureau', 'societe', 'entreprise', 'company', 'hq', 'cowork',
+    'work', 'office', 'bureau', 'travail', 'societe', 'entreprise', 'company', 'hq', 'cowork',
   ].some((k) => v.includes(k))
 }
 
-function isWorkTrip(trip: TripRecord): boolean {
-  return textContainsWorkHint(trip.startAddress) || textContainsWorkHint(trip.endAddress) || textContainsWorkHint(trip.notes)
+function normalizeGeofence(raw: unknown): GeofenceLocation | null {
+  if (!raw || typeof raw !== 'object') return null
+  const row = raw as Record<string, unknown>
+  const id = parseNumber(row.id)
+  const latitude = parseNumber(row.latitude)
+  const longitude = parseNumber(row.longitude)
+  const radius = parseNumber(row.radius)
+  const name = parseString(row.name)
+  if (id == null || latitude == null || longitude == null || radius == null || !name) return null
+  return {
+    id,
+    name,
+    latitude,
+    longitude,
+    radius,
+  }
+}
+
+function isWorkGeofenceName(name: string): boolean {
+  const value = name.toLowerCase()
+  return ['work', 'office', 'bureau', 'travail', 'company', 'hq', 'cowork'].some((hint) => value.includes(hint))
+}
+
+function isPointInsideGeofence(lat: number, lon: number, geofence: GeofenceLocation): boolean {
+  return haversineMeters(lat, lon, geofence.latitude, geofence.longitude) <= geofence.radius
+}
+
+function isWorkTrip(trip: TripRecord, workGeofences: GeofenceLocation[]): boolean {
+  if (textContainsWorkHint(trip.startAddress) || textContainsWorkHint(trip.endAddress) || textContainsWorkHint(trip.notes)) {
+    return true
+  }
+
+  if (workGeofences.length === 0) return false
+  const points: Array<{ lat: number; lon: number }> = []
+  if (trip.startLatitude != null && trip.startLongitude != null) {
+    points.push({ lat: trip.startLatitude, lon: trip.startLongitude })
+  }
+  if (trip.endLatitude != null && trip.endLongitude != null) {
+    points.push({ lat: trip.endLatitude, lon: trip.endLongitude })
+  }
+
+  return points.some((point) => workGeofences.some((geofence) => isPointInsideGeofence(point.lat, point.lon, geofence)))
 }
 
 function consumptionWhKm(trip: TripRecord): number | null {
@@ -455,6 +503,7 @@ export function TripsPage() {
   const [tab, setTab] = useState<TripTab>('all')
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
   const [isHeatmapEnabled, setIsHeatmapEnabled] = useState(true)
+  const [workGeofenceSavedTripId, setWorkGeofenceSavedTripId] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(10)
   const hasHydratedTripFromUrl = useRef(false)
 
@@ -468,6 +517,46 @@ export function TripsPage() {
     mutationFn: (enabled: boolean) => settingsApi.update({ tripHeatmapEnabled: enabled }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] })
+    },
+  })
+
+  const { data: geofencesData } = useQuery({
+    queryKey: ['geofences'],
+    queryFn: async () => api.get('/settings/geofences'),
+    staleTime: 60_000,
+  })
+
+  const workGeofences = useMemo(() => {
+    if (!Array.isArray(geofencesData)) return [] as GeofenceLocation[]
+    return geofencesData
+      .map(normalizeGeofence)
+      .filter((value): value is GeofenceLocation => value != null)
+      .filter((geofence) => isWorkGeofenceName(geofence.name))
+  }, [geofencesData])
+
+  const workGeofenceMutation = useMutation({
+    mutationFn: async ({ tripId, latitude, longitude }: { tripId: string; latitude: number; longitude: number }) => {
+      const existing = workGeofences[0] ?? null
+      if (existing) {
+        await api.patch(`/settings/geofences/${existing.id}`, {
+          name: existing.name,
+          latitude,
+          longitude,
+          radius: existing.radius,
+        })
+      } else {
+        await api.post('/settings/geofences', {
+          name: 'Travail',
+          latitude,
+          longitude,
+          radius: 150,
+        })
+      }
+      return { tripId }
+    },
+    onSuccess: (result) => {
+      setWorkGeofenceSavedTripId(result.tripId)
+      queryClient.invalidateQueries({ queryKey: ['geofences'] })
     },
   })
 
@@ -673,9 +762,9 @@ export function TripsPage() {
 
   const filteredTrips = useMemo(() => {
     if (tab === 'all') return trips
-    if (tab === 'work') return trips.filter(isWorkTrip)
-    return trips.filter((t) => !isWorkTrip(t))
-  }, [tab, trips])
+    if (tab === 'work') return trips.filter((trip) => isWorkTrip(trip, workGeofences))
+    return trips.filter((trip) => !isWorkTrip(trip, workGeofences))
+  }, [tab, trips, workGeofences])
 
   const displayedTrips = useMemo(() => filteredTrips.slice(0, visibleCount), [filteredTrips, visibleCount])
 
@@ -862,6 +951,9 @@ export function TripsPage() {
               : null
             const avgSpeedDisplay = avgSpeedFromTrip ?? pathInsights?.avgSpeed ?? null
             const maxSpeedDisplay = pathInsights?.maxSpeed ?? null
+            const canSetWorkDestination = detailEndCoords != null
+            const isSavingWorkDestination = workGeofenceMutation.isPending && workGeofenceMutation.variables?.tripId === tripId
+            const isWorkDestinationSaved = workGeofenceSavedTripId === tripId
 
             return (
             <Card
@@ -910,6 +1002,29 @@ export function TripsPage() {
                   <div className="flex items-center justify-end gap-4 text-xs text-text-muted">
                     <span className="inline-flex items-center gap-1"><Clock size={11} /> {trip.durationMin ? formatDuration(Number(trip.durationMin)) : '—'}</span>
                     <span className="inline-flex items-center gap-1"><Zap size={11} /> {trip.energyUsedKwh != null ? `${trip.energyUsedKwh.toFixed(1)} kWh` : '—'}</span>
+                    <button
+                      type="button"
+                      disabled={!canSetWorkDestination || isSavingWorkDestination}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        if (!detailEndCoords) return
+                        setWorkGeofenceSavedTripId(null)
+                        workGeofenceMutation.mutate({
+                          tripId,
+                          latitude: detailEndCoords.lat,
+                          longitude: detailEndCoords.lon,
+                        })
+                      }}
+                      className="inline-flex items-center gap-1 text-accent-400 hover:text-accent-300 disabled:text-text-muted disabled:cursor-not-allowed"
+                      title="Définir la destination de ce trajet comme geofence Travail"
+                    >
+                      <MapPin size={11} />
+                      {isSavingWorkDestination
+                        ? 'Enregistrement...'
+                        : isWorkDestinationSaved
+                          ? 'Travail OK'
+                          : 'Définir Travail'}
+                    </button>
                     <button
                       type="button"
                       onClick={(event) => {
