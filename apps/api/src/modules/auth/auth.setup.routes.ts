@@ -66,15 +66,8 @@ export async function registerSetupRoutes(app: FastifyInstance) {
       })
     }
 
-    if (env.AUTH_DISABLED) {
-      const oauthConfigured = Boolean(payload.teslaClientId && payload.teslaClientSecret && payload.teslaRedirectUri)
-      if (!oauthConfigured) {
-        return reply.status(400).send({
-          success: false,
-          error: { code: 'BAD_REQUEST', message: 'Tesla OAuth client settings are required in AUTH_DISABLED mode' },
-        })
-      }
-    }
+    // AUTH_DISABLED mode no longer requires Fleet OAuth configuration.
+    // Users can complete setup first, then configure Tesla later.
 
     if (payload.teslaToken) {
       await persistTeslaConfig({

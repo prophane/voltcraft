@@ -109,8 +109,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      teslamate-db:
-        condition: service_healthy
       vehicle-command:
         condition: service_started
     environment:
@@ -162,6 +160,7 @@ services:
   teslamate-db:
     image: postgres:16-alpine
     container_name: teslamate-db
+    profiles: ["teslamate"]
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${TESLAMATE_DB_NAME:-teslamate}
@@ -183,6 +182,7 @@ services:
   teslamate-mqtt:
     image: eclipse-mosquitto:2
     container_name: teslamate-mqtt
+    profiles: ["teslamate"]
     restart: unless-stopped
     command: ["mosquitto", "-c", "/mosquitto/config/mosquitto-no-auth.conf"]
     volumes:
@@ -201,6 +201,7 @@ services:
   teslamate:
     image: teslamate/teslamate:latest
     container_name: teslamate
+    profiles: ["teslamate"]
     restart: unless-stopped
     depends_on:
       teslamate-db:
@@ -227,6 +228,7 @@ services:
   teslamate-grafana:
     image: teslamate/grafana:latest
     container_name: teslamate-grafana
+    profiles: ["teslamate"]
     restart: unless-stopped
     depends_on:
       teslamate-db:

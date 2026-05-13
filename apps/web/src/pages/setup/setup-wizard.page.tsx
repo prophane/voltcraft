@@ -99,16 +99,6 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
     // Auth disabled mode: skip admin, go straight to Tesla token
     if (authDisabled) {
       if (step === 'tesla') {
-        const hasOAuthConfig = Boolean(
-          formData.teslaClientId.trim()
-          && formData.teslaClientSecret.trim()
-          && formData.teslaRedirectUri.trim(),
-        )
-
-        if (!hasOAuthConfig) {
-          setError('Provide Tesla OAuth client settings to continue')
-          return
-        }
         setupMutation.mutate()
       }
       return
@@ -136,7 +126,7 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
         && formData.teslaRedirectUri.trim(),
       )
       if (!hasOAuthConfig) {
-        setError('Tesla OAuth Client ID, Secret and Redirect URI are required')
+        setStep('optional')
         return
       }
       setStep('optional')
@@ -245,11 +235,11 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
                 <>
                   <div className="space-y-1">
                     <h2 className="text-xl font-semibold text-text-primary">Configure Tesla OAuth</h2>
-                    <p className="text-sm text-text-secondary">Enter Tesla OAuth app settings (recommended)</p>
+                    <p className="text-sm text-text-secondary">Enter Tesla OAuth app settings (optional, recommended)</p>
                   </div>
 
                   <div className="bg-bg-overlay border border-border-subtle rounded-lg p-4 space-y-2">
-                    <p className="text-xs font-medium text-text-secondary">ℹ️ Required for one-click Tesla connect after setup</p>
+                    <p className="text-xs font-medium text-text-secondary">ℹ️ Optional at setup time, required later for one-click Tesla connect</p>
                     <p className="text-xs text-text-muted">
                       Visit{' '}
                       <a href="https://developer.tesla.com" target="_blank" rel="noopener noreferrer" className="text-accent-500 hover:underline">
@@ -310,11 +300,11 @@ export function SetupWizardPage({ onSetupComplete }: SetupWizardPageProps) {
                 <>
                   <div className="space-y-1">
                     <h2 className="text-xl font-semibold text-text-primary">Tesla Fleet API Setup</h2>
-                    <p className="text-sm text-text-secondary">Connect to your Tesla vehicles</p>
+                    <p className="text-sm text-text-secondary">Connect to your Tesla vehicles (optional for now)</p>
                   </div>
 
                   <div className="bg-bg-overlay border border-border-subtle rounded-lg p-4 space-y-2">
-                    <p className="text-xs font-medium text-text-secondary">ℹ️ Need Tesla credentials?</p>
+                    <p className="text-xs font-medium text-text-secondary">ℹ️ Need Tesla credentials? You can also skip and configure later in Settings.</p>
                     <p className="text-xs text-text-muted">
                       Register at{' '}
                       <a href={teslaDeveloperUrl} target="_blank" rel="noopener noreferrer" className="text-accent-500 hover:underline">

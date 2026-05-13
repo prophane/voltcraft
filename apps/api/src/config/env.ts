@@ -36,10 +36,10 @@ const envSchema = z.object({
   TESLAMATE_DB_HOST: z.string().default('teslamate-db'),
   TESLAMATE_DB_PORT: z.coerce.number().default(5432),
   TESLAMATE_DB_USER: z.string().default('teslamate'),
-  TESLAMATE_DB_PASSWORD: z.string().min(8),
-  TESLAMATE_ENCRYPTION_KEY: z.string().regex(/^[a-fA-F0-9]{64}$/),
+  TESLAMATE_DB_PASSWORD: z.string().default(''),
+  TESLAMATE_ENCRYPTION_KEY: z.string().default(''),
   TESLAMATE_GRAFANA_USER: z.string().default('admin'),
-  TESLAMATE_GRAFANA_PASSWORD: z.string().min(8),
+  TESLAMATE_GRAFANA_PASSWORD: z.string().default(''),
   TESLAMATE_PORT: z.coerce.number().default(4000),
   TESLAMATE_GRAFANA_PORT: z.coerce.number().default(3002),
   TESLAMATE_BACKEND_ONLY: z

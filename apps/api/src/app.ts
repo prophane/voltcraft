@@ -103,26 +103,24 @@ export async function buildApp() {
     async (app) => {
       // ── Config endpoint (frontend setup detection) ───────────────
       app.get('/config', async () => {
-        // In AUTH_DISABLED mode, setup is required only when neither OAuth app
-        // credentials nor an active Tesla account/token are available.
-        let teslaNeedsSetup = false
-        if (env.AUTH_DISABLED) {
-          const oauthConfigured = Boolean(env.TESLA_CLIENT_ID && env.TESLA_CLIENT_SECRET && env.TESLA_REDIRECT_URI)
-          const hasActiveAccount =
-            (await app.prisma.teslaAccount.count({ where: { isActive: true } })) > 0
-          teslaNeedsSetup = !oauthConfigured && !hasActiveAccount
-        }
+        const hasActiveAccount =
+          (await app.prisma.teslaAccount.count({ where: { isActive: true } })) > 0
+        const oauthConfigured = Boolean(env.TESLA_CLIENT_ID && env.TESLA_CLIENT_SECRET && env.TESLA_REDIRECT_URI)
+        const adminNeedsSetup = !env.AUTH_DISABLED
+          ? (await app.prisma.user.count()) === 0
+          : false
 
         const teslamateRequiredMissing: string[] = []
         if (!env.TESLAMATE_DB_PASSWORD) teslamateRequiredMissing.push('TESLAMATE_DB_PASSWORD')
         if (!env.TESLAMATE_ENCRYPTION_KEY) teslamateRequiredMissing.push('TESLAMATE_ENCRYPTION_KEY')
         if (!env.TESLAMATE_GRAFANA_PASSWORD) teslamateRequiredMissing.push('TESLAMATE_GRAFANA_PASSWORD')
-        const teslamateNeedsSetup = teslamateRequiredMissing.length > 0
 
         // Return directly without ok() wrapper to match frontend expectations
         return {
           authDisabled: env.AUTH_DISABLED,
-          setupRequired: teslaNeedsSetup || teslamateNeedsSetup,
+          setupRequired: adminNeedsSetup,
+          teslaOAuthConfigured: oauthConfigured,
+          teslaAccountLinked: hasActiveAccount,
           teslamateRequiredMissing,
         }
       })

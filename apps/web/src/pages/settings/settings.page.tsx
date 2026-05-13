@@ -606,11 +606,11 @@ export function SettingsPage() {
               if (!ts) return null
               return ts.configured ? (
                 <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-xs text-success">
-                  Configuration TeslaMate obligatoire complete.
+                  Configuration TeslaMate complete.
                 </div>
               ) : (
                 <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-text-secondary">
-                  Variables manquantes: {ts.requiredMissing.join(', ')}
+                  TeslaMate non configure completement (optionnel). Variables manquantes: {ts.requiredMissing.join(', ')}
                 </div>
               )
             })()}
