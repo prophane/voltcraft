@@ -8,13 +8,27 @@ import type {
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
+import { CheckCircle2, AlertTriangle, XCircle, ArrowUp, ArrowDown } from 'lucide-react'
 import { ApiError } from '@/lib/api-client'
 import { TeslaSettingsSection } from './tesla-section'
 import { GeofencesSection } from './geofences-section'
 import { MENU_ICON_REGISTRY } from '@/components/layout/nav-config'
 import { getNavPreferences, resetNavPreferences, setNavPreferences, type NavPreferences } from '@/features/preferences/nav-preferences'
-import { NAV_ITEMS } from '@/components/layout/nav-config'
+import { NAV_ITEMS, type NavItemKey } from '@/components/layout/nav-config'
+
+function normalizeOrderedKeys(keys: NavItemKey[]): NavItemKey[] {
+  const unique: NavItemKey[] = []
+  for (const key of keys) {
+    if (!NAV_ITEMS.some((item) => item.key === key) || unique.includes(key)) continue
+    unique.push(key)
+  }
+
+  for (const item of NAV_ITEMS) {
+    if (!unique.includes(item.key)) unique.push(item.key)
+  }
+
+  return unique
+}
 
 export function SettingsPage() {
   const qc = useQueryClient()
@@ -120,11 +134,18 @@ export function SettingsPage() {
     setMenuDraft(getNavPreferences())
   }, [])
 
-  const menuItems = useMemo(() => NAV_ITEMS.map((item) => ({
-    ...item,
-    iconName: menuDraft.iconByKey[item.key] ?? item.defaultIcon,
-    hidden: menuDraft.hiddenKeys.includes(item.key),
-  })), [menuDraft])
+  const menuItems = useMemo(() => {
+    const byKey = new Map(NAV_ITEMS.map((item) => [item.key, item]))
+    const orderedKeys = normalizeOrderedKeys(menuDraft.orderedKeys)
+    return orderedKeys
+      .map((key) => byKey.get(key))
+      .filter((item): item is (typeof NAV_ITEMS)[number] => item != null)
+      .map((item) => ({
+        ...item,
+        iconName: menuDraft.iconByKey[item.key] ?? item.defaultIcon,
+        hidden: menuDraft.hiddenKeys.includes(item.key),
+      }))
+  }, [menuDraft])
 
   const updateMenuIcon = (key: keyof NavPreferences['iconByKey'], iconName: keyof typeof MENU_ICON_REGISTRY) => {
     setMenuDraft((current) => {
@@ -152,8 +173,31 @@ export function SettingsPage() {
     })
   }
 
+  const moveMenuItem = (key: NavItemKey, direction: 'up' | 'down') => {
+    setMenuDraft((current) => {
+      const ordered = normalizeOrderedKeys(current.orderedKeys)
+      const index = ordered.indexOf(key)
+      if (index < 0) return current
+      const targetIndex = direction === 'up' ? index - 1 : index + 1
+      if (targetIndex < 0 || targetIndex >= ordered.length) return current
+
+      const nextOrdered = [...ordered]
+      const currentKey = nextOrdered[index]
+      nextOrdered[index] = nextOrdered[targetIndex] as NavItemKey
+      nextOrdered[targetIndex] = currentKey as NavItemKey
+
+      const next = {
+        ...current,
+        orderedKeys: nextOrdered,
+      }
+      setNavPreferences(next)
+      setMenuSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+      return next
+    })
+  }
+
   const resetMenuPreferences = () => {
-    const next = { hiddenKeys: [], iconByKey: {} }
+    const next = { hiddenKeys: [], iconByKey: {}, orderedKeys: [] as NavItemKey[] }
     setMenuDraft(next)
     resetNavPreferences()
     setMenuSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
@@ -431,14 +475,34 @@ export function SettingsPage() {
       <Card>
         <CardHeader><CardTitle>Menu et navigation</CardTitle></CardHeader>
         <div className="space-y-3">
-          <p className="text-sm text-text-muted">Choisis l'icône de chaque entrée et masque celles dont tu n'as pas besoin. Les changements sont appliqués immédiatement, et tu peux aussi forcer la sauvegarde avec le bouton dédié.</p>
+          <p className="text-sm text-text-muted">Choisis l'ordre, l'icône et la visibilité de chaque entrée. Les changements sont appliqués immédiatement, et tu peux aussi forcer la sauvegarde avec le bouton dédié.</p>
 
-          {menuItems.map((item) => {
+          {menuItems.map((item, index) => {
             const selectedIcon = MENU_ICON_REGISTRY[item.iconName as keyof typeof MENU_ICON_REGISTRY]
             const SelectedIcon = selectedIcon.icon
             return (
               <div key={item.key} className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3 items-center rounded-lg border border-border-subtle bg-bg-overlay/40 px-3 py-3">
                 <div className="flex items-center gap-2 text-sm text-text-secondary">
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      className="h-7 w-7 inline-flex items-center justify-center rounded border border-border-subtle text-text-secondary hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                      onClick={() => moveMenuItem(item.key, 'up')}
+                      disabled={index === 0}
+                      title="Monter"
+                    >
+                      <ArrowUp size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      className="h-7 w-7 inline-flex items-center justify-center rounded border border-border-subtle text-text-secondary hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                      onClick={() => moveMenuItem(item.key, 'down')}
+                      disabled={index === menuItems.length - 1}
+                      title="Descendre"
+                    >
+                      <ArrowDown size={13} />
+                    </button>
+                  </div>
                   <SelectedIcon size={15} className="text-text-primary" />
                   <span>{item.label}</span>
                 </div>

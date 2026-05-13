@@ -12,7 +12,21 @@ interface Geofence {
   longitude: number
   radius: number
   costPerUnit?: number
-  billingType?: string
+  billingType?: 'per_kwh' | 'per_minute'
+}
+
+type GeofenceForm = {
+  name: string
+  latitude: number
+  longitude: number
+  radius: number
+  costPerUnit: number
+  billingType: 'per_kwh' | 'per_minute'
+}
+
+function parseNumberInput(value: string, fallback: number): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
 }
 
 function normalizeGeofence(row: unknown): Geofence | null {
@@ -40,7 +54,12 @@ function normalizeGeofence(row: unknown): Geofence | null {
     longitude,
     radius,
     costPerUnit: toNumber(record.costPerUnit ?? record.cost_per_unit) ?? undefined,
-    billingType: typeof record.billingType === 'string' ? record.billingType : typeof record.billing_type === 'string' ? record.billing_type : undefined,
+    billingType:
+      record.billingType === 'per_kwh' || record.billingType === 'per_minute'
+        ? record.billingType
+        : record.billing_type === 'per_kwh' || record.billing_type === 'per_minute'
+          ? record.billing_type
+          : undefined,
   }
 }
 
@@ -48,7 +67,7 @@ export function GeofencesSection() {
   const qc = useQueryClient()
   const [isCreating, setIsCreating] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [form, setForm] = useState({ name: '', latitude: 0, longitude: 0, radius: 50, costPerUnit: 0 })
+  const [form, setForm] = useState<GeofenceForm>({ name: '', latitude: 0, longitude: 0, radius: 50, costPerUnit: 0, billingType: 'per_kwh' })
 
   const { data: geofences = [], isLoading } = useQuery({
     queryKey: ['geofences'],
@@ -62,7 +81,7 @@ export function GeofencesSection() {
     mutationFn: (data: typeof form) => api.post('/settings/geofences', data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['geofences'] })
-      setForm({ name: '', latitude: 0, longitude: 0, radius: 50, costPerUnit: 0 })
+      setForm({ name: '', latitude: 0, longitude: 0, radius: 50, costPerUnit: 0, billingType: 'per_kwh' })
       setIsCreating(false)
     },
   })
@@ -72,7 +91,7 @@ export function GeofencesSection() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['geofences'] })
       setEditingId(null)
-      setForm({ name: '', latitude: 0, longitude: 0, radius: 50, costPerUnit: 0 })
+      setForm({ name: '', latitude: 0, longitude: 0, radius: 50, costPerUnit: 0, billingType: 'per_kwh' })
     },
   })
 
@@ -89,22 +108,27 @@ export function GeofencesSection() {
       longitude: geofence.longitude,
       radius: geofence.radius,
       costPerUnit: geofence.costPerUnit ?? 0,
+      billingType: geofence.billingType ?? 'per_kwh',
     })
   }
 
   const handleSave = () => {
     if (!form.name.trim()) return
+    const payload = {
+      ...form,
+      costPerUnit: Number.isFinite(form.costPerUnit) ? form.costPerUnit : 0,
+    }
     if (editingId) {
-      updateMutation.mutate({ id: editingId, data: form })
+      updateMutation.mutate({ id: editingId, data: payload })
     } else {
-      createMutation.mutate(form)
+      createMutation.mutate(payload)
     }
   }
 
   const handleCancel = () => {
     setIsCreating(false)
     setEditingId(null)
-    setForm({ name: '', latitude: 0, longitude: 0, radius: 50, costPerUnit: 0 })
+    setForm({ name: '', latitude: 0, longitude: 0, radius: 50, costPerUnit: 0, billingType: 'per_kwh' })
   }
 
   return (
@@ -178,15 +202,25 @@ export function GeofencesSection() {
                     />
                   </div>
                   <div className="col-span-2">
-                    <label className="text-xs text-text-secondary block mb-1">Prix kWh (€)</label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      min="0"
-                      className="w-full bg-bg-overlay border border-border rounded px-2 py-1 text-sm text-text-primary"
-                      value={form.costPerUnit}
-                      onChange={(e) => setForm({ ...form, costPerUnit: parseFloat(e.target.value) })}
-                    />
+                    <label className="text-xs text-text-secondary block mb-1">Tarif recharge (€)</label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <input
+                        type="number"
+                        step="0.001"
+                        min="0"
+                        className="w-full bg-bg-overlay border border-border rounded px-2 py-1 text-sm text-text-primary"
+                        value={form.costPerUnit}
+                        onChange={(e) => setForm({ ...form, costPerUnit: parseNumberInput(e.target.value, 0) })}
+                      />
+                      <select
+                        className="w-full bg-bg-overlay border border-border rounded px-2 py-1 text-sm text-text-primary"
+                        value={form.billingType}
+                        onChange={(e) => setForm({ ...form, billingType: e.target.value as 'per_kwh' | 'per_minute' })}
+                      >
+                        <option value="per_kwh">Par kWh</option>
+                        <option value="per_minute">Par minute</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-2 justify-end">
@@ -200,7 +234,7 @@ export function GeofencesSection() {
                   <p className="text-sm font-medium text-text-primary">{geofence.name}</p>
                   <p className="text-xs text-text-muted">
                     {geofence.latitude.toFixed(4)}, {geofence.longitude.toFixed(4)} • rayon: {geofence.radius}m
-                    {geofence.costPerUnit ? ` • €${geofence.costPerUnit.toFixed(3)}/kWh` : ''}
+                    {` • €${(geofence.costPerUnit ?? 0).toFixed(3)}/${geofence.billingType === 'per_minute' ? 'min' : 'kWh'}`}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -269,15 +303,25 @@ export function GeofencesSection() {
                 />
               </div>
               <div className="col-span-2">
-                <label className="text-xs text-text-secondary block mb-1">Prix kWh (€)</label>
-                <input
-                  type="number"
-                  step="0.001"
-                  min="0"
-                  className="w-full bg-bg-overlay border border-border rounded px-2 py-1 text-sm text-text-primary"
-                  value={form.costPerUnit}
-                  onChange={(e) => setForm({ ...form, costPerUnit: parseFloat(e.target.value) })}
-                />
+                <label className="text-xs text-text-secondary block mb-1">Tarif recharge (€)</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    className="w-full bg-bg-overlay border border-border rounded px-2 py-1 text-sm text-text-primary"
+                    value={form.costPerUnit}
+                    onChange={(e) => setForm({ ...form, costPerUnit: parseNumberInput(e.target.value, 0) })}
+                  />
+                  <select
+                    className="w-full bg-bg-overlay border border-border rounded px-2 py-1 text-sm text-text-primary"
+                    value={form.billingType}
+                    onChange={(e) => setForm({ ...form, billingType: e.target.value as 'per_kwh' | 'per_minute' })}
+                  >
+                    <option value="per_kwh">Par kWh</option>
+                    <option value="per_minute">Par minute</option>
+                  </select>
+                </div>
               </div>
             </div>
             <div className="flex gap-2 justify-end">

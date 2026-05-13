@@ -13,6 +13,7 @@ const NAV_PREFS_CHANGE_EVENT = 'voltcraft:nav-preferences-changed'
 type StoredPrefs = {
   hiddenKeys: NavItemKey[]
   iconByKey: Partial<Record<NavItemKey, MenuIconName>>
+  orderedKeys: NavItemKey[]
 }
 
 export type NavPreferences = StoredPrefs
@@ -20,6 +21,21 @@ export type NavPreferences = StoredPrefs
 const DEFAULT_PREFS: StoredPrefs = {
   hiddenKeys: [],
   iconByKey: {},
+  orderedKeys: [],
+}
+
+function normalizeOrderedKeys(keys: NavItemKey[]): NavItemKey[] {
+  const unique: NavItemKey[] = []
+  for (const key of keys) {
+    if (!isNavItemKey(key) || unique.includes(key)) continue
+    unique.push(key)
+  }
+
+  for (const item of NAV_ITEMS) {
+    if (!unique.includes(item.key)) unique.push(item.key)
+  }
+
+  return unique
 }
 
 let cachedPrefsRaw: string | null = null
@@ -50,8 +66,11 @@ function readPrefs(): StoredPrefs {
     const iconByKey = Object.fromEntries(
       Object.entries(parsed.iconByKey ?? {}).filter(([k, v]) => isNavItemKey(k) && isMenuIconName(String(v))),
     ) as Partial<Record<NavItemKey, MenuIconName>>
+    const orderedKeys = normalizeOrderedKeys(
+      (parsed.orderedKeys ?? []).map((k) => String(k)).filter(isNavItemKey),
+    )
     cachedPrefsRaw = raw
-    cachedPrefs = { hiddenKeys, iconByKey }
+    cachedPrefs = { hiddenKeys, iconByKey, orderedKeys }
     return cachedPrefs
   } catch {
     return DEFAULT_PREFS
@@ -101,12 +120,17 @@ export function useNavPreferences() {
   const prefs = useSyncExternalStore(subscribePrefs, readPrefs, () => DEFAULT_PREFS)
 
   const resolvedItems = useMemo<ResolvedNavItem[]>(() => {
-    return NAV_ITEMS.map((item) => ({
+    const byKey = new Map(NAV_ITEMS.map((item) => [item.key, item]))
+    const orderedKeys = normalizeOrderedKeys(prefs.orderedKeys)
+    return orderedKeys
+      .map((key) => byKey.get(key))
+      .filter((item): item is NavItemDefinition => item != null)
+      .map((item) => ({
       ...item,
       iconName: prefs.iconByKey[item.key] ?? item.defaultIcon,
       hidden: prefs.hiddenKeys.includes(item.key),
     }))
-  }, [prefs.hiddenKeys, prefs.iconByKey])
+  }, [prefs.hiddenKeys, prefs.iconByKey, prefs.orderedKeys])
 
   const visibleItems = useMemo(() => resolvedItems.filter((item) => !item.hidden), [resolvedItems])
 
@@ -124,6 +148,22 @@ export function useNavPreferences() {
     })
   }
 
+  const moveItem = (key: NavItemKey, direction: 'up' | 'down') => {
+    const ordered = normalizeOrderedKeys(prefs.orderedKeys)
+    const index = ordered.indexOf(key)
+    if (index < 0) return
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= ordered.length) return
+    const next = [...ordered]
+    const current = next[index]
+    next[index] = next[targetIndex] as NavItemKey
+    next[targetIndex] = current as NavItemKey
+    setNavPreferences({
+      ...prefs,
+      orderedKeys: next,
+    })
+  }
+
   const reset = () => {
     resetNavPreferences()
   }
@@ -134,6 +174,7 @@ export function useNavPreferences() {
     prefs,
     setHidden,
     setIcon,
+    moveItem,
     reset,
   }
 }

@@ -8,11 +8,6 @@ import { MENU_ICON_REGISTRY } from './nav-config'
 import { useNavPreferences, type ResolvedNavItem } from '@/features/preferences/nav-preferences'
 
 const MOBILE_PRIMARY_LIMIT = 4
-const MOBILE_PRIMARY_PRIORITY: Array<ResolvedNavItem['key']> = ['dashboard', 'trips', 'charges', 'app-health']
-
-function isResolvedNavItem(item: ResolvedNavItem | undefined): item is ResolvedNavItem {
-  return item != null
-}
 
 export function MobileBottomNav() {
   const location = useLocation()
@@ -22,19 +17,9 @@ export function MobileBottomNav() {
   const navBottomOffset = 'calc(env(safe-area-inset-bottom, 0px) + 0.5rem)'
   const sheetBottomOffset = 'calc(env(safe-area-inset-bottom, 0px) + 4.75rem)'
 
-  const visibleByKey = new Map(visibleItems.map((item) => [item.key, item]))
-
-  const prioritizedPrimaryItems = MOBILE_PRIMARY_PRIORITY
-    .map((key) => visibleByKey.get(key))
-    .filter(isResolvedNavItem)
-
-  const fallbackPrimaryItems = visibleItems.filter(
-    (item) => item.mobilePrimary && !prioritizedPrimaryItems.some((primary) => primary.key === item.key),
-  )
-
+  const mobilePrimaryItems = visibleItems.filter((item) => item.mobilePrimary)
   const visibleSequentialBackfill = visibleItems.filter(
-    (item) => !prioritizedPrimaryItems.some((primary) => primary.key === item.key)
-      && !fallbackPrimaryItems.some((fallback) => fallback.key === item.key),
+    (item) => !mobilePrimaryItems.some((primary) => primary.key === item.key),
   )
 
   const pickUnique = (items: ResolvedNavItem[]) => {
@@ -48,8 +33,7 @@ export function MobileBottomNav() {
   }
 
   const primaryItems = pickUnique([
-    ...prioritizedPrimaryItems,
-    ...fallbackPrimaryItems,
+    ...mobilePrimaryItems,
     ...visibleSequentialBackfill,
   ])
 
