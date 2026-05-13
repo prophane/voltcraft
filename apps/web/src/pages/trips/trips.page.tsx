@@ -503,7 +503,9 @@ export function TripsPage() {
   const [tab, setTab] = useState<TripTab>('all')
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
   const [isHeatmapEnabled, setIsHeatmapEnabled] = useState(true)
-  const [workGeofenceSavedTripId, setWorkGeofenceSavedTripId] = useState<string | null>(null)
+  const [addGeofenceModal, setAddGeofenceModal] = useState<{ tripId: string; lat: number; lon: number; defaultName: string } | null>(null)
+  const [newGeofenceName, setNewGeofenceName] = useState('')
+  const [savedGeofenceTripId, setSavedGeofenceTripId] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(10)
   const hasHydratedTripFromUrl = useRef(false)
 
@@ -534,28 +536,13 @@ export function TripsPage() {
       .filter((geofence) => isWorkGeofenceName(geofence.name))
   }, [geofencesData])
 
-  const workGeofenceMutation = useMutation({
-    mutationFn: async ({ tripId, latitude, longitude }: { tripId: string; latitude: number; longitude: number }) => {
-      const existing = workGeofences[0] ?? null
-      if (existing) {
-        await api.patch(`/settings/geofences/${existing.id}`, {
-          name: existing.name,
-          latitude,
-          longitude,
-          radius: existing.radius,
-        })
-      } else {
-        await api.post('/settings/geofences', {
-          name: 'Travail',
-          latitude,
-          longitude,
-          radius: 150,
-        })
-      }
-      return { tripId }
+  const createGeofenceMutation = useMutation({
+    mutationFn: async ({ name, latitude, longitude }: { name: string; latitude: number; longitude: number }) => {
+      await api.post('/settings/geofences', { name: name.trim(), latitude, longitude, radius: 150 })
     },
-    onSuccess: (result) => {
-      setWorkGeofenceSavedTripId(result.tripId)
+    onSuccess: () => {
+      setSavedGeofenceTripId(addGeofenceModal?.tripId ?? null)
+      setAddGeofenceModal(null)
       queryClient.invalidateQueries({ queryKey: ['geofences'] })
     },
   })
@@ -951,9 +938,8 @@ export function TripsPage() {
               : null
             const avgSpeedDisplay = avgSpeedFromTrip ?? pathInsights?.avgSpeed ?? null
             const maxSpeedDisplay = pathInsights?.maxSpeed ?? null
-            const canSetWorkDestination = detailEndCoords != null
-            const isSavingWorkDestination = workGeofenceMutation.isPending && workGeofenceMutation.variables?.tripId === tripId
-            const isWorkDestinationSaved = workGeofenceSavedTripId === tripId
+            const canAddGeofence = detailEndCoords != null
+            const isGeofenceSaved = savedGeofenceTripId === tripId
 
             return (
             <Card
@@ -1004,26 +990,24 @@ export function TripsPage() {
                     <span className="inline-flex items-center gap-1"><Zap size={11} /> {trip.energyUsedKwh != null ? `${trip.energyUsedKwh.toFixed(1)} kWh` : '—'}</span>
                     <button
                       type="button"
-                      disabled={!canSetWorkDestination || isSavingWorkDestination}
+                      disabled={!canAddGeofence}
                       onClick={(event) => {
                         event.stopPropagation()
                         if (!detailEndCoords) return
-                        setWorkGeofenceSavedTripId(null)
-                        workGeofenceMutation.mutate({
+                        setSavedGeofenceTripId(null)
+                        setNewGeofenceName('')
+                        setAddGeofenceModal({
                           tripId,
-                          latitude: detailEndCoords.lat,
-                          longitude: detailEndCoords.lon,
+                          lat: detailEndCoords.lat,
+                          lon: detailEndCoords.lon,
+                          defaultName: endLabel,
                         })
                       }}
                       className="inline-flex items-center gap-1 text-accent-400 hover:text-accent-300 disabled:text-text-muted disabled:cursor-not-allowed"
-                      title="Définir la destination de ce trajet comme geofence Travail"
+                      title="Ajouter la destination comme lieu enregistré"
                     >
                       <MapPin size={11} />
-                      {isSavingWorkDestination
-                        ? 'Enregistrement...'
-                        : isWorkDestinationSaved
-                          ? 'Travail OK'
-                          : 'Définir Travail'}
+                      {isGeofenceSaved ? 'Lieu enregistré ✓' : 'Ajouter lieu'}
                     </button>
                     <button
                       type="button"
@@ -1259,6 +1243,82 @@ export function TripsPage() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {addGeofenceModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setAddGeofenceModal(null)}
+        >
+          <div
+            className="surface-premium rounded-2xl border border-border-subtle w-full max-w-sm p-6 space-y-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <p className="text-xs uppercase tracking-wide text-text-muted">Ajouter un lieu</p>
+              <h3 className="text-base font-semibold text-text-primary mt-1">Nommer ce lieu</h3>
+              <p className="text-xs text-text-muted mt-1">
+                Si le nom contient <span className="text-accent-400">&quot;Travail&quot;</span>, le lieu sera automatiquement reconnu comme destination professionnelle.
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs text-text-secondary" htmlFor="geofence-name-input">
+                Nom du lieu
+              </label>
+              <input
+                id="geofence-name-input"
+                type="text"
+                autoFocus
+                placeholder={addGeofenceModal.defaultName ?? 'Ex: Travail, Client Paris...'}
+                value={newGeofenceName}
+                onChange={(e) => setNewGeofenceName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newGeofenceName.trim().length > 0 && !createGeofenceMutation.isPending) {
+                    createGeofenceMutation.mutate({
+                      name: newGeofenceName,
+                      latitude: addGeofenceModal.lat,
+                      longitude: addGeofenceModal.lon,
+                    })
+                  }
+                  if (e.key === 'Escape') setAddGeofenceModal(null)
+                }}
+                className="w-full bg-bg-overlay border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-500/60"
+              />
+              <p className="text-[11px] text-text-muted">
+                Coordonnées : {addGeofenceModal.lat.toFixed(5)}, {addGeofenceModal.lon.toFixed(5)} · Rayon 150 m
+              </p>
+            </div>
+
+            {createGeofenceMutation.isError && (
+              <p className="text-xs text-warning">Erreur lors de l&apos;enregistrement. Réessaie.</p>
+            )}
+
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setAddGeofenceModal(null)}
+                className="px-4 py-2 rounded-lg border border-border-subtle text-sm text-text-secondary hover:text-text-primary"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                disabled={newGeofenceName.trim().length === 0 || createGeofenceMutation.isPending}
+                onClick={() => {
+                  createGeofenceMutation.mutate({
+                    name: newGeofenceName,
+                    latitude: addGeofenceModal.lat,
+                    longitude: addGeofenceModal.lon,
+                  })
+                }}
+                className="px-4 py-2 rounded-lg bg-accent-500/20 border border-accent-500/40 text-sm text-accent-400 hover:bg-accent-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {createGeofenceMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
