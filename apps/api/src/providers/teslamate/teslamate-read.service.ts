@@ -1077,7 +1077,7 @@ export class TeslaMateReadService {
         charge_stats AS (
           SELECT
             COALESCE(SUM(COALESCE(cp.charge_energy_added, lc.charge_energy_added)), 0) AS energy_added_kwh,
-            0::numeric AS estimated_cost_eur,
+            COALESCE(SUM(cp.cost), 0)::float8 AS estimated_cost_eur,
             COUNT(*)::int AS charge_sessions_count
           FROM charging_processes cp
           INNER JOIN cars c ON c.id = cp.car_id

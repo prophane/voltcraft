@@ -61,10 +61,12 @@ export function StatsPage() {
   const energyAdded30 = Number(s?.['energyAddedKwh'] ?? 0)
   const avgConso30 = Number(s?.['avgConsumptionKwhPer100km'] ?? 0)
   const cost30 = Number(s?.['estimatedCostEur'] ?? 0)
+  const chargeSessions30 = Number(s?.['chargeSessionsCount'] ?? 0)
   const avgDailyKm30 = distance30 > 0 ? distance30 / 30 : 0
   const avgDailyKm7 = distance7 > 0 ? distance7 / 7 : 0
   const paceDeltaPct = avgDailyKm30 > 0 ? ((avgDailyKm7 - avgDailyKm30) / avgDailyKm30) * 100 : 0
-  const costPer100 = distance30 > 0 ? (cost30 / distance30) * 100 : 0
+  const hasCostData = chargeSessions30 > 0
+  const costPer100 = hasCostData && distance30 > 0 ? (cost30 / distance30) * 100 : 0
   const energyBalance30 = energyAdded30 - energyUsed30
 
   return (
@@ -113,7 +115,7 @@ export function StatsPage() {
             Conso moyenne: {avgConso30 > 0 ? `${avgConso30.toFixed(1)} kWh/100` : 'indisponible'}
           </p>
           <p className="mt-2 text-sm text-text-secondary">
-            Cout estime: {cost30 > 0 ? `${cost30.toFixed(2)} EUR` : 'indisponible'} {costPer100 > 0 ? `(${costPer100.toFixed(2)} EUR/100 km)` : ''}
+            Cout estime: {hasCostData ? `${cost30.toFixed(2)} EUR` : 'indisponible'} {hasCostData && distance30 > 0 ? `(${costPer100.toFixed(2)} EUR/100 km)` : ''}
           </p>
         </Card>
 
@@ -138,7 +140,7 @@ export function StatsPage() {
           <MetricCard icon={CarFront} label="Distance" value={`${Math.round(s?.['distanceKm'] ?? 0)} km`} />
           <MetricCard icon={BatteryCharging} label="Energie ajoutee" value={`${s?.['energyAddedKwh']?.toFixed(1) ?? '—'} kWh`} />
           <MetricCard icon={Leaf} label="Energie consommee" value={`${s?.['energyUsedKwh']?.toFixed(1) ?? '—'} kWh`} />
-          <MetricCard icon={Euro} label="Cout estime" value={`${s?.['estimatedCostEur']?.toFixed(2) ?? '—'} €`} />
+          <MetricCard icon={Euro} label="Cout estime" value={hasCostData ? `${cost30.toFixed(2)} €` : '—'} />
           <MetricCard icon={Gauge} label="Conso moyenne" value={s?.['avgConsumptionKwhPer100km'] ? `${s['avgConsumptionKwhPer100km']} kWh/100` : '—'} />
           <MetricCard icon={Activity} label="Sessions" value={`${s?.['tripsCount'] ?? 0} trajets / ${s?.['chargeSessionsCount'] ?? 0} charges`} />
         </div>
