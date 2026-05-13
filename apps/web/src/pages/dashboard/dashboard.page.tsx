@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Lock, Unlock, MapPin, Plus, Minus, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { api } from '@/lib/api'
 import { cn, formatDate } from '@/lib/utils'
 
 interface ReverseGeocodeResponse {
@@ -16,6 +17,14 @@ interface HomeLocation {
   lat: number
   lon: number
   radiusM: number
+}
+
+interface GeofenceLocation {
+  id: number
+  name: string
+  latitude: number
+  longitude: number
+  radius: number
 }
 
 interface LatestTrip {
@@ -90,6 +99,34 @@ function parseLatestTrip(raw: unknown): LatestTrip | null {
     startAddress: obj.startAddress == null ? null : String(obj.startAddress),
     endAddress: obj.endAddress == null ? null : String(obj.endAddress),
   }
+}
+
+function normalizeGeofence(raw: unknown): GeofenceLocation | null {
+  if (!raw || typeof raw !== 'object') return null
+  const row = raw as Record<string, unknown>
+  const id = toFiniteNumber(row.id)
+  const latitude = toFiniteNumber(row.latitude)
+  const longitude = toFiniteNumber(row.longitude)
+  const radius = toFiniteNumber(row.radius)
+  const name = row.name == null ? null : String(row.name)
+  if (id == null || latitude == null || longitude == null || radius == null || !name) return null
+  return {
+    id,
+    name,
+    latitude,
+    longitude,
+    radius,
+  }
+}
+
+function isPointInsideGeofence(lat: number, lon: number, geofence: GeofenceLocation): boolean {
+  return haversineMeters(lat, lon, geofence.latitude, geofence.longitude) <= geofence.radius
+}
+
+function geofenceNameForPoint(lat: number | null | undefined, lon: number | null | undefined, geofences: GeofenceLocation[]): string | null {
+  if (lat == null || lon == null || geofences.length === 0) return null
+  const match = geofences.find((geofence) => isPointInsideGeofence(lat, lon, geofence))
+  return match?.name ?? null
 }
 
 function ArcGauge({ level, rangeKm, hasData }: { level: number | null; rangeKm: number | null; hasData: boolean }) {
@@ -209,12 +246,31 @@ export function DashboardPage() {
     enabled: !!vehicle,
   })
 
+  const { data: geofencesData } = useQuery({
+    queryKey: ['geofences'],
+    queryFn: async () => api.get('/settings/geofences'),
+    staleTime: 60_000,
+  })
+
+  const allGeofences = useMemo(() => {
+    if (!Array.isArray(geofencesData)) return [] as GeofenceLocation[]
+    return geofencesData
+      .map(normalizeGeofence)
+      .filter((value): value is GeofenceLocation => value != null)
+  }, [geofencesData])
+
   const { data: locationAddress } = useQuery({
-    queryKey: ['vehicle', 'location', 'address', location?.latitude, location?.longitude],
+    queryKey: ['vehicle', 'location', 'address', location?.latitude, location?.longitude, allGeofences.length],
     enabled: !!location,
     staleTime: 10 * 60_000,
     queryFn: async () => {
       if (!location) return null
+      
+      // Check if location is inside a geofence first
+      const geofenceName = geofenceNameForPoint(location.latitude, location.longitude, allGeofences)
+      if (geofenceName) return geofenceName
+      
+      // Fall back to reverse geocoding
       const url = new URL('https://nominatim.openstreetmap.org/reverse')
       url.searchParams.set('format', 'jsonv2')
       url.searchParams.set('lat', String(location.latitude))
