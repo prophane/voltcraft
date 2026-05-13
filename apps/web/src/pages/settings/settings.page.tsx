@@ -8,7 +8,7 @@ import type {
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, AlertTriangle, XCircle, ArrowUp, ArrowDown } from 'lucide-react'
+import { CheckCircle2, AlertTriangle, XCircle, ArrowUp, ArrowDown, GripVertical } from 'lucide-react'
 import { ApiError } from '@/lib/api-client'
 import { TeslaSettingsSection } from './tesla-section'
 import { GeofencesSection } from './geofences-section'
@@ -67,6 +67,8 @@ export function SettingsPage() {
   const [diagIdleCriticalHours7d, setDiagIdleCriticalHours7d] = useState<string>('')
   const [menuDraft, setMenuDraft] = useState<NavPreferences>(() => getNavPreferences())
   const [menuSavedAt, setMenuSavedAt] = useState<string | null>(null)
+  const [draggedMenuKey, setDraggedMenuKey] = useState<NavItemKey | null>(null)
+  const [dragOverMenuKey, setDragOverMenuKey] = useState<NavItemKey | null>(null)
   const [teslamateForm, setTeslamateForm] = useState<TeslamateSettingsInput>({
     backendOnly: true,
     dbName: 'teslamate',
@@ -185,6 +187,29 @@ export function SettingsPage() {
       const currentKey = nextOrdered[index]
       nextOrdered[index] = nextOrdered[targetIndex] as NavItemKey
       nextOrdered[targetIndex] = currentKey as NavItemKey
+
+      const next = {
+        ...current,
+        orderedKeys: nextOrdered,
+      }
+      setNavPreferences(next)
+      setMenuSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+      return next
+    })
+  }
+
+  const moveMenuItemToTarget = (fromKey: NavItemKey, targetKey: NavItemKey) => {
+    if (fromKey === targetKey) return
+    setMenuDraft((current) => {
+      const ordered = normalizeOrderedKeys(current.orderedKeys)
+      const fromIndex = ordered.indexOf(fromKey)
+      const targetIndex = ordered.indexOf(targetKey)
+      if (fromIndex < 0 || targetIndex < 0) return current
+
+      const nextOrdered = [...ordered]
+      const [moved] = nextOrdered.splice(fromIndex, 1)
+      if (!moved) return current
+      nextOrdered.splice(targetIndex, 0, moved)
 
       const next = {
         ...current,
@@ -481,8 +506,40 @@ export function SettingsPage() {
             const selectedIcon = MENU_ICON_REGISTRY[item.iconName as keyof typeof MENU_ICON_REGISTRY]
             const SelectedIcon = selectedIcon.icon
             return (
-              <div key={item.key} className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3 items-center rounded-lg border border-border-subtle bg-bg-overlay/40 px-3 py-3">
+              <div
+                key={item.key}
+                draggable
+                onDragStart={(event) => {
+                  setDraggedMenuKey(item.key)
+                  event.dataTransfer.setData('text/plain', item.key)
+                  event.dataTransfer.effectAllowed = 'move'
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                  setDragOverMenuKey(item.key)
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const sourceKey = (event.dataTransfer.getData('text/plain') as NavItemKey) || draggedMenuKey
+                  if (sourceKey) {
+                    moveMenuItemToTarget(sourceKey, item.key)
+                  }
+                  setDraggedMenuKey(null)
+                  setDragOverMenuKey(null)
+                }}
+                onDragEnd={() => {
+                  setDraggedMenuKey(null)
+                  setDragOverMenuKey(null)
+                }}
+                className={[
+                  'grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3 items-center rounded-lg border bg-bg-overlay/40 px-3 py-3 transition-colors',
+                  dragOverMenuKey === item.key ? 'border-accent-500/60' : 'border-border-subtle',
+                  draggedMenuKey === item.key ? 'opacity-70' : '',
+                ].join(' ')}
+              >
                 <div className="flex items-center gap-2 text-sm text-text-secondary">
+                  <GripVertical size={15} className="text-text-muted cursor-grab" />
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
