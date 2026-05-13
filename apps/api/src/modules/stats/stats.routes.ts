@@ -36,7 +36,7 @@ export async function statsRoutes(app: FastifyInstance) {
     return v
   }
 
-  const getVehicleForRead = (userId: string) => withVehicleAutoBootstrap(app, () => getVehicle(userId))
+  const getVehicleForRead = (userId: string) => withVehicleAutoBootstrap(app, userId, () => getVehicle(userId))
 
   // GET /stats/summary?days=30
   app.get('/summary', { schema: { tags: ['stats'] } }, async (req) => {

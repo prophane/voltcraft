@@ -84,6 +84,14 @@ type TeslaMateVehicleRow = {
   conn_charge_cable?: string | null
 }
 
+type TeslaMateCarIdentityRow = {
+  vin: string | null
+  name: string | null
+  model: string | null
+  trim_badging: string | null
+  exterior_color: string | null
+}
+
 function toNumber(value: unknown): number | null {
   if (value == null) return null
   const parsed = typeof value === 'number' ? value : Number(value)
@@ -263,6 +271,35 @@ export class TeslaMateReadService {
 
   isEnabled() {
     return true
+  }
+
+  async getPrimaryVehicleIdentity() {
+    const rows = await this.query<TeslaMateCarIdentityRow>(
+      `
+        SELECT
+          c.vin,
+          c.name,
+          c.model,
+          c.trim_badging,
+          c.exterior_color
+        FROM cars c
+        WHERE c.vin IS NOT NULL
+          AND c.vin <> ''
+        ORDER BY c.id ASC
+        LIMIT 1
+      `,
+      [],
+    )
+
+    const row = rows[0]
+    if (!row?.vin) return null
+
+    return {
+      vin: row.vin,
+      displayName: row.name?.trim() || row.vin,
+      model: row.model?.trim() || row.trim_badging?.trim() || null,
+      color: row.exterior_color?.trim() || null,
+    }
   }
 
   private async query<T>(text: string, values: unknown[]) {

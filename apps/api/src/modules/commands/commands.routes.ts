@@ -34,7 +34,7 @@ export async function commandsRoutes(app: FastifyInstance) {
   const run = async (req: Parameters<typeof requireAuth>[0], command: Parameters<typeof policy.execute>[1], params?: Record<string, unknown>) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
-    return withVehicleAutoBootstrap(app, () => policy.execute(session.userId, command, params))
+    return withVehicleAutoBootstrap(app, session.userId, () => policy.execute(session.userId, command, params))
   }
 
   app.post('/lock', { schema: { tags: ['commands'] } }, async (req) => ok(await run(req, 'lock')))
@@ -125,7 +125,7 @@ export async function commandsRoutes(app: FastifyInstance) {
   app.get('/history', { schema: { tags: ['commands'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
-    const vehicle = await withVehicleAutoBootstrap(app, () => vehicleRepo.findActive(session.userId))
+    const vehicle = await withVehicleAutoBootstrap(app, session.userId, () => vehicleRepo.findActive(session.userId))
     if (!vehicle) return ok([])
     const logs = await commandRepo.getRecent(vehicle.id)
     return ok(logs)

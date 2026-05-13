@@ -36,7 +36,7 @@ export async function chargesRoutes(app: FastifyInstance) {
     return v
   }
 
-  const getVehicleForRead = (userId: string) => withVehicleAutoBootstrap(app, () => getVehicle(userId))
+  const getVehicleForRead = (userId: string) => withVehicleAutoBootstrap(app, userId, () => getVehicle(userId))
 
   app.get('/', { schema: { tags: ['charges'] } }, async (req) => {
     const token = await requireAuth(req)

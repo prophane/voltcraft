@@ -11,6 +11,7 @@ import { requireAuth } from '../auth/auth.routes.js'
 import { ok, paginated } from '../../common/http/response.js'
 import { withVehicleAutoBootstrap } from './vehicle-auto-bootstrap.js'
 import { TeslaMateReadService } from '../../providers/teslamate/teslamate-read.service.js'
+import { NotFoundError } from '../../common/errors/app-error.js'
 
 const historyQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -130,9 +131,9 @@ export async function vehicleRoutes(app: FastifyInstance) {
   }
 
   const getVehicleForRead = async (userId: string) => {
-    return withVehicleAutoBootstrap(app, async () => {
+    return withVehicleAutoBootstrap(app, userId, async () => {
       const vehicle = await repo.findActive(userId)
-      if (!vehicle) throw new Error('Vehicle not found')
+      if (!vehicle) throw new NotFoundError('Vehicle')
       return vehicle
     })
   }
@@ -207,7 +208,7 @@ export async function vehicleRoutes(app: FastifyInstance) {
   app.post('/sync', { schema: { tags: ['vehicle'] } }, async (req) => {
     const token = await requireAuth(req)
     const session = await authService.validateSession(token)
-    const result = await withVehicleAutoBootstrap(app, () => service.forceSync(session.userId))
+    const result = await withVehicleAutoBootstrap(app, session.userId, () => service.forceSync(session.userId))
     return ok(result)
   })
 }

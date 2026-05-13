@@ -31,7 +31,7 @@ export async function tripsRoutes(app: FastifyInstance) {
     return v
   }
 
-  const getVehicleForRead = (userId: string) => withVehicleAutoBootstrap(app, () => getVehicle(userId))
+  const getVehicleForRead = (userId: string) => withVehicleAutoBootstrap(app, userId, () => getVehicle(userId))
 
   // GET /trips
   app.get('/', { schema: { tags: ['trips'] } }, async (req) => {
