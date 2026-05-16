@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { settingsApi, statsApi, tripsApi } from '@/features/vehicle/api'
+import { settingsApi, statsApi, tripsApi, vehicleApi } from '@/features/vehicle/api'
 import { api } from '@/lib/api-client'
 import { MapContainer, Polyline, TileLayer, CircleMarker } from 'react-leaflet'
 import { useLocation, useSearchParams } from 'react-router-dom'
@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card'
 import { CardSkeleton } from '@/components/ui/skeleton'
 import { formatDate, formatKm, formatDuration } from '@/lib/utils'
 import { Route, Clock, Zap, MapPin, BatteryCharging, Gauge, ChevronRight } from 'lucide-react'
+import { ageMinutes, ModuleDataHealthStrip } from '../diagnostics/diagnostics-shared'
 
 type TripRecord = {
   id: string
@@ -764,6 +765,13 @@ export function TripsPage() {
     staleTime: 300_000,
   })
 
+  const { data: vehicleState } = useQuery({
+    queryKey: ['vehicle', 'state'],
+    queryFn: vehicleApi.getState,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  })
+
   const baselineConsumption = useMemo(() => {
     const value = parseNumber((summary30 as Record<string, unknown> | undefined)?.['avgConsumptionKwhPer100km'])
     return value != null && value > 0 ? value : null
@@ -893,6 +901,15 @@ export function TripsPage() {
     heatmapSettingMutation.mutate(next)
   }
 
+  const tripsLastUpdateAt = trips[0]?.startedAt ?? null
+  const tripsFreshnessMin = ageMinutes(tripsLastUpdateAt)
+  const hasTripSyncGap = Boolean(vehicleState?.isDriving && (tripsFreshnessMin == null || tripsFreshnessMin > 180))
+  const tripsSyncMessage = hasTripSyncGap
+    ? 'Vehicule detecte en mouvement mais aucun trajet recent: verifier la synchro TeslaMate.'
+    : tripsFreshnessMin != null && tripsFreshnessMin > 10_080
+      ? 'Aucun trajet recent sur cette source. Si vous avez roule, verifier TeslaMate puis relancer la synchro.'
+      : null
+
   return (
     <div className="space-y-6">
       <div className="surface-premium p-4 md:p-5">
@@ -920,6 +937,20 @@ export function TripsPage() {
               {item.label}
             </button>
           ))}
+        </div>
+
+        <div className="mt-3">
+          <ModuleDataHealthStrip
+            moduleLabel="Trajets"
+            source="TeslaMate"
+            cached
+            lastUpdateAt={tripsLastUpdateAt}
+            warnMinutes={4_320}
+            criticalMinutes={10_080}
+            message={tripsSyncMessage}
+            actionLabel="Ouvrir settings"
+            actionHref="/settings"
+          />
         </div>
 
         <div className="mt-3 rounded-lg border border-border-subtle bg-bg-overlay/45 px-3 py-2">

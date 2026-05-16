@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { chargesApi, settingsApi } from '@/features/vehicle/api'
+import { chargesApi, settingsApi, vehicleApi } from '@/features/vehicle/api'
 import { Card } from '@/components/ui/card'
 import { CardSkeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -7,6 +7,7 @@ import { api, ApiError } from '@/lib/api-client'
 import { formatDate, formatDuration } from '@/lib/utils'
 import { useEffect, useMemo, useState } from 'react'
 import { Battery, Clock, Euro, Gauge, MapPin, Zap } from 'lucide-react'
+import { ageMinutes, ModuleDataHealthStrip } from '../diagnostics/diagnostics-shared'
 
 type ChargeSessionRecord = {
   id: string
@@ -222,6 +223,13 @@ export function ChargesPage() {
     placeholderData: (previousData) => previousData,
   })
 
+  const { data: vehicleState } = useQuery({
+    queryKey: ['vehicle', 'state'],
+    queryFn: vehicleApi.getState,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  })
+
   useEffect(() => {
     setVisibleCount(initialChargeDisplayCount)
   }, [initialChargeDisplayCount])
@@ -281,6 +289,15 @@ export function ChargesPage() {
     () => buildDailyChargeEnergyTrend(sessions, windowDays),
     [sessions, windowDays],
   )
+
+  const chargesLastUpdateAt = sessions[0]?.startedAt ?? null
+  const chargesFreshnessMin = ageMinutes(chargesLastUpdateAt)
+  const hasChargeSyncGap = Boolean(vehicleState?.isCharging && (chargesFreshnessMin == null || chargesFreshnessMin > 120))
+  const chargesSyncMessage = hasChargeSyncGap
+    ? 'Vehicule en charge detecte mais aucune session recente: verifier TeslaMate puis relancer la synchro.'
+    : chargesFreshnessMin != null && chargesFreshnessMin > 14_400
+      ? 'Aucune recharge recente sur cette source. Si vous avez recharge, verifier TeslaMate.'
+      : null
 
   const displayedSessions = sessions.slice(0, visibleCount)
   const geofences = normalizeGeofences(geofencesData)
@@ -353,6 +370,19 @@ export function ChargesPage() {
       <div className="surface-premium p-4 md:p-5">
         <h1 className="text-2xl font-semibold tracking-tight text-text-primary">Charging</h1>
         <p className="text-sm text-text-muted mt-1">Sessions de recharge, vitesse, type, emplacement et coûts</p>
+        <div className="mt-3">
+          <ModuleDataHealthStrip
+            moduleLabel="Recharges"
+            source="TeslaMate"
+            cached
+            lastUpdateAt={chargesLastUpdateAt}
+            warnMinutes={7_200}
+            criticalMinutes={14_400}
+            message={chargesSyncMessage}
+            actionLabel="Ouvrir settings"
+            actionHref="/settings"
+          />
+        </div>
         {sessions.length > 0 && (
           <div className="mt-3 rounded-lg border border-border-subtle bg-bg-overlay/45 px-3 py-2">
             <div className="flex flex-wrap items-center justify-between gap-2">

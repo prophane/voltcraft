@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useVehicleComposedState } from '@/hooks/use-vehicle-composed-state'
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { BatteryCharging, Compass, Gauge, Thermometer } from 'lucide-react'
@@ -7,12 +7,14 @@ import { statsApi, vehicleApi, type VehicleHistorySnapshot } from '@/features/ve
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn, formatDate, formatKm, formatPercent } from '@/lib/utils'
 import {
+  ageMinutes,
   formatAge,
   sourceLabelText,
   DiagBadge,
   InfoChip,
   MetricTile,
   EmptyState,
+  ModuleDataHealthStrip,
   ViewModeToggle,
   type DiagnosticsViewMode,
   type TelemetrySource,
@@ -29,6 +31,7 @@ function formatBar(value: number | null): string {
 }
 
 export function VehicleHealthPage() {
+  const queryClient = useQueryClient()
   const [viewMode, setViewMode] = useState<DiagnosticsViewMode>('essential')
 
   const { data: vehicle } = useQuery({
@@ -74,7 +77,16 @@ export function VehicleHealthPage() {
   const historyRows = Array.isArray(history) ? (history as VehicleHistorySnapshot[]) : []
   const recentHistory = historyRows.slice(0, 12).reverse()
 
-  const source: TelemetrySource = state?.isCached ? 'Cache' : vehicle?.isCached ? 'Voltcraft' : 'Unknown'
+  const source: TelemetrySource = state?.isCached ? 'TeslaMate' : 'Fleet'
+
+  const forceSyncMutation = useMutation({
+    mutationFn: () => vehicleApi.sync(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vehicle', 'current'] })
+      queryClient.invalidateQueries({ queryKey: ['vehicle', 'state'] })
+      queryClient.invalidateQueries({ queryKey: ['vehicle', 'history'] })
+    },
+  })
 
   const vehicleComposedState = useVehicleComposedState({
     isDriving: state?.isDriving,
@@ -83,6 +95,11 @@ export function VehicleHealthPage() {
     vehicleState: vehicle?.state,
   })
   const vehicleStatus = vehicleComposedState.label
+  const stateLastUpdateAt = state?.capturedAt ?? vehicle?.lastSeenAt ?? null
+  const stateFreshnessMinutes = ageMinutes(stateLastUpdateAt)
+  const vehicleStateSyncMessage = stateFreshnessMinutes != null && stateFreshnessMinutes > 20
+    ? 'Etat vehicule ancien: forcer une synchro puis verifier la connectivite TeslaMate/Fleet.'
+    : null
 
   const batteryTrend = useMemo(() => {
     return historyRows
@@ -174,6 +191,22 @@ export function VehicleHealthPage() {
           <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />
         </div>
       </section>
+
+      <ModuleDataHealthStrip
+        moduleLabel="Etat vehicule"
+        source={source}
+        cached={Boolean(state?.isCached)}
+        lastUpdateAt={stateLastUpdateAt}
+        warnMinutes={8}
+        criticalMinutes={20}
+        message={vehicleStateSyncMessage}
+        actionLabel={forceSyncMutation.isPending ? 'Sync en cours...' : 'Forcer sync'}
+        onAction={() => {
+          if (!forceSyncMutation.isPending) {
+            forceSyncMutation.mutate()
+          }
+        }}
+      />
 
       {/* Métriques actuelles */}
       <section className="grid grid-cols-2 xl:grid-cols-4 gap-4">

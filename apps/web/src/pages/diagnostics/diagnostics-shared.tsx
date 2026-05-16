@@ -3,7 +3,7 @@ import { type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Card } from '@/components/ui/card'
 
-export type TelemetrySource = 'TeslaMate' | 'Voltcraft' | 'Cache' | 'Unknown'
+export type TelemetrySource = 'TeslaMate' | 'Fleet' | 'Voltcraft' | 'Cache' | 'Unknown'
 export type DiagnosticsViewMode = 'essential' | 'expert'
 export type AlertSeverity = 'Critique' | 'A surveiller' | 'Info'
 
@@ -24,9 +24,92 @@ export function formatAge(iso?: string | null): string {
 
 export function sourceLabelText(source: TelemetrySource, cached: boolean): string {
   if (source === 'TeslaMate') return cached ? 'TeslaMate (cache)' : 'TeslaMate (direct)'
-  if (source === 'Voltcraft') return cached ? 'Voltcraft (cache)' : 'Voltcraft (direct)'
+  if (source === 'Fleet') return cached ? 'Fleet (cache)' : 'Fleet (direct)'
   if (source === 'Cache') return 'Cache local'
+  if (source === 'Voltcraft') return cached ? 'Voltcraft (cache)' : 'Voltcraft (direct)'
   return 'Source inconnue'
+}
+
+function freshnessTone(minutes: number | null, warnMinutes: number, criticalMinutes: number) {
+  if (minutes == null) return 'text-text-muted border-border-subtle bg-bg-overlay/60'
+  if (minutes >= criticalMinutes) return 'text-warning border-warning/30 bg-warning/10'
+  if (minutes >= warnMinutes) return 'text-warning border-warning/30 bg-warning/10'
+  return 'text-success border-success/30 bg-success/10'
+}
+
+function freshnessLabel(minutes: number | null, warnMinutes: number, criticalMinutes: number) {
+  if (minutes == null) return 'Fraicheur inconnue'
+  if (minutes >= criticalMinutes) return 'Synchro en retard'
+  if (minutes >= warnMinutes) return 'Synchro a surveiller'
+  return 'Synchronise'
+}
+
+export function ModuleDataHealthStrip({
+  moduleLabel,
+  source,
+  lastUpdateAt,
+  cached,
+  warnMinutes,
+  criticalMinutes,
+  message,
+  actionLabel,
+  onAction,
+  actionHref,
+}: {
+  moduleLabel: string
+  source: TelemetrySource
+  lastUpdateAt?: string | null
+  cached?: boolean
+  warnMinutes: number
+  criticalMinutes: number
+  message?: string | null
+  actionLabel?: string
+  onAction?: () => void
+  actionHref?: string
+}) {
+  const minutes = ageMinutes(lastUpdateAt)
+  const tone = freshnessTone(minutes, warnMinutes, criticalMinutes)
+  const status = freshnessLabel(minutes, warnMinutes, criticalMinutes)
+
+  return (
+    <div className="rounded-xl border border-border-subtle bg-bg-overlay/45 px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <DiagBadge tone="text-text-secondary border-border-subtle bg-bg-overlay/70">
+            {moduleLabel}
+          </DiagBadge>
+          <DiagBadge tone="text-text-secondary border-border-subtle bg-bg-overlay/70">
+            Source: {sourceLabelText(source, Boolean(cached))}
+          </DiagBadge>
+          <DiagBadge tone={tone}>{status}</DiagBadge>
+        </div>
+
+        {(onAction && actionLabel) || (actionHref && actionLabel) ? (
+          onAction ? (
+            <button
+              type="button"
+              onClick={onAction}
+              className="text-xs px-2.5 py-1 rounded-md border border-border-subtle text-text-secondary hover:text-text-primary"
+            >
+              {actionLabel}
+            </button>
+          ) : (
+            <a
+              href={actionHref}
+              className="text-xs px-2.5 py-1 rounded-md border border-border-subtle text-text-secondary hover:text-text-primary"
+            >
+              {actionLabel}
+            </a>
+          )
+        ) : null}
+      </div>
+
+      <p className="mt-1 text-xs text-text-muted">
+        Derniere mise a jour: {formatAge(lastUpdateAt)}
+        {message ? ` - ${message}` : ''}
+      </p>
+    </div>
+  )
 }
 
 export function MetricTile({
