@@ -76,6 +76,12 @@ type GeofenceLocation = {
   radius: number
 }
 
+type WindowDays = 7 | 30 | 90
+
+type MiniTrendPoint = {
+  value: number
+}
+
 function textContainsWorkHint(value?: string | null): boolean {
   if (!value) return false
   const v = value.toLowerCase()
@@ -484,6 +490,31 @@ function isMeaningfulTrip(trip: TripRecord, minDistanceKm: number) {
   return distance >= minDistanceKm
 }
 
+function buildDailyTripDistanceTrend(trips: TripRecord[], days: WindowDays): MiniTrendPoint[] {
+  const now = new Date()
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+  start.setDate(start.getDate() - (days - 1))
+
+  const byDay = new Map<string, number>()
+  for (const trip of trips) {
+    const at = new Date(trip.startedAt)
+    if (Number.isNaN(at.getTime()) || at < start) continue
+    const key = at.toISOString().slice(0, 10)
+    byDay.set(key, (byDay.get(key) ?? 0) + (trip.distanceKm ?? 0))
+  }
+
+  const points: MiniTrendPoint[] = []
+  for (let i = 0; i < days; i++) {
+    const day = new Date(start)
+    day.setDate(start.getDate() + i)
+    const key = day.toISOString().slice(0, 10)
+    points.push({ value: Math.round((byDay.get(key) ?? 0) * 10) / 10 })
+  }
+
+  return points
+}
+
 async function reverseGeocode(lat: number, lon: number) {
   const url = new URL('https://nominatim.openstreetmap.org/reverse')
   url.searchParams.set('format', 'jsonv2')
@@ -506,6 +537,7 @@ export function TripsPage() {
   const queryClient = useQueryClient()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
+  const [windowDays, setWindowDays] = useState<WindowDays>(30)
   const [tab, setTab] = useState<TripTab>('all')
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
   const [isHeatmapEnabled, setIsHeatmapEnabled] = useState(true)
@@ -764,6 +796,11 @@ export function TripsPage() {
     return trips.filter((trip) => !isWorkTrip(trip, workGeofences))
   }, [tab, trips, workGeofences])
 
+  const filteredWindowTrips = useMemo(() => {
+    const threshold = Date.now() - windowDays * 86_400_000
+    return filteredTrips.filter((trip) => new Date(trip.startedAt).getTime() >= threshold)
+  }, [filteredTrips, windowDays])
+
   const displayedTrips = useMemo(() => filteredTrips.slice(0, visibleCount), [filteredTrips, visibleCount])
 
   const activeTrip = useMemo(
@@ -835,15 +872,20 @@ export function TripsPage() {
   }, [tab, initialTripDisplayCount])
 
   const summary = useMemo(() => {
-    const totalDistance = filteredTrips.reduce((acc, t) => acc + (t.distanceKm ?? 0), 0)
-    const totalDuration = filteredTrips.reduce((acc, t) => acc + (t.durationMin ?? 0), 0)
-    const totalEnergy = filteredTrips.reduce((acc, t) => acc + (t.energyUsedKwh ?? 0), 0)
+    const totalDistance = filteredWindowTrips.reduce((acc, t) => acc + (t.distanceKm ?? 0), 0)
+    const totalDuration = filteredWindowTrips.reduce((acc, t) => acc + (t.durationMin ?? 0), 0)
+    const totalEnergy = filteredWindowTrips.reduce((acc, t) => acc + (t.energyUsedKwh ?? 0), 0)
     return {
       totalDistance,
       totalDuration,
       totalEnergy,
     }
-  }, [filteredTrips])
+  }, [filteredWindowTrips])
+
+  const compactTrend = useMemo(
+    () => buildDailyTripDistanceTrend(filteredTrips, windowDays),
+    [filteredTrips, windowDays],
+  )
 
   const handleHeatmapToggle = () => {
     const next = !isHeatmapEnabled
@@ -880,18 +922,35 @@ export function TripsPage() {
           ))}
         </div>
 
-        <div className="grid grid-cols-3 gap-3 mt-4">
-          <div>
-            <p className="text-[11px] text-text-muted uppercase">Distance</p>
-            <p className="text-lg font-semibold text-text-primary">{Math.round(summary.totalDistance)} km</p>
+        <div className="mt-3 rounded-lg border border-border-subtle bg-bg-overlay/45 px-3 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="inline-flex rounded-md border border-border-subtle overflow-hidden">
+              {([7, 30, 90] as WindowDays[]).map((days) => (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => setWindowDays(days)}
+                  className={[
+                    'px-2.5 py-1 text-xs transition-colors',
+                    windowDays === days
+                      ? 'bg-accent-500/20 text-accent-400'
+                      : 'text-text-muted hover:text-text-primary',
+                  ].join(' ')}
+                >
+                  {days}j
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 text-[11px] md:text-xs">
+              <p className="text-text-muted">Distance <span className="text-text-primary font-medium">{Math.round(summary.totalDistance)} km</span></p>
+              <p className="text-text-muted">Durée <span className="text-text-primary font-medium">{formatDuration(Math.round(summary.totalDuration))}</span></p>
+              <p className="text-text-muted">Énergie <span className="text-text-primary font-medium">{summary.totalEnergy > 0 ? `${summary.totalEnergy.toFixed(1)} kWh` : '—'}</span></p>
+            </div>
           </div>
-          <div>
-            <p className="text-[11px] text-text-muted uppercase">Durée</p>
-            <p className="text-lg font-semibold text-text-primary">{formatDuration(Math.round(summary.totalDuration))}</p>
-          </div>
-          <div>
-            <p className="text-[11px] text-text-muted uppercase">Énergie</p>
-            <p className="text-lg font-semibold text-text-primary">{summary.totalEnergy > 0 ? `${summary.totalEnergy.toFixed(1)} kWh` : '—'}</p>
+
+          <div className="mt-2">
+            <MiniTrendSparkline points={compactTrend} color="#f97316" ariaLabel="Tendance distance trajets" />
           </div>
         </div>
       </div>
@@ -1350,6 +1409,37 @@ export function TripsPage() {
       )}
 
     </div>
+  )
+}
+
+function MiniTrendSparkline({ points, color, ariaLabel }: { points: MiniTrendPoint[]; color: string; ariaLabel: string }) {
+  if (!points.length) {
+    return <p className="text-xs text-text-muted">Aucune donnée sur la période.</p>
+  }
+
+  const width = 520
+  const height = 58
+  const pad = 4
+  const max = Math.max(...points.map((p) => p.value), 1)
+  const min = 0
+  const xStep = points.length > 1 ? (width - pad * 2) / (points.length - 1) : 0
+
+  const coords = points.map((point, index) => {
+    const x = pad + xStep * index
+    const ratio = (point.value - min) / (max - min || 1)
+    const y = height - pad - ratio * (height - pad * 2)
+    return { x, y }
+  })
+
+  const path = coords
+    .map((c, index) => `${index === 0 ? 'M' : 'L'} ${c.x.toFixed(2)} ${c.y.toFixed(2)}`)
+    .join(' ')
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-14" role="img" aria-label={ariaLabel}>
+      <path d={`M ${pad} ${height - pad} ${path.slice(1)} L ${width - pad} ${height - pad} Z`} fill={`${color}22`} stroke="none" />
+      <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    </svg>
   )
 }
 

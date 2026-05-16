@@ -35,6 +35,13 @@ type GeofenceRecord = {
   radius: number
 }
 
+type WindowDays = 7 | 30 | 90
+
+type MiniTrendPoint = {
+  dayLabel: string
+  value: number
+}
+
 function parseNumber(value: unknown): number | null {
   if (value == null) return null
   const parsed = typeof value === 'number' ? value : Number(value)
@@ -155,8 +162,36 @@ function chargeTypeLabel(type?: string | null) {
   return 'Inconnu'
 }
 
+function buildDailyChargeEnergyTrend(sessions: ChargeSessionRecord[], days: WindowDays): MiniTrendPoint[] {
+  const now = new Date()
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+  start.setDate(start.getDate() - (days - 1))
+
+  const byDay = new Map<string, number>()
+  for (const session of sessions) {
+    const at = new Date(session.startedAt)
+    if (Number.isNaN(at.getTime()) || at < start) continue
+    const key = at.toISOString().slice(0, 10)
+    byDay.set(key, (byDay.get(key) ?? 0) + (session.energyAddedKwh ?? 0))
+  }
+
+  const points: MiniTrendPoint[] = []
+  for (let i = 0; i < days; i++) {
+    const day = new Date(start)
+    day.setDate(start.getDate() + i)
+    const key = day.toISOString().slice(0, 10)
+    points.push({
+      dayLabel: `${day.getDate()}/${day.getMonth() + 1}`,
+      value: Math.round((byDay.get(key) ?? 0) * 10) / 10,
+    })
+  }
+  return points
+}
+
 export function ChargesPage() {
   const queryClient = useQueryClient()
+  const [windowDays, setWindowDays] = useState<WindowDays>(30)
   const [expandedGeofenceForId, setExpandedGeofenceForId] = useState<string | null>(null)
   const [geofenceName, setGeofenceName] = useState('')
   const [geofenceRadius, setGeofenceRadius] = useState(100)
@@ -225,6 +260,28 @@ export function ChargesPage() {
 
     return !isTrivialShortSession
   })
+
+  const filteredWindowSessions = useMemo(() => {
+    const threshold = Date.now() - windowDays * 86_400_000
+    return sessions.filter((session) => new Date(session.startedAt).getTime() >= threshold)
+  }, [sessions, windowDays])
+
+  const compactSummary = useMemo(() => {
+    const totalEnergy = filteredWindowSessions.reduce((sum, s) => sum + (s.energyAddedKwh ?? 0), 0)
+    const totalCost = filteredWindowSessions.reduce((sum, s) => sum + (s.estimatedCost ?? 0), 0)
+    const count = filteredWindowSessions.length
+    return {
+      totalEnergy,
+      totalCost,
+      count,
+    }
+  }, [filteredWindowSessions])
+
+  const compactTrend = useMemo(
+    () => buildDailyChargeEnergyTrend(sessions, windowDays),
+    [sessions, windowDays],
+  )
+
   const displayedSessions = sessions.slice(0, visibleCount)
   const geofences = normalizeGeofences(geofencesData)
   const addressCounts = displayedSessions.reduce((acc, session) => {
@@ -296,6 +353,39 @@ export function ChargesPage() {
       <div className="surface-premium p-4 md:p-5">
         <h1 className="text-2xl font-semibold tracking-tight text-text-primary">Charging</h1>
         <p className="text-sm text-text-muted mt-1">Sessions de recharge, vitesse, type, emplacement et coûts</p>
+        {sessions.length > 0 && (
+          <div className="mt-3 rounded-lg border border-border-subtle bg-bg-overlay/45 px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="inline-flex rounded-md border border-border-subtle overflow-hidden">
+                {([7, 30, 90] as WindowDays[]).map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    onClick={() => setWindowDays(days)}
+                    className={[
+                      'px-2.5 py-1 text-xs transition-colors',
+                      windowDays === days
+                        ? 'bg-accent-500/20 text-accent-400'
+                        : 'text-text-muted hover:text-text-primary',
+                    ].join(' ')}
+                  >
+                    {days}j
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 text-[11px] md:text-xs">
+                <p className="text-text-muted">Sessions <span className="text-text-primary font-medium">{compactSummary.count}</span></p>
+                <p className="text-text-muted">Energie <span className="text-text-primary font-medium">{compactSummary.totalEnergy.toFixed(1)} kWh</span></p>
+                <p className="text-text-muted">Cout <span className="text-text-primary font-medium">{compactSummary.totalCost.toFixed(2)} €</span></p>
+              </div>
+            </div>
+
+            <div className="mt-2">
+              <MiniTrendSparkline points={compactTrend} color="#22c55e" ariaLabel="Tendance énergie recharges" />
+            </div>
+          </div>
+        )}
         <div className="h-px mt-4 accent-line opacity-70" />
       </div>
 
@@ -446,5 +536,36 @@ export function ChargesPage() {
         <Card className="text-sm text-text-secondary">{feedbackMessage}</Card>
       )}
     </div>
+  )
+}
+
+function MiniTrendSparkline({ points, color, ariaLabel }: { points: MiniTrendPoint[]; color: string; ariaLabel: string }) {
+  if (!points.length) {
+    return <p className="text-xs text-text-muted">Aucune donnée sur la période.</p>
+  }
+
+  const width = 520
+  const height = 58
+  const pad = 4
+  const max = Math.max(...points.map((p) => p.value), 1)
+  const min = 0
+  const xStep = points.length > 1 ? (width - pad * 2) / (points.length - 1) : 0
+
+  const coords = points.map((point, index) => {
+    const x = pad + xStep * index
+    const ratio = (point.value - min) / (max - min || 1)
+    const y = height - pad - ratio * (height - pad * 2)
+    return { x, y }
+  })
+
+  const path = coords
+    .map((c, index) => `${index === 0 ? 'M' : 'L'} ${c.x.toFixed(2)} ${c.y.toFixed(2)}`)
+    .join(' ')
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-14" role="img" aria-label={ariaLabel}>
+      <path d={`M ${pad} ${height - pad} ${path.slice(1)} L ${width - pad} ${height - pad} Z`} fill={`${color}22`} stroke="none" />
+      <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    </svg>
   )
 }
