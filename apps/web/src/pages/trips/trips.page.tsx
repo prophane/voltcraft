@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { settingsApi, statsApi, tripsApi, vehicleApi } from '@/features/vehicle/api'
 import { api } from '@/lib/api-client'
 import { MapContainer, Polyline, TileLayer, CircleMarker } from 'react-leaflet'
@@ -67,7 +67,6 @@ type HeatSegment = {
 type LatLonTuple = [number, number]
 
 type TripTab = 'all' | 'work' | 'personal'
-type ResolvedTripAddresses = Record<string, { start: string | null; end: string | null }>
 type HomeLocation = { lat: number; lon: number; radiusM: number }
 type GeofenceLocation = {
   id: number
@@ -221,21 +220,22 @@ function normalizeTrips(raw: unknown): TripRecord[] {
   return []
 }
 
-async function fetchAllTrips() {
-  const pageSize = 100
-  const maxPages = 50
-  let page = 1
-  const trips: TripRecord[] = []
+const TRIPS_PAGE_SIZE = 30
 
-  while (page <= maxPages) {
-    const response = await tripsApi.list(page, pageSize)
-    const pageTrips = normalizeTrips(response)
-    trips.push(...pageTrips)
-    if (pageTrips.length < pageSize) break
-    page += 1
-  }
+async function fetchTripsPage(page: number) {
+  return tripsApi.list(page, TRIPS_PAGE_SIZE)
+}
 
-  return trips
+function getTripsPageMeta(raw: unknown) {
+  if (!raw || typeof raw !== 'object') return null
+  const meta = (raw as Record<string, unknown>).meta
+  if (!meta || typeof meta !== 'object') return null
+  const value = meta as Record<string, unknown>
+  const currentPage = Number(value.page)
+  const totalPages = Number(value.totalPages)
+  if (!Number.isFinite(currentPage) || !Number.isFinite(totalPages)) return null
+  const total = Number(value.total)
+  return { currentPage, totalPages, total: Number.isFinite(total) ? total : null }
 }
 
 function normalizePath(raw: unknown): TripPathPoint[] {
@@ -592,18 +592,29 @@ export function TripsPage() {
   })
 
   const {
-    data,
+    data: tripPages,
     isLoading,
     isError: hasTripsError,
     error: tripsError,
     refetch: refetchTrips,
-  } = useQuery({
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ['trips'],
-    queryFn: () => fetchAllTrips(),
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: true,
+    queryFn: ({ pageParam }) => fetchTripsPage(pageParam),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const meta = getTripsPageMeta(lastPage)
+      if (!meta) {
+        return undefined
+      }
+      return meta.currentPage < meta.totalPages ? meta.currentPage + 1 : undefined
+    },
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
-    staleTime: 0,
+    staleTime: 5 * 60_000,
     placeholderData: (previousData) => previousData,
   })
 
@@ -647,14 +658,15 @@ export function TripsPage() {
   }, [settingsData])
 
   const trips = useMemo(() => {
-    return normalizeTrips(data)
+    const loadedTrips = tripPages?.pages.flatMap((page) => normalizeTrips(page)) ?? []
+    return loadedTrips
       .filter((trip) => isMeaningfulTrip(trip, minTripDistanceKm))
       .sort((a, b) => {
         const aTime = new Date(a.startedAt).getTime()
         const bTime = new Date(b.startedAt).getTime()
         return bTime - aTime
       })
-  }, [data, minTripDistanceKm])
+  }, [tripPages, minTripDistanceKm])
   const selectedTrip = useMemo(() => normalizeTrip(selectedTripData), [selectedTripData])
   const selectedPath = useMemo(() => normalizePath(selectedPathData), [selectedPathData])
 
@@ -750,14 +762,15 @@ export function TripsPage() {
   }, [location.key, refetchTrips])
 
   useEffect(() => {
-    if (!isLoading && !hasTripsError && normalizeTrips(data).length === 0) {
+    const loadedTripCount = tripPages?.pages.reduce<number>((total, page) => total + normalizeTrips(page).length, 0) ?? 0
+    if (!isLoading && !hasTripsError && loadedTripCount === 0) {
       const timer = setTimeout(() => {
         void refetchTrips()
       }, 1000)
       return () => clearTimeout(timer)
     }
     return undefined
-  }, [data, hasTripsError, isLoading, refetchTrips])
+  }, [tripPages, hasTripsError, isLoading, refetchTrips])
 
   const { data: summary30 } = useQuery({
     queryKey: ['stats', 'summary', 30],
@@ -810,70 +823,13 @@ export function TripsPage() {
   }, [filteredTrips, windowDays])
 
   const displayedTrips = useMemo(() => filteredTrips.slice(0, visibleCount), [filteredTrips, visibleCount])
+  const loadedTripCount = tripPages?.pages.reduce<number>((total, page) => total + normalizeTrips(page).length, 0) ?? 0
+  const totalTripCount = tripPages?.pages[0] ? (getTripsPageMeta(tripPages.pages[0])?.total ?? loadedTripCount) : loadedTripCount
 
   const activeTrip = useMemo(
     () => filteredTrips.find((trip) => String(trip.id) === selectedTripId) ?? null,
     [filteredTrips, selectedTripId],
   )
-
-  const { data: listResolvedAddresses } = useQuery({
-    queryKey: [
-      'trips',
-      'list-addresses',
-      displayedTrips
-        .map((trip) => `${trip.id}:${trip.startLatitude ?? ''}:${trip.startLongitude ?? ''}:${trip.endLatitude ?? ''}:${trip.endLongitude ?? ''}`)
-        .join('|'),
-    ],
-    queryFn: async () => {
-      const candidates = displayedTrips
-      const entries = await Promise.all(candidates.map(async (trip) => {
-        const start = trip.startAddress && trip.startAddress.trim().length > 0
-          ? trip.startAddress
-          : trip.startLatitude != null && trip.startLongitude != null
-            ? await reverseGeocode(trip.startLatitude, trip.startLongitude)
-            : null
-        const end = trip.endAddress && trip.endAddress.trim().length > 0
-          ? trip.endAddress
-          : trip.endLatitude != null && trip.endLongitude != null
-            ? await reverseGeocode(trip.endLatitude, trip.endLongitude)
-            : null
-        return [String(trip.id), { start, end }] as const
-      }))
-      return Object.fromEntries(entries) as ResolvedTripAddresses
-    },
-    enabled: displayedTrips.length > 0,
-    staleTime: 30 * 60_000,
-  })
-
-  const { data: listPreviewRoutes } = useQuery({
-    queryKey: ['trips', 'list-preview-routes', displayedTrips.map((trip) => String(trip.id)).join('|')],
-    queryFn: async () => {
-      const entries = await Promise.all(displayedTrips.map(async (trip) => {
-        const start = trip.startLatitude != null && trip.startLongitude != null
-          ? { lat: trip.startLatitude, lon: trip.startLongitude }
-          : null
-        const end = trip.endLatitude != null && trip.endLongitude != null
-          ? { lat: trip.endLatitude, lon: trip.endLongitude }
-          : null
-
-        if (!start || !end) {
-          return [String(trip.id), [] as LatLonTuple[]] as const
-        }
-
-        try {
-          const rawPath = await tripsApi.path(String(trip.id))
-          const path = normalizePath(rawPath)
-          const route = normalizeRoutePoints(start, end, path)
-          return [String(trip.id), route] as const
-        } catch {
-          return [String(trip.id), normalizeRoutePoints(start, end, [])] as const
-        }
-      }))
-      return Object.fromEntries(entries) as Record<string, LatLonTuple[]>
-    },
-    enabled: displayedTrips.length > 0,
-    staleTime: 10 * 60_000,
-  })
 
   useEffect(() => {
     setVisibleCount(initialTripDisplayCount)
@@ -1005,13 +961,13 @@ export function TripsPage() {
             const detailStartGeofenceName = geofenceNameForPoint(detailTrip.startLatitude, detailTrip.startLongitude, allGeofences)
             const detailEndGeofenceName = geofenceNameForPoint(detailTrip.endLatitude, detailTrip.endLongitude, allGeofences)
             const listStartLabel = formatPointLabel(
-              tripStartGeofenceName ?? listResolvedAddresses?.[tripId]?.start ?? trip.startAddress,
+              tripStartGeofenceName ?? trip.startAddress,
               trip.startLatitude,
               trip.startLongitude,
               homeLocation,
             )
             const listEndLabel = formatPointLabel(
-              tripEndGeofenceName ?? listResolvedAddresses?.[tripId]?.end ?? trip.endAddress,
+              tripEndGeofenceName ?? trip.endAddress,
               trip.endLatitude,
               trip.endLongitude,
               homeLocation,
@@ -1043,7 +999,7 @@ export function TripsPage() {
               : []
             const previewRoutePoints = isSelected && selectedDisplayedRoutePoints.length > 0
               ? selectedDisplayedRoutePoints
-              : (listPreviewRoutes?.[tripId] ?? fallbackPreviewRoute)
+              : fallbackPreviewRoute
             const detailRoutePoints = isSelected ? selectedDisplayedRoutePoints : []
             const pathInsights = isSelected ? buildPathInsights(selectedPath) : null
             const efficiencyScore = isSelected
@@ -1346,17 +1302,24 @@ export function TripsPage() {
             )
           })}
 
-          {filteredTrips.length > displayedTrips.length && (
+          {(filteredTrips.length > displayedTrips.length || hasNextPage) && (
             <div className="flex items-center justify-between px-1 pt-1">
               <p className="text-xs text-text-muted">
-                {displayedTrips.length} sur {filteredTrips.length} trajets affichés
+                {displayedTrips.length} sur {hasNextPage ? `au moins ${totalTripCount}` : filteredTrips.length} trajets affichés
               </p>
               <button
                 type="button"
-                onClick={() => setVisibleCount((count) => Math.min(filteredTrips.length, count + initialTripDisplayCount))}
+                disabled={isFetchingNextPage}
+                onClick={() => {
+                  if (displayedTrips.length < filteredTrips.length) {
+                    setVisibleCount((count) => count + initialTripDisplayCount)
+                    return
+                  }
+                  if (hasNextPage) void fetchNextPage()
+                }}
                 className="px-3 py-1.5 rounded-md border border-border-subtle text-text-secondary hover:text-text-primary text-sm"
               >
-                Charger plus
+                {isFetchingNextPage ? 'Chargement…' : 'Charger plus'}
               </button>
             </div>
           )}
