@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { settingsApi, statsApi, tripsApi, vehicleApi } from '@/features/vehicle/api'
 import { api } from '@/lib/api-client'
 import { MapContainer, Polyline, TileLayer, CircleMarker } from 'react-leaflet'
@@ -826,6 +826,33 @@ export function TripsPage() {
   const loadedTripCount = tripPages?.pages.reduce<number>((total, page) => total + normalizeTrips(page).length, 0) ?? 0
   const totalTripCount = tripPages?.pages[0] ? (getTripsPageMeta(tripPages.pages[0])?.total ?? loadedTripCount) : loadedTripCount
 
+  const listPreviewRouteQueries = useQueries({
+    queries: displayedTrips.map((trip) => ({
+      queryKey: ['trips', 'list-preview-route', String(trip.id)],
+      queryFn: async () => {
+        const start = trip.startLatitude != null && trip.startLongitude != null
+          ? { lat: trip.startLatitude, lon: trip.startLongitude }
+          : null
+        const end = trip.endLatitude != null && trip.endLongitude != null
+          ? { lat: trip.endLatitude, lon: trip.endLongitude }
+          : null
+        if (!start || !end) return [] as LatLonTuple[]
+        try {
+          return normalizeRoutePoints(start, end, normalizePath(await tripsApi.path(String(trip.id))))
+        } catch {
+          return [] as LatLonTuple[]
+        }
+      },
+      enabled: !selectedTripId,
+      staleTime: 10 * 60_000,
+      refetchInterval: false,
+    })),
+  })
+  const listPreviewRoutes = useMemo(
+    () => Object.fromEntries(displayedTrips.map((trip, index) => [String(trip.id), listPreviewRouteQueries[index]?.data ?? []])),
+    [displayedTrips, listPreviewRouteQueries],
+  ) as Record<string, LatLonTuple[]>
+
   const activeTrip = useMemo(
     () => filteredTrips.find((trip) => String(trip.id) === selectedTripId) ?? null,
     [filteredTrips, selectedTripId],
@@ -994,12 +1021,9 @@ export function TripsPage() {
             const detailEndCoords = detailTrip.endLatitude != null && detailTrip.endLongitude != null
               ? { lat: detailTrip.endLatitude, lon: detailTrip.endLongitude }
               : null
-            const fallbackPreviewRoute = detailStartCoords && detailEndCoords
-              ? [[detailStartCoords.lat, detailStartCoords.lon], [detailEndCoords.lat, detailEndCoords.lon]] as LatLonTuple[]
-              : []
             const previewRoutePoints = isSelected && selectedDisplayedRoutePoints.length > 0
               ? selectedDisplayedRoutePoints
-              : fallbackPreviewRoute
+              : (listPreviewRoutes[tripId] ?? [])
             const detailRoutePoints = isSelected ? selectedDisplayedRoutePoints : []
             const pathInsights = isSelected ? buildPathInsights(selectedPath) : null
             const efficiencyScore = isSelected
