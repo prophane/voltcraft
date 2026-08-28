@@ -604,10 +604,10 @@ export function TripsPage() {
     queryKey: ['trips'],
     queryFn: ({ pageParam }) => fetchTripsPage(pageParam),
     initialPageParam: 1,
-    getNextPageParam: (lastPage) => {
+    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
       const meta = getTripsPageMeta(lastPage)
       if (!meta) {
-        return normalizeTrips(lastPage).length === TRIPS_PAGE_SIZE ? pageParam + 1 : undefined
+        return normalizeTrips(lastPage).length === TRIPS_PAGE_SIZE ? lastPageParam + 1 : undefined
       }
       return meta.currentPage < meta.totalPages ? meta.currentPage + 1 : undefined
     },
