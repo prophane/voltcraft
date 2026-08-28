@@ -80,10 +80,11 @@ export const commandsApi = {
 }
 
 export const tripsApi = {
-  list: (page = 1, pageSize = 20, from?: string, to?: string) => {
+  list: (page = 1, pageSize = 20, from?: string, to?: string, includeEnergy = true) => {
     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
     if (from) params.set('from', from)
     if (to) params.set('to', to)
+    params.set('includeEnergy', String(includeEnergy))
     return api.get<unknown>(`/trips?${params}`)
   },
   getById: (id: string) => api.get<unknown>(`/trips/${id}`),

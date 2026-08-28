@@ -46,6 +46,7 @@ type PaginationOpts = {
   pageSize: number
   from?: Date
   to?: Date
+  includeEnergy?: boolean
 }
 
 type MappedRecord = Record<string, unknown>
@@ -504,6 +505,7 @@ export class TeslaMateReadService {
 
   async getTrips(vin: string, opts: PaginationOpts) {
     const distanceMultiplier = await this.inferOdometerMultiplier(vin)
+    const includeEnergy = opts.includeEnergy !== false
     const where = buildTripWhereClause(opts.from, opts.to, 1)
     const countRows = await this.queryOrThrow<{ total: string | number }>(
       `
@@ -523,14 +525,15 @@ export class TeslaMateReadService {
           d.end_date AS "endedAt",
           d.duration_min AS "durationMin",
           d.distance AS "distanceKm",
-          te.energy_used_kwh AS "energyUsedKwh",
+          ${includeEnergy ? `te.energy_used_kwh AS "energyUsedKwh",
           CASE
             WHEN te.energy_used_kwh IS NOT NULL AND d.distance > 0
               THEN ROUND((te.energy_used_kwh / d.distance * 100)::numeric, 1)
             WHEN c.efficiency IS NOT NULL
               THEN ROUND((c.efficiency * 100)::numeric, 1)
             ELSE NULL
-          END AS "avgConsumptionKwh100",
+          END AS "avgConsumptionKwh100",` : `NULL AS "energyUsedKwh",
+          NULL AS "avgConsumptionKwh100",`}
           CASE
             WHEN sg.name IS NOT NULL THEN sg.name
             WHEN sa.name IS NOT NULL AND sa.road IS NOT NULL THEN sa.name || ', ' || sa.road || ', ' || COALESCE(sa.city, sa.county)
@@ -559,7 +562,7 @@ export class TeslaMateReadService {
         LEFT JOIN addresses ea ON ea.id = d.end_address_id
         LEFT JOIN geofences sg ON sg.id = d.start_geofence_id
         LEFT JOIN geofences eg ON eg.id = d.end_geofence_id
-        LEFT JOIN LATERAL (
+        ${includeEnergy ? `LEFT JOIN LATERAL (
           WITH samples AS (
             SELECT
               p.date AS captured_at,
@@ -600,7 +603,7 @@ export class TeslaMateReadService {
               THEN ROUND((d.distance * c.efficiency)::numeric, 2)
             ELSE NULL
           END AS energy_used_kwh
-        ) te ON TRUE
+        ) te ON TRUE` : ''}
         WHERE c.vin = $1${where.sql}
         ORDER BY d.start_date DESC
         LIMIT $${where.params.length + 2}

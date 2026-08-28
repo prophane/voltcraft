@@ -18,6 +18,7 @@ const paginationSchema = z.object({
   pageSize: z.coerce.number().min(1).max(100).default(20),
   from: z.string().optional(),
   to: z.string().optional(),
+  includeEnergy: z.enum(['true', 'false']).default('true').transform((value) => value === 'true'),
 })
 
 export async function tripsRoutes(app: FastifyInstance) {
@@ -45,6 +46,7 @@ export async function tripsRoutes(app: FastifyInstance) {
         pageSize: query.pageSize,
         from: query.from ? new Date(query.from) : undefined,
         to: query.to ? new Date(query.to) : undefined,
+        includeEnergy: query.includeEnergy,
       })
       return paginated(teslamateTrips.trips, teslamateTrips.total, query.page, query.pageSize)
     } catch (error) {

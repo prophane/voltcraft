@@ -223,7 +223,7 @@ function normalizeTrips(raw: unknown): TripRecord[] {
 const TRIPS_PAGE_SIZE = 30
 
 async function fetchTripsPage(page: number) {
-  return tripsApi.list(page, TRIPS_PAGE_SIZE)
+  return tripsApi.list(page, TRIPS_PAGE_SIZE, undefined, undefined, false)
 }
 
 function getTripsPageMeta(raw: unknown) {
@@ -607,7 +607,7 @@ export function TripsPage() {
     getNextPageParam: (lastPage) => {
       const meta = getTripsPageMeta(lastPage)
       if (!meta) {
-        return undefined
+        return normalizeTrips(lastPage).length === TRIPS_PAGE_SIZE ? pageParam + 1 : undefined
       }
       return meta.currentPage < meta.totalPages ? meta.currentPage + 1 : undefined
     },
