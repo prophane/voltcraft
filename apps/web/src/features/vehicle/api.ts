@@ -107,6 +107,115 @@ export const statsApi = {
   efficiency: (days = 30) => api.get<unknown>(`/stats/efficiency?days=${days}`),
   idles: (days = 7, minDurationMin = 5) => api.get<unknown>(`/stats/idles?days=${days}&minDurationMin=${minDurationMin}`),
   anomalies: (days = 30) => api.get<unknown>(`/stats/anomalies?days=${days}`),
+  batteryDegradation: (days = 365) => api.get<BatteryDegradation>(`/stats/health/battery-degradation?days=${days}`),
+  vampireDrain: (days = 90) => api.get<VampireDrain>(`/stats/health/vampire-drain?days=${days}`),
+  chargingProfile: (days = 365) => api.get<ChargingProfile>(`/stats/health/charging-profile?days=${days}`),
+  efficiencyByTemperature: (days = 365) => api.get<EfficiencyByTemperature>(`/stats/health/efficiency-by-temperature?days=${days}`),
+  tirePressure: (days = 90) => api.get<TirePressureAnalysis>(`/stats/health/tire-pressure?days=${days}`),
+  softwareUpdates: () => api.get<SoftwareUpdate[]>('/stats/health/software-updates'),
+}
+
+export interface BatteryDegradation {
+  periodDays: number
+  chemistry: string
+  ready: boolean
+  samplesCount: number
+  series: Array<{ day: string; fullRangeKm: number; odometerKm: number | null; capacityKwh: number | null }>
+  efficiencyKwhPerKm: number | null
+  bestFullRangeKm: number | null
+  currentFullRangeKm: number | null
+  healthPct: number | null
+  degradationPct: number | null
+  originalCapacityKwh: number | null
+  currentCapacityKwh: number | null
+  lossPer10000Km: number | null
+  odometerKm: number | null
+  projectedKmToWarrantyFloor: number | null
+}
+
+export interface VampireDrainSession {
+  parkedFrom: string
+  parkedTo: string
+  hours: number
+  socFrom: number
+  socTo: number
+  socLost: number
+  pctPerDay: number
+  rangeLostKm: number | null
+}
+
+export interface VampireDrain {
+  periodDays: number
+  ready: boolean
+  sessionsCount: number
+  medianPctPerDay: number | null
+  avgPctPerDay: number | null
+  worstPctPerDay: number | null
+  worstSession: VampireDrainSession | null
+  kwhPerDay: number | null
+  thresholdPctPerDay: number
+  status: 'ok' | 'warning' | 'critical' | 'unknown'
+  sessions: VampireDrainSession[]
+}
+
+export interface ChargingProfile {
+  periodDays: number
+  chemistry: string
+  sessionsCount: number
+  dcCount: number
+  acCount: number
+  dcEnergyKwh: number
+  acEnergyKwh: number
+  totalEnergyKwh: number
+  dcSharePct: number | null
+  equivalentCycles: number | null
+  avgEndSocPct: number | null
+  avgStartSocPct: number | null
+  maxPowerKw: number | null
+  maxRecommendedSocPct: number
+  highSocSessions: number
+  deepDischargeSessions: number
+  monthly: Array<{ month: string; dcKwh: number; acKwh: number }>
+}
+
+export interface EfficiencyByTemperature {
+  periodDays: number
+  buckets: Array<{ bucketMinC: number; distanceKm: number; energyKwh: number; tripsCount: number; consumptionWhPerKm: number | null }>
+  overallWhPerKm: number | null
+  coldWhPerKm: number | null
+  mildWhPerKm: number | null
+  winterPenaltyPct: number | null
+}
+
+type TireCorner = 'fl' | 'fr' | 'rl' | 'rr'
+
+export interface TirePressureAnalysis {
+  periodDays: number
+  ready: boolean
+  targetBar: number
+  toleranceBar: number
+  latest: {
+    day: string
+    outsideTempC: number | null
+    raw: Record<TireCorner, number | null>
+    corrected: Record<TireCorner, number | null>
+  } | null
+  spreadBar: number | null
+  spreadWarning: boolean
+  alerts: Array<{ corner: TireCorner; correctedBar: number; deltaBar: number; severity: 'warning' | 'critical' }>
+  leakSuspects: Array<{ corner: TireCorner; barPer30Days: number }>
+  series: Array<{
+    day: string
+    outsideTempC: number | null
+    raw: Record<TireCorner, number | null>
+    corrected: Record<TireCorner, number | null>
+  }>
+}
+
+export interface SoftwareUpdate {
+  startedAt: string
+  installedAt: string | null
+  version: string | null
 }
 
 export const automationsApi = {

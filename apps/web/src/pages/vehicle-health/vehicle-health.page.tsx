@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useVehicleComposedState } from '@/hooks/use-vehicle-composed-state'
-import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { BatteryCharging, Compass, Gauge, Thermometer } from 'lucide-react'
-import { statsApi, vehicleApi, type VehicleHistorySnapshot } from '@/features/vehicle/api'
+import { statsApi, vehicleApi, settingsApi, type VehicleHistorySnapshot } from '@/features/vehicle/api'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn, formatDate, formatKm, formatPercent } from '@/lib/utils'
 import {
@@ -20,19 +20,30 @@ import {
   type TelemetrySource,
 } from '../diagnostics/diagnostics-shared'
 
+type HealthWindowDays = 90 | 365 | 1095
+
+const HEALTH_WINDOWS: Array<{ value: HealthWindowDays; label: string }> = [
+  { value: 90, label: '90j' },
+  { value: 365, label: '1 an' },
+  { value: 1095, label: '3 ans' },
+]
+
+const CORNER_LABELS = { fl: 'Avant gauche', fr: 'Avant droit', rl: 'Arriere gauche', rr: 'Arriere droit' } as const
+
 function normalizeTpmsToBar(value: number | null | undefined): number | null {
   if (value == null || !Number.isFinite(value) || value <= 0) return null
   if (value > 15) return value * 0.0689476
   return value
 }
 
-function formatBar(value: number | null): string {
+function formatBar(value: number | null | undefined): string {
   return value != null ? `${value.toFixed(2)} bar` : '—'
 }
 
 export function VehicleHealthPage() {
   const queryClient = useQueryClient()
   const [viewMode, setViewMode] = useState<DiagnosticsViewMode>('essential')
+  const [healthDays, setHealthDays] = useState<HealthWindowDays>(365)
 
   const { data: vehicle } = useQuery({
     queryKey: ['vehicle', 'current'],
@@ -66,6 +77,48 @@ export function VehicleHealthPage() {
     staleTime: 5 * 60_000,
   })
 
+  const { data: settingsData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => settingsApi.get(),
+    staleTime: 5 * 60_000,
+  })
+
+  const { data: degradation } = useQuery({
+    queryKey: ['stats', 'health', 'degradation', healthDays],
+    queryFn: () => statsApi.batteryDegradation(healthDays),
+    staleTime: 10 * 60_000,
+  })
+
+  const { data: vampireDrain } = useQuery({
+    queryKey: ['stats', 'health', 'vampire-drain', healthDays],
+    queryFn: () => statsApi.vampireDrain(healthDays),
+    staleTime: 10 * 60_000,
+  })
+
+  const { data: chargingProfile } = useQuery({
+    queryKey: ['stats', 'health', 'charging-profile', healthDays],
+    queryFn: () => statsApi.chargingProfile(healthDays),
+    staleTime: 10 * 60_000,
+  })
+
+  const { data: efficiencyByTemp } = useQuery({
+    queryKey: ['stats', 'health', 'efficiency-temp', healthDays],
+    queryFn: () => statsApi.efficiencyByTemperature(healthDays),
+    staleTime: 10 * 60_000,
+  })
+
+  const { data: tirePressure } = useQuery({
+    queryKey: ['stats', 'health', 'tire-pressure', Math.min(healthDays, 365)],
+    queryFn: () => statsApi.tirePressure(Math.min(healthDays, 365)),
+    staleTime: 10 * 60_000,
+  })
+
+  const { data: softwareUpdates } = useQuery({
+    queryKey: ['stats', 'health', 'software-updates'],
+    queryFn: () => statsApi.softwareUpdates(),
+    staleTime: 30 * 60_000,
+  })
+
   const batteryHealthSummary = batteryHealth as {
     ready?: boolean
     samplesCount?: number
@@ -74,7 +127,10 @@ export function VehicleHealthPage() {
     currentFullRangeKm?: number | null
   } | undefined
 
-  const historyRows = Array.isArray(history) ? (history as VehicleHistorySnapshot[]) : []
+  const historyRows = useMemo(
+    () => (Array.isArray(history) ? (history as VehicleHistorySnapshot[]) : []),
+    [history],
+  )
   const recentHistory = historyRows.slice(0, 12).reverse()
 
   const source: TelemetrySource = state?.isCached ? 'TeslaMate' : 'Fleet'
@@ -166,6 +222,52 @@ export function VehicleHealthPage() {
     }))
   }, [tirePressureSeries])
 
+  const tpmsCorrectedTrend = useMemo(() => {
+    if (!tirePressure?.series?.length) return []
+    return tirePressure.series.map((row) => ({
+      day: row.day.slice(5),
+      fl: row.corrected.fl,
+      fr: row.corrected.fr,
+      rl: row.corrected.rl,
+      rr: row.corrected.rr,
+    }))
+  }, [tirePressure])
+
+  const degradationSeries = useMemo(() => {
+    return (degradation?.series ?? []).map((point) => ({
+      day: point.day,
+      fullRangeKm: point.fullRangeKm,
+      capacityKwh: point.capacityKwh,
+    }))
+  }, [degradation])
+
+  const efficiencyTempSeries = useMemo(() => {
+    return (efficiencyByTemp?.buckets ?? [])
+      .filter((bucket) => bucket.consumptionWhPerKm != null && bucket.distanceKm >= 20)
+      .map((bucket) => ({
+        label: `${bucket.bucketMinC}°`,
+        whPerKm: bucket.consumptionWhPerKm,
+        distanceKm: bucket.distanceKm,
+      }))
+  }, [efficiencyByTemp])
+
+  const chargingMonthly = useMemo(() => {
+    return (chargingProfile?.monthly ?? []).map((row) => ({
+      month: row.month.slice(2),
+      dcKwh: row.dcKwh,
+      acKwh: row.acKwh,
+    }))
+  }, [chargingProfile])
+
+  const drainTone: 'neutral' | 'success' | 'warning' =
+    vampireDrain?.status === 'critical' || vampireDrain?.status === 'warning'
+      ? 'warning'
+      : vampireDrain?.status === 'ok'
+        ? 'success'
+        : 'neutral'
+
+  const chemistry = (settingsData as Record<string, unknown> | undefined)?.['batteryChemistry'] === 'lfp' ? 'lfp' : 'nca'
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
@@ -189,6 +291,26 @@ export function VehicleHealthPage() {
             </div>
           </div>
           <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <span className="text-xs uppercase tracking-wide text-text-muted">Fenêtre d'analyse</span>
+          <div className="inline-flex rounded-md border border-border-subtle overflow-hidden">
+            {HEALTH_WINDOWS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setHealthDays(option.value)}
+                className={cn(
+                  'px-3 py-1 text-xs transition-colors',
+                  healthDays === option.value ? 'bg-accent-500/20 text-accent-400' : 'text-text-muted hover:text-text-primary',
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <DiagBadge>{chemistry === 'lfp' ? 'Chimie LFP' : 'Chimie NCA/NCM'}</DiagBadge>
         </div>
       </section>
 
@@ -271,11 +393,82 @@ export function VehicleHealthPage() {
           <CardHeader>
             <div>
               <CardTitle>Santé batterie</CardTitle>
-              <h2 className="mt-2 text-xl font-semibold text-text-primary">Estimation basée sur TeslaMate</h2>
+              <h2 className="mt-2 text-xl font-semibold text-text-primary">
+                {degradation?.ready ? 'Dégradation mesurée sur les charges' : 'Estimation basée sur TeslaMate'}
+              </h2>
             </div>
           </CardHeader>
 
-          {batteryHealth ? (
+          {degradation?.ready ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-border-subtle bg-bg-overlay/60 p-4">
+                <p className="text-xs uppercase tracking-wide text-text-muted">Santé estimée</p>
+                <p className="mt-2 text-4xl font-semibold text-text-primary">
+                  {degradation.healthPct != null ? `${degradation.healthPct.toFixed(1)}%` : '—'}
+                </p>
+                <p className="mt-2 text-xs text-text-muted">
+                  {degradation.degradationPct != null ? `${degradation.degradationPct.toFixed(1)} pts de perte` : 'Perte indisponible'}
+                  {' • '}
+                  {degradation.samplesCount} jours de mesure
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <InfoChip
+                  label="Capacité d'origine"
+                  value={degradation.originalCapacityKwh != null ? `${degradation.originalCapacityKwh.toFixed(1)} kWh` : '—'}
+                />
+                <InfoChip
+                  label="Capacité actuelle"
+                  value={degradation.currentCapacityKwh != null ? `${degradation.currentCapacityKwh.toFixed(1)} kWh` : '—'}
+                />
+                <InfoChip
+                  label="Autonomie 100% max"
+                  value={degradation.bestFullRangeKm != null ? `${degradation.bestFullRangeKm.toFixed(0)} km` : '—'}
+                />
+                <InfoChip
+                  label="Autonomie 100% actuelle"
+                  value={degradation.currentFullRangeKm != null ? `${degradation.currentFullRangeKm.toFixed(0)} km` : '—'}
+                />
+                <InfoChip
+                  label="Perte / 10 000 km"
+                  value={degradation.lossPer10000Km != null ? `${degradation.lossPer10000Km.toFixed(2)} pts` : 'Recul insuffisant'}
+                  tone={degradation.lossPer10000Km != null && degradation.lossPer10000Km > 1.5 ? 'warning' : 'neutral'}
+                />
+                <InfoChip
+                  label="Odomètre"
+                  value={degradation.odometerKm != null ? `${Math.round(degradation.odometerKm).toLocaleString('fr-FR')} km` : '—'}
+                />
+              </div>
+
+              {degradation.projectedKmToWarrantyFloor != null ? (
+                <p className="text-xs text-text-muted">
+                  Au rythme actuel, le seuil de garantie (70%) serait atteint dans environ{' '}
+                  <span className="text-text-primary font-medium">
+                    {Math.round(degradation.projectedKmToWarrantyFloor).toLocaleString('fr-FR')} km
+                  </span>.
+                </p>
+              ) : null}
+
+              <div className="rounded-2xl border border-border-subtle bg-bg-overlay/60 p-4">
+                <p className="text-xs uppercase tracking-wide text-text-muted mb-3">Autonomie 100% reconstituée</p>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={degradationSeries} margin={{ left: 8, right: 12, top: 8, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
+                      <XAxis dataKey="day" stroke="#8D8D8D" tickLine={false} axisLine={false} minTickGap={40} />
+                      <YAxis stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} domain={['dataMin - 5', 'dataMax + 5']} />
+                      <Tooltip
+                        contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 10, color: '#F5F5F5' }}
+                        formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(1)} km` : '—')}
+                      />
+                      <Line type="monotone" dataKey="fullRangeKm" name="Autonomie 100%" stroke="#7dd3fc" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          ) : batteryHealth ? (
             <div className="space-y-4">
               <div className="rounded-2xl border border-border-subtle bg-bg-overlay/60 p-4">
                 <p className="text-xs uppercase tracking-wide text-text-muted">Santé estimée</p>
@@ -326,6 +519,184 @@ export function VehicleHealthPage() {
           )}
         </Card>
       </div>
+
+      {/* Perte a l'arret + stress batterie */}
+      <div className="grid xl:grid-cols-2 gap-4">
+        <Card className="p-5 lg:p-6">
+          <CardHeader>
+            <div>
+              <CardTitle>Perte à l'arrêt (vampire drain)</CardTitle>
+              <h2 className="mt-2 text-xl font-semibold text-text-primary">Consommation batterie véhicule stationné</h2>
+            </div>
+          </CardHeader>
+
+          {vampireDrain?.ready ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <InfoChip
+                  label="Médiane"
+                  value={vampireDrain.medianPctPerDay != null ? `${vampireDrain.medianPctPerDay.toFixed(2)} %/jour` : '—'}
+                  tone={drainTone}
+                />
+                <InfoChip
+                  label="Équivalent énergie"
+                  value={vampireDrain.kwhPerDay != null ? `${vampireDrain.kwhPerDay.toFixed(2)} kWh/jour` : '—'}
+                />
+                <InfoChip
+                  label="Pire période"
+                  value={vampireDrain.worstPctPerDay != null ? `${vampireDrain.worstPctPerDay.toFixed(2)} %/jour` : '—'}
+                />
+                <InfoChip label="Périodes analysées" value={String(vampireDrain.sessionsCount)} />
+              </div>
+
+              <p className="text-xs text-text-muted">
+                Seuil d'alerte configuré : {vampireDrain.thresholdPctPerDay} %/jour.{' '}
+                {vampireDrain.status === 'ok'
+                  ? 'Comportement normal (veille profonde correcte).'
+                  : 'Vérifier Sentry Mode, la précond. programmée et les applications tierces qui réveillent le véhicule.'}
+              </p>
+
+              <div className="space-y-2">
+                {vampireDrain.sessions.slice(0, 5).map((session) => (
+                  <div key={session.parkedFrom} className="rounded-xl border border-border-subtle bg-bg-overlay/50 px-3 py-2 text-xs text-text-secondary">
+                    <div className="flex items-center justify-between gap-2">
+                      <span>{formatDate(session.parkedFrom)}</span>
+                      <span className="text-text-primary font-medium">{session.pctPerDay.toFixed(2)} %/j</span>
+                    </div>
+                    <p className="mt-1 text-text-muted">
+                      {session.hours.toFixed(0)} h à l'arrêt • {session.socFrom}% → {session.socTo}%
+                      {session.rangeLostKm != null ? ` • ${session.rangeLostKm.toFixed(0)} km perdus` : ''}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <EmptyState message="Pas encore assez de périodes de stationnement longues sans charge pour estimer la perte à l'arrêt." />
+          )}
+        </Card>
+
+        <Card className="p-5 lg:p-6">
+          <CardHeader>
+            <div>
+              <CardTitle>Usage et stress batterie</CardTitle>
+              <h2 className="mt-2 text-xl font-semibold text-text-primary">Profil de charge sur la période</h2>
+            </div>
+          </CardHeader>
+
+          {chargingProfile && chargingProfile.sessionsCount > 0 ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <InfoChip
+                  label="Part de charge rapide"
+                  value={chargingProfile.dcSharePct != null ? `${chargingProfile.dcSharePct.toFixed(1)}%` : '—'}
+                  tone={chargingProfile.dcSharePct != null && chargingProfile.dcSharePct > 40 ? 'warning' : 'neutral'}
+                />
+                <InfoChip
+                  label="Cycles équivalents"
+                  value={chargingProfile.equivalentCycles != null ? chargingProfile.equivalentCycles.toFixed(1) : '—'}
+                />
+                <InfoChip label="Sessions DC / AC" value={`${chargingProfile.dcCount} / ${chargingProfile.acCount}`} />
+                <InfoChip
+                  label="Puissance max vue"
+                  value={chargingProfile.maxPowerKw != null ? `${chargingProfile.maxPowerKw} kW` : '—'}
+                />
+                <InfoChip
+                  label={`Charges > ${chargingProfile.maxRecommendedSocPct}%`}
+                  value={String(chargingProfile.highSocSessions)}
+                  tone={chemistry === 'nca' && chargingProfile.highSocSessions > 0 ? 'warning' : 'neutral'}
+                />
+                <InfoChip
+                  label="Départs sous 10%"
+                  value={String(chargingProfile.deepDischargeSessions)}
+                  tone={chargingProfile.deepDischargeSessions > 0 ? 'warning' : 'neutral'}
+                />
+              </div>
+
+              <p className="text-xs text-text-muted">
+                {chemistry === 'lfp'
+                  ? 'Chimie LFP : une charge à 100% par semaine est recommandée pour recalibrer la jauge.'
+                  : `Chimie NCA/NCM : viser ${chargingProfile.maxRecommendedSocPct}% au quotidien et éviter les stationnements prolongés à pleine charge.`}
+              </p>
+
+              {chargingMonthly.length > 1 ? (
+                <div className="rounded-2xl border border-border-subtle bg-bg-overlay/50 p-3">
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chargingMonthly} margin={{ left: 8, right: 12, top: 8, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
+                        <XAxis dataKey="month" stroke="#8D8D8D" tickLine={false} axisLine={false} minTickGap={20} />
+                        <YAxis stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} />
+                        <Tooltip
+                          contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 10, color: '#F5F5F5' }}
+                          formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(1)} kWh` : '—')}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        <Bar dataKey="acKwh" name="AC" stackId="energy" fill="#34D399" />
+                        <Bar dataKey="dcKwh" name="DC rapide" stackId="energy" fill="#F59E0B" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <EmptyState message="Aucune session de charge sur la période sélectionnée." />
+          )}
+        </Card>
+      </div>
+
+      {/* Efficience vs temperature */}
+      <Card className="p-5 lg:p-6">
+        <CardHeader>
+          <div>
+            <CardTitle>Efficience et température</CardTitle>
+            <h2 className="mt-2 text-xl font-semibold text-text-primary">Consommation réelle par tranche de température extérieure</h2>
+          </div>
+        </CardHeader>
+
+        {efficiencyTempSeries.length > 1 ? (
+          <div className="space-y-4">
+            <div className="grid sm:grid-cols-3 gap-3">
+              <InfoChip
+                label="Moyenne globale"
+                value={efficiencyByTemp?.overallWhPerKm != null ? `${efficiencyByTemp.overallWhPerKm} Wh/km` : '—'}
+              />
+              <InfoChip
+                label="Par temps doux (15-30 °C)"
+                value={efficiencyByTemp?.mildWhPerKm != null ? `${efficiencyByTemp.mildWhPerKm} Wh/km` : '—'}
+              />
+              <InfoChip
+                label="Surcoût hivernal (< 5 °C)"
+                value={efficiencyByTemp?.winterPenaltyPct != null ? `+${efficiencyByTemp.winterPenaltyPct.toFixed(1)}%` : '—'}
+                tone={efficiencyByTemp?.winterPenaltyPct != null && efficiencyByTemp.winterPenaltyPct > 35 ? 'warning' : 'neutral'}
+              />
+            </div>
+
+            <div className="h-64 rounded-2xl border border-border-subtle bg-bg-overlay/50 p-3">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={efficiencyTempSeries} margin={{ left: 8, right: 12, top: 8, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
+                  <XAxis dataKey="label" stroke="#8D8D8D" tickLine={false} axisLine={false} />
+                  <YAxis stroke="#8D8D8D" tickLine={false} axisLine={false} width={44} />
+                  <Tooltip
+                    contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 10, color: '#F5F5F5' }}
+                    formatter={(value: unknown, name: unknown) =>
+                      typeof value === 'number' ? (name === 'Distance' ? `${value.toFixed(0)} km` : `${value.toFixed(0)} Wh/km`) : '—'
+                    }
+                  />
+                  <Bar dataKey="whPerKm" name="Consommation" fill="#60A5FA" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="text-xs text-text-muted">
+              Tranches de 5 °C, trajets de plus de 3 km uniquement. La consommation est reconstruite depuis la perte d'autonomie idéale TeslaMate.
+            </p>
+          </div>
+        ) : (
+          <EmptyState message="Pas encore assez de trajets répartis sur différentes températures." />
+        )}
+      </Card>
 
       {/* État détaillé */}
       <div className="grid lg:grid-cols-2 gap-4">
@@ -385,11 +756,83 @@ export function VehicleHealthPage() {
         <CardHeader>
           <div>
             <CardTitle>Suivi pression pneus</CardTitle>
-            <h2 className="mt-2 text-xl font-semibold text-text-primary">Derniere mesure et tendance recente</h2>
+            <h2 className="mt-2 text-xl font-semibold text-text-primary">
+              {tirePressure?.latest ? 'Valeurs compensées en température' : 'Derniere mesure et tendance recente'}
+            </h2>
           </div>
         </CardHeader>
 
-        {tirePressureStats.latest ? (
+        {tirePressure?.latest ? (
+          <div className="space-y-4">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm text-text-secondary">
+              {(['fl', 'fr', 'rl', 'rr'] as const).map((corner) => {
+                const alert = tirePressure.alerts.find((row) => row.corner === corner)
+                const corrected = tirePressure.latest?.corrected[corner] ?? null
+                const raw = tirePressure.latest?.raw[corner] ?? null
+                return (
+                  <InfoChip
+                    key={corner}
+                    label={CORNER_LABELS[corner]}
+                    value={`${formatBar(corrected)}${raw != null ? ` (brut ${raw.toFixed(2)})` : ''}`}
+                    tone={alert ? 'warning' : 'success'}
+                  />
+                )
+              })}
+            </div>
+
+            <div className="grid sm:grid-cols-3 gap-3 text-sm text-text-secondary">
+              <InfoChip label="Cible" value={formatBar(tirePressure.targetBar)} />
+              <InfoChip
+                label="Ecart entre roues"
+                value={tirePressure.spreadBar != null ? `${tirePressure.spreadBar.toFixed(2)} bar` : '—'}
+                tone={tirePressure.spreadWarning ? 'warning' : 'success'}
+              />
+              <InfoChip
+                label="Température au relevé"
+                value={tirePressure.latest.outsideTempC != null ? `${tirePressure.latest.outsideTempC.toFixed(1)} °C` : '—'}
+              />
+            </div>
+
+            {tirePressure.leakSuspects.length > 0 ? (
+              <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-text-secondary">
+                <p className="font-medium text-text-primary">Perte de pression suspecte</p>
+                <ul className="mt-2 space-y-1 text-xs">
+                  {tirePressure.leakSuspects.map((row) => (
+                    <li key={row.corner}>
+                      {CORNER_LABELS[row.corner]} : {row.barPer30Days.toFixed(2)} bar / 30 jours à température constante
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {tpmsCorrectedTrend.length > 1 ? (
+              <div className="rounded-2xl border border-border-subtle bg-bg-overlay/50 p-3">
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={tpmsCorrectedTrend} margin={{ left: 8, right: 12, top: 8, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
+                      <XAxis dataKey="day" stroke="#8D8D8D" tickLine={false} axisLine={false} minTickGap={28} />
+                      <YAxis stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} domain={['dataMin - 0.05', 'dataMax + 0.05']} />
+                      <Tooltip
+                        contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 10, color: '#F5F5F5' }}
+                        formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)} bar` : '—')}
+                      />
+                      <Line type="monotone" dataKey="fl" name="Avant gauche" stroke="#60A5FA" strokeWidth={2} dot={false} connectNulls />
+                      <Line type="monotone" dataKey="fr" name="Avant droit" stroke="#34D399" strokeWidth={2} dot={false} connectNulls />
+                      <Line type="monotone" dataKey="rl" name="Arriere gauche" stroke="#F59E0B" strokeWidth={2} dot={false} connectNulls />
+                      <Line type="monotone" dataKey="rr" name="Arriere droit" stroke="#F472B6" strokeWidth={2} dot={false} connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ) : null}
+
+            <p className="text-xs text-text-muted">
+              Relevés ramenés à 20 °C pour neutraliser l'effet thermique (≈ 0,1 bar tous les 10 °C). Dernier jour agrégé : {tirePressure.latest.day}.
+            </p>
+          </div>
+        ) : tirePressureStats.latest ? (
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm text-text-secondary">
               <InfoChip label="Avant gauche" value={formatBar(tirePressureStats.latest.fl)} />
@@ -433,6 +876,36 @@ export function VehicleHealthPage() {
           </div>
         ) : (
           <EmptyState message="Aucune pression pneus disponible pour le moment dans la telemetrie." />
+        )}
+      </Card>
+
+      <Card className="p-5 lg:p-6">
+        <CardHeader>
+          <div>
+            <CardTitle>Logiciel embarqué</CardTitle>
+            <h2 className="mt-2 text-xl font-semibold text-text-primary">Version courante et historique des mises à jour</h2>
+          </div>
+        </CardHeader>
+
+        {softwareUpdates && softwareUpdates.length > 0 ? (
+          <div className="space-y-3">
+            <InfoChip
+              label="Version installée"
+              value={softwareUpdates[0]?.version ?? '—'}
+            />
+            <div className="space-y-2">
+              {softwareUpdates.map((update) => (
+                <div key={`${update.version}-${update.startedAt}`} className="flex items-center justify-between gap-3 rounded-xl border border-border-subtle bg-bg-overlay/50 px-3 py-2 text-xs text-text-secondary">
+                  <span className="font-medium text-text-primary">{update.version ?? 'Version inconnue'}</span>
+                  <span className="text-text-muted">
+                    {update.installedAt ? `Installée le ${formatDate(update.installedAt)}` : `Démarrée le ${formatDate(update.startedAt)} (non finalisée)`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <EmptyState message="Aucune mise à jour enregistrée par TeslaMate pour le moment." />
         )}
       </Card>
     </div>

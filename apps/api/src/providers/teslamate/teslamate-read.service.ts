@@ -1229,6 +1229,334 @@ export class TeslaMateReadService {
     }))
   }
 
+  // Meilleure autonomie 100% observee par jour, reconstruite depuis les echantillons de charge (SoC >= 50%).
+  async getBatteryDegradation(vin: string, since: Date) {
+    const odometerMultiplier = await this.inferOdometerMultiplier(vin)
+
+    const rows = await this.query<{
+      day: Date | string
+      full_range_km: number | string | null
+      odometer: number | string | null
+      efficiency: number | string | null
+      samples: number | string
+    }>(
+      `
+        WITH car AS (
+          SELECT c.id, c.efficiency FROM cars c WHERE c.vin = $1 LIMIT 1
+        ),
+        samples AS (
+          SELECT
+            ch.date,
+            COALESCE(NULLIF(ch.usable_battery_level, 0), ch.battery_level) AS soc,
+            COALESCE(ch.rated_battery_range_km, ch.ideal_battery_range_km) AS range_km
+          FROM charges ch
+          INNER JOIN charging_processes cp ON cp.id = ch.charging_process_id
+          INNER JOIN car ON car.id = cp.car_id
+          WHERE ch.date >= $2
+        ),
+        daily AS (
+          SELECT
+            DATE_TRUNC('day', s.date) AS day,
+            MAX(s.range_km / s.soc * 100.0) AS full_range_km,
+            COUNT(*)::int AS samples
+          FROM samples s
+          WHERE s.soc >= 50 AND s.range_km IS NOT NULL AND s.range_km > 0
+          GROUP BY 1
+        )
+        SELECT
+          d.day,
+          d.full_range_km,
+          d.samples,
+          car.efficiency,
+          od.odometer
+        FROM daily d
+        CROSS JOIN car
+        LEFT JOIN LATERAL (
+          SELECT p.odometer
+          FROM positions p
+          WHERE p.car_id = car.id
+            AND p.odometer IS NOT NULL
+            AND p.date < d.day + INTERVAL '1 day'
+          ORDER BY p.date DESC
+          LIMIT 1
+        ) od ON TRUE
+        ORDER BY d.day ASC
+      `,
+      [vin, since],
+    )
+
+    return rows.map((row) => ({
+      day: toDate(row.day) ?? new Date(),
+      fullRangeKm: toNumber(row.full_range_km),
+      odometerKm: toNumber(row.odometer) != null ? (toNumber(row.odometer) as number) * odometerMultiplier : null,
+      efficiencyKwhPerKm: toNumber(row.efficiency),
+      samples: Number(row.samples ?? 0),
+    }))
+  }
+
+  // Perte de charge a l'arret: intervalles entre deux trajets sans charge intercalee.
+  async getVampireDrain(vin: string, since: Date, minHours = 6) {
+    const rows = await this.query<{
+      parked_from: Date | string
+      parked_to: Date | string
+      hours: number | string
+      soc_from: number | string | null
+      soc_to: number | string | null
+      range_from: number | string | null
+      range_to: number | string | null
+      efficiency: number | string | null
+    }>(
+      `
+        WITH car AS (
+          SELECT c.id, c.efficiency FROM cars c WHERE c.vin = $1 LIMIT 1
+        ),
+        drive_edges AS (
+          SELECT
+            d.end_date,
+            COALESCE(NULLIF(ep.usable_battery_level, 0), ep.battery_level) AS end_soc,
+            COALESCE(ep.rated_battery_range_km, ep.est_battery_range_km, ep.ideal_battery_range_km) AS end_range,
+            LEAD(d.start_date) OVER (ORDER BY d.start_date) AS next_start,
+            LEAD(COALESCE(NULLIF(sp.usable_battery_level, 0), sp.battery_level)) OVER (ORDER BY d.start_date) AS next_soc,
+            LEAD(COALESCE(sp.rated_battery_range_km, sp.est_battery_range_km, sp.ideal_battery_range_km)) OVER (ORDER BY d.start_date) AS next_range
+          FROM drives d
+          INNER JOIN car ON car.id = d.car_id
+          LEFT JOIN positions sp ON sp.id = d.start_position_id
+          LEFT JOIN positions ep ON ep.id = d.end_position_id
+          WHERE d.start_date >= $2
+            AND d.end_date IS NOT NULL
+        ),
+        gaps AS (
+          SELECT
+            de.end_date AS parked_from,
+            de.next_start AS parked_to,
+            EXTRACT(EPOCH FROM (de.next_start - de.end_date)) / 3600.0 AS hours,
+            de.end_soc AS soc_from,
+            de.next_soc AS soc_to,
+            de.end_range AS range_from,
+            de.next_range AS range_to
+          FROM drive_edges de
+          WHERE de.next_start IS NOT NULL
+            AND de.next_start > de.end_date
+            AND EXTRACT(EPOCH FROM (de.next_start - de.end_date)) >= $3 * 3600
+        )
+        SELECT g.*, car.efficiency
+        FROM gaps g
+        CROSS JOIN car
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM charging_processes cp
+          WHERE cp.car_id = car.id
+            AND cp.start_date < g.parked_to
+            AND COALESCE(cp.end_date, cp.start_date + INTERVAL '12 hours') > g.parked_from
+        )
+        ORDER BY g.parked_from ASC
+      `,
+      [vin, since, minHours],
+    )
+
+    return rows.map((row) => ({
+      parkedFrom: toDate(row.parked_from) ?? new Date(),
+      parkedTo: toDate(row.parked_to) ?? new Date(),
+      hours: toNumber(row.hours) ?? 0,
+      socFrom: toNumber(row.soc_from),
+      socTo: toNumber(row.soc_to),
+      rangeFromKm: toNumber(row.range_from),
+      rangeToKm: toNumber(row.range_to),
+      efficiencyKwhPerKm: toNumber(row.efficiency),
+    }))
+  }
+
+  async getChargingProfile(vin: string, since: Date) {
+    const rows = await this.query<{
+      id: number
+      start_date: Date | string
+      end_date: Date | string | null
+      energy_added_kwh: number | string | null
+      energy_used_kwh: number | string | null
+      start_battery_level: number | null
+      end_battery_level: number | null
+      duration_min: number | null
+      cost: number | string | null
+      is_fast: boolean | null
+      max_power_kw: number | string | null
+      fast_charger_brand: string | null
+    }>(
+      `
+        WITH car AS (
+          SELECT c.id FROM cars c WHERE c.vin = $1 LIMIT 1
+        )
+        SELECT
+          cp.id,
+          cp.start_date,
+          cp.end_date,
+          cp.charge_energy_added AS energy_added_kwh,
+          cp.charge_energy_used AS energy_used_kwh,
+          cp.start_battery_level,
+          cp.end_battery_level,
+          cp.duration_min,
+          cp.cost,
+          agg.is_fast,
+          agg.max_power_kw,
+          agg.fast_charger_brand
+        FROM charging_processes cp
+        INNER JOIN car ON car.id = cp.car_id
+        LEFT JOIN LATERAL (
+          SELECT
+            BOOL_OR(COALESCE(ch.fast_charger_present, false)) AS is_fast,
+            MAX(ch.charger_power) AS max_power_kw,
+            MAX(ch.fast_charger_brand) AS fast_charger_brand
+          FROM charges ch
+          WHERE ch.charging_process_id = cp.id
+        ) agg ON TRUE
+        WHERE cp.start_date >= $2
+        ORDER BY cp.start_date ASC
+      `,
+      [vin, since],
+    )
+
+    return rows.map((row) => ({
+      id: String(row.id),
+      startedAt: toDate(row.start_date) ?? new Date(),
+      endedAt: toDate(row.end_date),
+      energyAddedKwh: toNumber(row.energy_added_kwh),
+      energyUsedKwh: toNumber(row.energy_used_kwh),
+      startBatteryLevel: toNumber(row.start_battery_level),
+      endBatteryLevel: toNumber(row.end_battery_level),
+      durationMin: toNumber(row.duration_min),
+      costEur: toNumber(row.cost),
+      isFastCharge: row.is_fast === true,
+      maxPowerKw: toNumber(row.max_power_kw),
+      fastChargerBrand: row.fast_charger_brand,
+    }))
+  }
+
+  // Consommation moyenne par tranche de temperature exterieure (pas de 5 degres).
+  async getEfficiencyByTemperature(vin: string, since: Date) {
+    const distanceMultiplier = await this.inferOdometerMultiplier(vin)
+
+    const rows = await this.query<{
+      bucket_min: number | string
+      distance_km: number | string | null
+      energy_kwh: number | string | null
+      trips_count: number | string
+    }>(
+      `
+        WITH car AS (
+          SELECT c.id, c.efficiency FROM cars c WHERE c.vin = $1 LIMIT 1
+        ),
+        drive_rows AS (
+          SELECT
+            FLOOR(d.outside_temp_avg / 5.0) * 5 AS bucket_min,
+            d.distance AS distance_km,
+            CASE
+              WHEN d.start_ideal_range_km IS NOT NULL AND d.end_ideal_range_km IS NOT NULL AND car.efficiency IS NOT NULL
+                THEN (d.start_ideal_range_km - d.end_ideal_range_km) * car.efficiency
+              ELSE d.distance * COALESCE(car.efficiency, 0)
+            END AS energy_kwh
+          FROM drives d
+          INNER JOIN car ON car.id = d.car_id
+          WHERE d.start_date >= $2
+            AND d.outside_temp_avg IS NOT NULL
+            AND d.distance IS NOT NULL
+            AND d.distance >= 3
+        )
+        SELECT
+          bucket_min,
+          SUM(distance_km) AS distance_km,
+          SUM(GREATEST(energy_kwh, 0)) AS energy_kwh,
+          COUNT(*)::int AS trips_count
+        FROM drive_rows
+        GROUP BY 1
+        ORDER BY 1 ASC
+      `,
+      [vin, since],
+    )
+
+    return rows
+      .map((row) => {
+        const distanceKm = (toNumber(row.distance_km) ?? 0) * distanceMultiplier
+        const energyKwh = toNumber(row.energy_kwh) ?? 0
+        return {
+          bucketMinC: toNumber(row.bucket_min) ?? 0,
+          distanceKm: Math.round(distanceKm * 10) / 10,
+          energyKwh: Math.round(energyKwh * 100) / 100,
+          tripsCount: Number(row.trips_count ?? 0),
+          consumptionWhPerKm: distanceKm > 0 ? Math.round((energyKwh / distanceKm) * 1000) : null,
+        }
+      })
+      .filter((row) => row.distanceKm > 0)
+  }
+
+  async getSoftwareUpdates(vin: string, limit = 20) {
+    const rows = await this.query<{
+      start_date: Date | string
+      end_date: Date | string | null
+      version: string | null
+    }>(
+      `
+        SELECT u.start_date, u.end_date, u.version
+        FROM updates u
+        INNER JOIN cars c ON c.id = u.car_id
+        WHERE c.vin = $1
+        ORDER BY u.start_date DESC
+        LIMIT $2
+      `,
+      [vin, limit],
+    )
+
+    return rows.map((row) => ({
+      startedAt: toDate(row.start_date) ?? new Date(),
+      installedAt: toDate(row.end_date),
+      version: row.version,
+    }))
+  }
+
+  async getTirePressureHistory(vin: string, since: Date) {
+    const rows = await this.query<{
+      day: Date | string
+      fl: number | string | null
+      fr: number | string | null
+      rl: number | string | null
+      rr: number | string | null
+      outside_temp: number | string | null
+      samples: number | string
+    }>(
+      `
+        SELECT
+          DATE_TRUNC('day', p.date) AS day,
+          AVG(p.tpms_pressure_fl) AS fl,
+          AVG(p.tpms_pressure_fr) AS fr,
+          AVG(p.tpms_pressure_rl) AS rl,
+          AVG(p.tpms_pressure_rr) AS rr,
+          AVG(p.outside_temp) AS outside_temp,
+          COUNT(*)::int AS samples
+        FROM positions p
+        INNER JOIN cars c ON c.id = p.car_id
+        WHERE c.vin = $1
+          AND p.date >= $2
+          AND (
+            p.tpms_pressure_fl IS NOT NULL
+            OR p.tpms_pressure_fr IS NOT NULL
+            OR p.tpms_pressure_rl IS NOT NULL
+            OR p.tpms_pressure_rr IS NOT NULL
+          )
+        GROUP BY 1
+        ORDER BY 1 ASC
+      `,
+      [vin, since],
+    )
+
+    return rows.map((row) => ({
+      day: toDate(row.day) ?? new Date(),
+      fl: toNumber(row.fl),
+      fr: toNumber(row.fr),
+      rl: toNumber(row.rl),
+      rr: toNumber(row.rr),
+      outsideTempC: toNumber(row.outside_temp),
+      samples: Number(row.samples ?? 0),
+    }))
+  }
+
   private async getVehicleRow(vin: string) {
     const rows = await this.query<TeslaMateVehicleRow>(
       `

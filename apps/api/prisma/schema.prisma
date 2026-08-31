@@ -404,6 +404,14 @@ model UserSettings {
   diagnosticsIdleWarnHours7d      Float  @default(8)
   diagnosticsIdleCriticalHours7d  Float  @default(12)
 
+  // Vehicle health
+  batteryChemistry         String @default("nca") // nca | lfp
+  batteryNominalKwh        Float?                 // null = derive depuis TeslaMate
+  tirePressureTargetBar    Float  @default(2.9)
+  tirePressureToleranceBar Float  @default(0.2)
+  maxDailyDrainPct         Float  @default(1.5)
+  maxRecommendedSocPct     Int    @default(90)
+
   // Home geofence
   homeLatitude  Float?
   homeLongitude Float?

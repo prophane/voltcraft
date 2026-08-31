@@ -65,6 +65,12 @@ export function SettingsPage() {
   const [diagBatteryDeltaCriticalPct, setDiagBatteryDeltaCriticalPct] = useState<string>('')
   const [diagIdleWarnHours7d, setDiagIdleWarnHours7d] = useState<string>('')
   const [diagIdleCriticalHours7d, setDiagIdleCriticalHours7d] = useState<string>('')
+  const [batteryChemistry, setBatteryChemistry] = useState<'nca' | 'lfp'>('nca')
+  const [batteryNominalKwh, setBatteryNominalKwh] = useState<string>('')
+  const [tirePressureTargetBar, setTirePressureTargetBar] = useState<string>('')
+  const [tirePressureToleranceBar, setTirePressureToleranceBar] = useState<string>('')
+  const [maxDailyDrainPct, setMaxDailyDrainPct] = useState<string>('')
+  const [maxRecommendedSocPct, setMaxRecommendedSocPct] = useState<string>('')
   const [menuDraft, setMenuDraft] = useState<NavPreferences>(() => getNavPreferences())
   const [menuSavedAt, setMenuSavedAt] = useState<string | null>(null)
   const [draggedMenuKey, setDraggedMenuKey] = useState<NavItemKey | null>(null)
@@ -130,6 +136,12 @@ export function SettingsPage() {
     setDiagBatteryDeltaCriticalPct(String(s['diagnosticsBatteryDeltaCriticalPct'] ?? 5))
     setDiagIdleWarnHours7d(String(s['diagnosticsIdleWarnHours7d'] ?? 8))
     setDiagIdleCriticalHours7d(String(s['diagnosticsIdleCriticalHours7d'] ?? 12))
+    setBatteryChemistry(s['batteryChemistry'] === 'lfp' ? 'lfp' : 'nca')
+    setBatteryNominalKwh(s['batteryNominalKwh'] != null ? String(s['batteryNominalKwh']) : '')
+    setTirePressureTargetBar(String(s['tirePressureTargetBar'] ?? 2.9))
+    setTirePressureToleranceBar(String(s['tirePressureToleranceBar'] ?? 0.2))
+    setMaxDailyDrainPct(String(s['maxDailyDrainPct'] ?? 1.5))
+    setMaxRecommendedSocPct(String(s['maxRecommendedSocPct'] ?? 90))
   }, [s])
 
   useEffect(() => {
@@ -474,6 +486,113 @@ export function SettingsPage() {
                 })}
               >
                 Sauvegarder les seuils diagnostics
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-4 border-t border-border-subtle pt-4">
+            <div>
+              <h3 className="text-sm font-medium text-text-primary">Santé véhicule</h3>
+              <p className="text-xs text-text-muted mt-1">
+                Sert aux calculs de dégradation, de perte à l'arrêt et aux alertes de pression pneus.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="stat-label block mb-1">Chimie batterie</label>
+                <select
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={batteryChemistry}
+                  onChange={(e) => setBatteryChemistry(e.target.value === 'lfp' ? 'lfp' : 'nca')}
+                >
+                  <option value="nca">NCA / NCM (limite 80-90%)</option>
+                  <option value="lfp">LFP (charge 100% hebdo)</option>
+                </select>
+              </div>
+              <div>
+                <label className="stat-label block mb-1">Capacité d'origine (kWh)</label>
+                <input
+                  type="number"
+                  min="10"
+                  max="250"
+                  step="0.1"
+                  placeholder="auto depuis TeslaMate"
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={batteryNominalKwh}
+                  onChange={(e) => setBatteryNominalKwh(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="stat-label block mb-1">Pression cible (bar)</label>
+                <input
+                  type="number"
+                  min="1.5"
+                  max="4"
+                  step="0.05"
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={tirePressureTargetBar}
+                  onChange={(e) => setTirePressureTargetBar(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="stat-label block mb-1">Tolérance pression (bar)</label>
+                <input
+                  type="number"
+                  min="0.05"
+                  max="1"
+                  step="0.05"
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={tirePressureToleranceBar}
+                  onChange={(e) => setTirePressureToleranceBar(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="stat-label block mb-1">Perte à l'arrêt max (%/jour)</label>
+                <input
+                  type="number"
+                  min="0.1"
+                  max="20"
+                  step="0.1"
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={maxDailyDrainPct}
+                  onChange={(e) => setMaxDailyDrainPct(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="stat-label block mb-1">SoC max recommandé (%)</label>
+                <input
+                  type="number"
+                  min="50"
+                  max="100"
+                  step="1"
+                  className="w-full bg-bg-overlay border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
+                  value={maxRecommendedSocPct}
+                  onChange={(e) => setMaxRecommendedSocPct(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                loading={updateMutation.isPending}
+                onClick={() => updateMutation.mutate({
+                  batteryChemistry,
+                  batteryNominalKwh: batteryNominalKwh.trim() === '' ? null : Number(batteryNominalKwh),
+                  tirePressureTargetBar: Number(tirePressureTargetBar),
+                  tirePressureToleranceBar: Number(tirePressureToleranceBar),
+                  maxDailyDrainPct: Number(maxDailyDrainPct),
+                  maxRecommendedSocPct: Number(maxRecommendedSocPct),
+                })}
+              >
+                Sauvegarder les seuils santé
               </Button>
             </div>
           </div>

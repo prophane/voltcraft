@@ -54,7 +54,10 @@ export function AnalyticsPage() {
     chargeSessionsCount?: number
   } | undefined
 
-  const historyRows = Array.isArray(history) ? (history as VehicleHistorySnapshot[]) : []
+  const historyRows = useMemo(
+    () => (Array.isArray(history) ? (history as VehicleHistorySnapshot[]) : []),
+    [history],
+  )
 
   const idleData = Array.isArray(idles) ? idles : []
   const idleHours7d = idleData.reduce((sum, row) => sum + Number((row as { durationMin?: number }).durationMin ?? 0), 0) / 60
