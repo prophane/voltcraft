@@ -113,6 +113,19 @@ export const statsApi = {
   efficiencyByTemperature: (days = 365) => api.get<EfficiencyByTemperature>(`/stats/health/efficiency-by-temperature?days=${days}`),
   tirePressure: (days = 90) => api.get<TirePressureAnalysis>(`/stats/health/tire-pressure?days=${days}`),
   softwareUpdates: () => api.get<SoftwareUpdate[]>('/stats/health/software-updates'),
+  healthSummary: (days = 365) => api.get<HealthSummary>(`/stats/health/summary?days=${days}`),
+}
+
+export interface HealthAlert {
+  severity: 'critical' | 'warning' | 'info'
+  message: string
+}
+
+export interface HealthSummary {
+  periodDays: number
+  score: number | null
+  status: 'ok' | 'warning' | 'critical' | 'unknown'
+  alerts: HealthAlert[]
 }
 
 export interface BatteryDegradation {

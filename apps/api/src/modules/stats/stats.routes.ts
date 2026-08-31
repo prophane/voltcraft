@@ -12,6 +12,7 @@ import { detectConsumptionAnomalies } from './calculators/anomalies.calculator.j
 import {
   buildBatteryDegradation,
   buildChargingProfile,
+  buildHealthSummary,
   buildTirePressureAnalysis,
   buildVampireDrain,
 } from './calculators/health.calculator.js'
@@ -173,6 +174,46 @@ export async function statsRoutes(app: FastifyInstance) {
       return ok(result)
     } catch (error) {
       throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('anomalies query', error), 503)
+    }
+  })
+
+  // GET /stats/health/summary?days=365
+  app.get('/health/summary', { schema: { tags: ['stats'] } }, async (req) => {
+    const { vehicle, settings, since, days } = await resolveHealthContext(req, 365)
+    try {
+      const tireSince = new Date(Date.now() - Math.min(days, 90) * 86_400_000)
+      const [degradationPoints, vampireGaps, chargingSessions, tireRows] = await Promise.all([
+        teslamate.getBatteryDegradation(vehicle.vin, since),
+        teslamate.getVampireDrain(vehicle.vin, since),
+        teslamate.getChargingProfile(vehicle.vin, since),
+        teslamate.getTirePressureHistory(vehicle.vin, tireSince),
+      ])
+
+      const degradation = buildBatteryDegradation(degradationPoints, { nominalCapacityKwh: settings.batteryNominalKwh })
+      const vampireDrain = buildVampireDrain(vampireGaps, {
+        capacityKwh: degradation.currentCapacityKwh ?? settings.batteryNominalKwh,
+        maxDailyDrainPct: settings.maxDailyDrainPct,
+      })
+      const chargingProfile = buildChargingProfile(chargingSessions, {
+        capacityKwh: degradation.currentCapacityKwh ?? settings.batteryNominalKwh,
+        maxRecommendedSocPct: settings.maxRecommendedSocPct,
+      })
+      const tirePressure = buildTirePressureAnalysis(tireRows, {
+        targetBar: settings.tirePressureTargetBar,
+        toleranceBar: settings.tirePressureToleranceBar,
+      })
+
+      const summary = buildHealthSummary({
+        chemistry: settings.batteryChemistry,
+        degradation,
+        vampireDrain,
+        chargingProfile,
+        tirePressure,
+      })
+
+      return ok({ periodDays: days, ...summary })
+    } catch (error) {
+      throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('health summary query', error), 503)
     }
   })
 

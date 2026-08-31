@@ -345,3 +345,112 @@ export function buildTirePressureAnalysis(
     series,
   }
 }
+
+export type HealthAlert = {
+  severity: 'critical' | 'warning' | 'info'
+  message: string
+}
+
+export function buildHealthSummary(input: {
+  chemistry: string
+  degradation: ReturnType<typeof buildBatteryDegradation>
+  vampireDrain: ReturnType<typeof buildVampireDrain>
+  chargingProfile: ReturnType<typeof buildChargingProfile> | null
+  tirePressure: ReturnType<typeof buildTirePressureAnalysis> | null
+}) {
+  const { chemistry, degradation, vampireDrain, chargingProfile, tirePressure } = input
+  const alerts: HealthAlert[] = []
+  const subScores: number[] = []
+
+  if (degradation.ready && degradation.healthPct != null) {
+    subScores.push(degradation.healthPct)
+    if (degradation.lossPer10000Km != null && degradation.lossPer10000Km > 1.5) {
+      alerts.push({
+        severity: 'warning',
+        message: `Degradation rapide: ${degradation.lossPer10000Km.toFixed(2)} pts / 10 000 km.`,
+      })
+    }
+  }
+
+  if (vampireDrain.ready && vampireDrain.medianPctPerDay != null) {
+    const drainScore = vampireDrain.status === 'critical' ? 40 : vampireDrain.status === 'warning' ? 70 : 100
+    subScores.push(drainScore)
+    if (vampireDrain.status === 'critical' || vampireDrain.status === 'warning') {
+      alerts.push({
+        severity: vampireDrain.status,
+        message: `Perte a l'arret elevee: ${vampireDrain.medianPctPerDay.toFixed(2)} %/jour (seuil ${vampireDrain.thresholdPctPerDay} %/jour).`,
+      })
+    }
+  }
+
+  if (chargingProfile && chargingProfile.sessionsCount > 0) {
+    let chargingScore = 100
+    if (chemistry === 'nca' && chargingProfile.highSocSessions > 0) {
+      chargingScore -= Math.min(30, chargingProfile.highSocSessions * 5)
+      alerts.push({
+        severity: 'warning',
+        message: `${chargingProfile.highSocSessions} charge(s) au-dela de ${chargingProfile.maxRecommendedSocPct}% (chimie NCA/NCM).`,
+      })
+    }
+    if (chargingProfile.deepDischargeSessions > 0) {
+      chargingScore -= Math.min(20, chargingProfile.deepDischargeSessions * 5)
+      alerts.push({
+        severity: 'info',
+        message: `${chargingProfile.deepDischargeSessions} depart(s) sous 10% de charge.`,
+      })
+    }
+    if (chargingProfile.dcSharePct != null && chargingProfile.dcSharePct > 40) {
+      chargingScore -= 10
+      alerts.push({
+        severity: 'info',
+        message: `Part de charge rapide elevee: ${chargingProfile.dcSharePct.toFixed(1)}%.`,
+      })
+    }
+    subScores.push(Math.max(0, chargingScore))
+  }
+
+  if (tirePressure && tirePressure.ready) {
+    let tireScore = 100
+    if (tirePressure.leakSuspects.length > 0) {
+      tireScore -= 30
+      for (const suspect of tirePressure.leakSuspects) {
+        alerts.push({
+          severity: 'warning',
+          message: `Fuite suspectee pneu ${suspect.corner.toUpperCase()}: ${suspect.barPer30Days.toFixed(2)} bar / 30j.`,
+        })
+      }
+    }
+    if (tirePressure.alerts.some((a) => a.severity === 'critical')) {
+      tireScore -= 20
+    } else if (tirePressure.alerts.length > 0) {
+      tireScore -= 10
+    }
+    if (tirePressure.spreadWarning) {
+      tireScore -= 10
+      alerts.push({
+        severity: 'info',
+        message: `Ecart de pression important entre les roues (${tirePressure.spreadBar?.toFixed(2)} bar).`,
+      })
+    }
+    subScores.push(Math.max(0, tireScore))
+  }
+
+  const score = subScores.length > 0 ? Math.round(subScores.reduce((a, b) => a + b, 0) / subScores.length) : null
+  const status: 'ok' | 'warning' | 'critical' | 'unknown' =
+    score == null
+      ? 'unknown'
+      : alerts.some((a) => a.severity === 'critical') || score < 60
+        ? 'critical'
+        : alerts.some((a) => a.severity === 'warning') || score < 85
+          ? 'warning'
+          : 'ok'
+
+  const severityOrder: Record<HealthAlert['severity'], number> = { critical: 0, warning: 1, info: 2 }
+  alerts.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity])
+
+  return {
+    score,
+    status,
+    alerts,
+  }
+}

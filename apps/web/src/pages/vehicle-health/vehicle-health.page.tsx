@@ -119,6 +119,12 @@ export function VehicleHealthPage() {
     staleTime: 30 * 60_000,
   })
 
+  const { data: healthSummary } = useQuery({
+    queryKey: ['stats', 'health', 'summary', healthDays],
+    queryFn: () => statsApi.healthSummary(healthDays),
+    staleTime: 10 * 60_000,
+  })
+
   const batteryHealthSummary = batteryHealth as {
     ready?: boolean
     samplesCount?: number
@@ -329,6 +335,68 @@ export function VehicleHealthPage() {
           }
         }}
       />
+
+      {/* Synthese: score global + alertes actionnables */}
+      <Card className="p-5 lg:p-6">
+        <CardHeader>
+          <div>
+            <CardTitle>Synthèse</CardTitle>
+            <h2 className="mt-2 text-xl font-semibold text-text-primary">Score de santé global et alertes actionnables</h2>
+          </div>
+        </CardHeader>
+        <div className="flex flex-col lg:flex-row gap-6">
+          <div className="flex items-center gap-4">
+            <div
+              className={cn(
+                'flex h-24 w-24 shrink-0 items-center justify-center rounded-full border-4 text-3xl font-semibold',
+                healthSummary?.status === 'critical'
+                  ? 'border-error/60 text-error'
+                  : healthSummary?.status === 'warning'
+                    ? 'border-warning/60 text-warning'
+                    : healthSummary?.status === 'ok'
+                      ? 'border-success/60 text-success'
+                      : 'border-border-subtle text-text-muted',
+              )}
+            >
+              {healthSummary?.score != null ? healthSummary.score : '—'}
+            </div>
+            <div>
+              <p className="text-sm text-text-muted">Score global (0-100)</p>
+              <p className="mt-1 text-base font-medium text-text-primary">
+                {healthSummary?.status === 'ok'
+                  ? 'Tout est normal'
+                  : healthSummary?.status === 'warning'
+                    ? 'Points de vigilance à surveiller'
+                    : healthSummary?.status === 'critical'
+                      ? 'Action recommandée'
+                      : 'Données insuffisantes pour un score fiable'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex-1 space-y-2">
+            {healthSummary && healthSummary.alerts.length > 0 ? (
+              healthSummary.alerts.map((alert, index) => (
+                <div
+                  key={`${alert.severity}-${index}`}
+                  className={cn(
+                    'rounded-xl border px-3 py-2 text-sm',
+                    alert.severity === 'critical'
+                      ? 'border-error/30 bg-error/10 text-error'
+                      : alert.severity === 'warning'
+                        ? 'border-warning/30 bg-warning/10 text-warning'
+                        : 'border-border-subtle bg-bg-overlay/50 text-text-secondary',
+                  )}
+                >
+                  {alert.message}
+                </div>
+              ))
+            ) : (
+              <EmptyState message="Aucune alerte actionnable détectée sur la période sélectionnée." />
+            )}
+          </div>
+        </div>
+      </Card>
 
       {/* Métriques actuelles */}
       <section className="grid grid-cols-2 xl:grid-cols-4 gap-4">
