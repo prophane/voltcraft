@@ -221,7 +221,10 @@ export function SettingsPage() {
       const nextOrdered = [...ordered]
       const [moved] = nextOrdered.splice(fromIndex, 1)
       if (!moved) return current
-      nextOrdered.splice(targetIndex, 0, moved)
+      // Apres suppression de l'element source, les index suivants se decalent d'un cran:
+      // il faut corriger la position cible pour que l'element depose prenne bien la place visuelle visee.
+      const adjustedTargetIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex
+      nextOrdered.splice(adjustedTargetIndex, 0, moved)
 
       const next = {
         ...current,

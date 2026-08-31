@@ -164,14 +164,18 @@ export function VehicleHealthPage() {
     : null
 
   const batteryTrend = useMemo(() => {
-    return historyRows
-      .slice(0, 72)
-      .reverse()
-      .map((row) => ({
-        time: new Date(row.capturedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+    const rows = historyRows.slice(0, 72).reverse()
+    const distinctDays = new Set(rows.map((row) => new Date(row.capturedAt).toDateString())).size
+    return rows.map((row) => {
+      const capturedDate = new Date(row.capturedAt)
+      return {
+        time: distinctDays > 1
+          ? capturedDate.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+          : capturedDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
         batteryLevel: row.batteryLevel,
         range: row.batteryRange,
-      }))
+      }
+    })
   }, [historyRows])
 
   const batteryHealthData = useMemo(() => {
@@ -444,11 +448,13 @@ export function VehicleHealthPage() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
-                  <XAxis dataKey="time" stroke="#8D8D8D" tickLine={false} axisLine={false} />
-                  <YAxis stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} />
+                  <XAxis dataKey="time" stroke="#8D8D8D" tickLine={false} axisLine={false} minTickGap={32} />
+                  <YAxis yAxisId="left" stroke="#8D8D8D" tickLine={false} axisLine={false} width={40} domain={[0, 100]} />
+                  <YAxis yAxisId="right" orientation="right" stroke="#8D8D8D" tickLine={false} axisLine={false} width={48} />
                   <Tooltip contentStyle={{ background: '#1B1B1B', border: '1px solid #2A2A2A', borderRadius: 10, color: '#F5F5F5' }} />
-                  <Area type="monotone" dataKey="batteryLevel" name="Charge" stroke="#E8112D" fill="url(#vhBatteryFill)" strokeWidth={2.25} dot={false} />
-                  <Line type="monotone" dataKey="range" name="Autonomie" stroke="#22c55e" strokeWidth={2} dot={false} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Area yAxisId="left" type="monotone" dataKey="batteryLevel" name="Charge (%)" stroke="#E8112D" fill="url(#vhBatteryFill)" strokeWidth={2.25} dot={false} />
+                  <Line yAxisId="right" type="monotone" dataKey="range" name="Autonomie (km)" stroke="#22c55e" strokeWidth={2} dot={false} />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
