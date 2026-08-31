@@ -221,9 +221,34 @@ function normalizeTrips(raw: unknown): TripRecord[] {
 }
 
 const TRIPS_PAGE_SIZE = 30
+const TRIPS_WINDOW_PAGE_SIZE = 100
+const TRIPS_WINDOW_MAX_PAGES = 20
 
 async function fetchTripsPage(page: number) {
   return tripsApi.list(page, TRIPS_PAGE_SIZE, undefined, undefined, false)
+}
+
+// Les stats de fenetre doivent couvrir toute la periode, pas seulement les pages deja chargees dans la liste.
+async function fetchTripsWindow(days: WindowDays): Promise<TripRecord[]> {
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  start.setDate(start.getDate() - (days - 1))
+  const from = start.toISOString()
+
+  const collected: TripRecord[] = []
+  for (let page = 1; page <= TRIPS_WINDOW_MAX_PAGES; page++) {
+    const raw = await tripsApi.list(page, TRIPS_WINDOW_PAGE_SIZE, from, undefined, true)
+    const batch = normalizeTrips(raw)
+    collected.push(...batch)
+
+    const meta = getTripsPageMeta(raw)
+    if (meta) {
+      if (meta.currentPage >= meta.totalPages) break
+    } else if (batch.length < TRIPS_WINDOW_PAGE_SIZE) {
+      break
+    }
+  }
+  return collected
 }
 
 function getTripsPageMeta(raw: unknown) {
@@ -817,10 +842,23 @@ export function TripsPage() {
     return trips.filter((trip) => !isWorkTrip(trip, workGeofences))
   }, [tab, trips, workGeofences])
 
+  const { data: windowTripsData, isFetching: isFetchingWindowTrips } = useQuery({
+    queryKey: ['trips', 'window', windowDays],
+    queryFn: () => fetchTripsWindow(windowDays),
+    staleTime: 5 * 60_000,
+    placeholderData: (previousData) => previousData,
+  })
+
+  const windowTrips = useMemo(() => {
+    const rows = windowTripsData ?? []
+    return rows.filter((trip) => isMeaningfulTrip(trip, minTripDistanceKm))
+  }, [windowTripsData, minTripDistanceKm])
+
   const filteredWindowTrips = useMemo(() => {
-    const threshold = Date.now() - windowDays * 86_400_000
-    return filteredTrips.filter((trip) => new Date(trip.startedAt).getTime() >= threshold)
-  }, [filteredTrips, windowDays])
+    if (tab === 'all') return windowTrips
+    if (tab === 'work') return windowTrips.filter((trip) => isWorkTrip(trip, workGeofences))
+    return windowTrips.filter((trip) => !isWorkTrip(trip, workGeofences))
+  }, [tab, windowTrips, workGeofences])
 
   const displayedTrips = useMemo(() => filteredTrips.slice(0, visibleCount), [filteredTrips, visibleCount])
   const loadedTripCount = tripPages?.pages.reduce<number>((total, page) => total + normalizeTrips(page).length, 0) ?? 0
@@ -874,8 +912,8 @@ export function TripsPage() {
   }, [filteredWindowTrips])
 
   const compactTrend = useMemo(
-    () => buildDailyTripDistanceTrend(filteredTrips, windowDays),
-    [filteredTrips, windowDays],
+    () => buildDailyTripDistanceTrend(filteredWindowTrips, windowDays),
+    [filteredWindowTrips, windowDays],
   )
 
   const handleHeatmapToggle = () => {
@@ -956,7 +994,8 @@ export function TripsPage() {
               ))}
             </div>
 
-            <div className="grid grid-cols-3 gap-3 text-[11px] md:text-xs">
+            <div className="grid grid-cols-4 gap-3 text-[11px] md:text-xs">
+              <p className="text-text-muted">Trajets <span className="text-text-primary font-medium">{isFetchingWindowTrips && windowTripsData == null ? '…' : filteredWindowTrips.length}</span></p>
               <p className="text-text-muted">Distance <span className="text-text-primary font-medium">{Math.round(summary.totalDistance)} km</span></p>
               <p className="text-text-muted">Durée <span className="text-text-primary font-medium">{formatDuration(Math.round(summary.totalDuration))}</span></p>
               <p className="text-text-muted">Énergie <span className="text-text-primary font-medium">{summary.totalEnergy > 0 ? `${summary.totalEnergy.toFixed(1)} kWh` : '—'}</span></p>
