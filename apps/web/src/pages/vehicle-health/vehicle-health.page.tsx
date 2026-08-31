@@ -432,12 +432,12 @@ export function VehicleHealthPage() {
 
       {/* Évolution batterie + Santé batterie */}
       <div className="grid xl:grid-cols-3 gap-4">
-        <Card className="xl:col-span-2 p-0 overflow-hidden">
+        <Card className="xl:col-span-2 p-0 overflow-hidden flex flex-col">
           <div className="p-5 lg:p-6 border-b border-border-subtle">
             <CardTitle>Evolution récente</CardTitle>
             <h2 className="mt-2 text-xl font-semibold text-text-primary">Batterie et autonomie sur les derniers échantillons</h2>
           </div>
-          <div className="h-80 px-3 pb-4 pt-2">
+          <div className="flex-1 min-h-[320px] px-3 pb-4 pt-2">
             {batteryTrend.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={batteryTrend} margin={{ left: 8, right: 12, top: 8, bottom: 4 }}>
