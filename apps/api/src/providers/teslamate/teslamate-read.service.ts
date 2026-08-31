@@ -1294,6 +1294,32 @@ export class TeslaMateReadService {
     }))
   }
 
+  // Meilleure autonomie 100% jamais observee (tout historique), independante de la fenetre d'analyse.
+  // Sert d'ancre pour la capacite d'origine: sans elle, la capacite "d'origine" varie selon la fenetre
+  // choisie (90j/1an/3ans) et peut etre sous-estimee si le pic (batterie neuve) est hors fenetre.
+  async getBestEverFullRangeKm(vin: string): Promise<number | null> {
+    const rows = await this.query<{ best_full_range_km: number | string | null }>(
+      `
+        WITH car AS (
+          SELECT c.id FROM cars c WHERE c.vin = $1 LIMIT 1
+        ),
+        samples AS (
+          SELECT
+            COALESCE(NULLIF(ch.usable_battery_level, 0), ch.battery_level) AS soc,
+            COALESCE(ch.rated_battery_range_km, ch.ideal_battery_range_km) AS range_km
+          FROM charges ch
+          INNER JOIN charging_processes cp ON cp.id = ch.charging_process_id
+          INNER JOIN car ON car.id = cp.car_id
+        )
+        SELECT MAX(range_km / soc * 100.0) AS best_full_range_km
+        FROM samples
+        WHERE soc >= 50 AND range_km IS NOT NULL AND range_km > 0
+      `,
+      [vin],
+    )
+    return toNumber(rows[0]?.best_full_range_km ?? null)
+  }
+
   // Perte de charge a l'arret: intervalles entre deux trajets sans charge intercalee.
   async getVampireDrain(vin: string, since: Date, minHours = 6) {
     const rows = await this.query<{

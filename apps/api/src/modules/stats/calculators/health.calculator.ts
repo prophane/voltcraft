@@ -80,7 +80,7 @@ function linearRegression(points: Array<{ x: number; y: number }>) {
 
 export function buildBatteryDegradation(
   points: DegradationPoint[],
-  options: { nominalCapacityKwh?: number | null } = {},
+  options: { nominalCapacityKwh?: number | null; bestEverFullRangeKm?: number | null } = {},
 ) {
   const valid = points.filter(
     (p): p is DegradationPoint & { fullRangeKm: number } =>
@@ -114,7 +114,13 @@ export function buildBatteryDegradation(
     }
   }
 
-  const bestFullRangeKm = Math.max(...valid.map((p) => p.fullRangeKm))
+  // Le pic "batterie neuve" peut etre hors de la fenetre d'analyse selectionnee (90j/1an/3ans):
+  // on prend le meilleur releve jamais vu quand il est disponible, sinon le max de la fenetre.
+  const windowBestFullRangeKm = Math.max(...valid.map((p) => p.fullRangeKm))
+  const bestFullRangeKm =
+    options.bestEverFullRangeKm != null
+      ? Math.max(options.bestEverFullRangeKm, windowBestFullRangeKm)
+      : windowBestFullRangeKm
   const recent = valid.slice(-7).map((p) => p.fullRangeKm)
   const currentFullRangeKm = median(recent) ?? recent[recent.length - 1]!
 

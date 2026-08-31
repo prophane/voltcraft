@@ -182,14 +182,15 @@ export async function statsRoutes(app: FastifyInstance) {
     const { vehicle, settings, since, days } = await resolveHealthContext(req, 365)
     try {
       const tireSince = new Date(Date.now() - Math.min(days, 90) * 86_400_000)
-      const [degradationPoints, vampireGaps, chargingSessions, tireRows] = await Promise.all([
+      const [degradationPoints, vampireGaps, chargingSessions, tireRows, bestEverFullRangeKm] = await Promise.all([
         teslamate.getBatteryDegradation(vehicle.vin, since),
         teslamate.getVampireDrain(vehicle.vin, since),
         teslamate.getChargingProfile(vehicle.vin, since),
         teslamate.getTirePressureHistory(vehicle.vin, tireSince),
+        teslamate.getBestEverFullRangeKm(vehicle.vin),
       ])
 
-      const degradation = buildBatteryDegradation(degradationPoints, { nominalCapacityKwh: settings.batteryNominalKwh })
+      const degradation = buildBatteryDegradation(degradationPoints, { nominalCapacityKwh: settings.batteryNominalKwh, bestEverFullRangeKm })
       const vampireDrain = buildVampireDrain(vampireGaps, {
         capacityKwh: degradation.currentCapacityKwh ?? settings.batteryNominalKwh,
         maxDailyDrainPct: settings.maxDailyDrainPct,
@@ -221,11 +222,14 @@ export async function statsRoutes(app: FastifyInstance) {
   app.get('/health/battery-degradation', { schema: { tags: ['stats'] } }, async (req) => {
     const { vehicle, settings, since, days } = await resolveHealthContext(req, 365)
     try {
-      const points = await teslamate.getBatteryDegradation(vehicle.vin, since)
+      const [points, bestEverFullRangeKm] = await Promise.all([
+        teslamate.getBatteryDegradation(vehicle.vin, since),
+        teslamate.getBestEverFullRangeKm(vehicle.vin),
+      ])
       return ok({
         periodDays: days,
         chemistry: settings.batteryChemistry,
-        ...buildBatteryDegradation(points, { nominalCapacityKwh: settings.batteryNominalKwh }),
+        ...buildBatteryDegradation(points, { nominalCapacityKwh: settings.batteryNominalKwh, bestEverFullRangeKm }),
       })
     } catch (error) {
       throw new AppError('TESLAMATE_UNAVAILABLE', formatTeslaMateUnavailableMessage('battery degradation query', error), 503)
